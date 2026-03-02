@@ -1,0 +1,5015 @@
+"use client";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabaseClient'; // 🌟 引入資料庫連線
+import { 
+  Camera, Plus, Trash2, DollarSign, Calendar, Layers, Grid, List, 
+  Image as ImageIcon, CheckCircle, XCircle, Share2, Download, Eye, EyeOff,
+  X, Maximize2, Minimize2, Save, BookOpen, User, Settings, Filter, 
+  ChevronRight, MoreHorizontal, Search, Edit2, Check, Users, Heart, ShoppingBag, FolderPlus,
+  ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp,
+  ChevronLeft, Folder, Package, Copy
+} from 'lucide-react';
+
+import * as htmlToImage from 'html-to-image';
+// --- 🌟 資料庫欄位名稱轉換工具 (處理 JS 駝峰命名與資料庫底線命名的差異) ---
+const toSnakeCase = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+    const res = {};
+    Object.keys(obj).forEach(k => {
+        const snake = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        res[snake] = obj[k];
+    });
+    return res;
+};
+
+import Cropper from 'react-easy-crop';
+// --- 🌟 新增：圖片裁切處理工具 ---
+const getCroppedImg = async (imageSrc, pixelCrop) => {
+  const image = new Image();
+  image.src = imageSrc;
+  await new Promise((resolve) => { image.onload = resolve; });
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+
+  return canvas.toDataURL('image/jpeg', 0.9);
+};
+
+const toCamelCase = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+    const res = {};
+    Object.keys(obj).forEach(k => {
+        const camel = k.replace(/_([a-z])/g, g => g[1].toUpperCase());
+        res[camel] = obj[k];
+    });
+    return res;
+};
+
+// --- 2. Hooks & Utilities ---
+const getInitialCols = () => typeof window !== 'undefined' && window.innerWidth < 768 ? 4 : 6;
+
+const useLongPress = (callback = () => {}, ms = 600) => {
+  const [startLongPress, setStartLongPress] = useState(false);
+  const timerRef = useRef(null);
+
+  const start = () => {
+    setStartLongPress(true);
+    timerRef.current = setTimeout(callback, ms);
+  };
+
+  const stop = () => {
+    setStartLongPress(false);
+    clearTimeout(timerRef.current);
+  };
+
+  return {
+    onMouseDown: start,
+    onMouseUp: stop,
+    onMouseLeave: stop,
+    onTouchStart: start,
+    onTouchEnd: stop,
+  };
+};
+
+function getModalTitle(type) {
+    switch(type) {
+        case 'group': return '團體';
+        case 'member': return '成員';
+        case 'series': return '系列';
+        case 'batch': return '批次';
+        case 'card': return '圖鑑';
+        case 'channel': return '通路';
+        case 'type': return '子類';
+        default: return '';
+    }
+}
+
+const getOwnedQuantity = (invList, cardId) => {
+    return (invList || [])
+        .filter(i => i.cardId === cardId && (!i.sellPrice || i.sellPrice <= 0))
+        .reduce((s, i) => s + Number(i.quantity), 0);
+};
+
+// --- 3. 基礎 UI 組件 ---
+const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction }) => (
+  <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+    <div 
+      className={`bg-white w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : `rounded-xl max-h-[90vh] ${className}`}`} 
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="px-4 py-3 border-b flex justify-between items-center bg-white flex-shrink-0 z-10">
+        <div className="font-bold text-lg text-gray-800 truncate pr-2 flex-1 flex items-center">
+            {title}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+            {headerAction}
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors"><X className="w-6 h-6 text-gray-500" /></button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto relative bg-gray-50">
+        {children}
+      </div>
+      {footer && (
+        <div className="px-4 py-3 border-t bg-white flex justify-end gap-3 flex-shrink-0 z-10 safe-area-bottom">
+          {footer}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// 🌟 1. 這裡多加一個 enableCrop = true
+const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", className = "h-32", multiple = false, aspect = 2/3, enableCrop = true }) => {
+  const ref = useRef(null);
+  
+  const [pendingCrops, setPendingCrops] = useState([]);
+  const [currentCropImage, setCurrentCropImage] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [processedImages, setProcessedImages] = useState([]);
+
+  const handleUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+        Promise.all(files.map(file => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+            });
+        })).then(results => {
+            // 🌟 2. 判斷是否需要裁切
+            if (enableCrop) {
+                setPendingCrops(results);
+                setProcessedImages([]);
+                setCurrentCropImage(results[0]);
+                setCrop({ x: 0, y: 0 });
+                setZoom(1);
+            } else {
+                // 如果不裁切，就直接把照片回傳給父層
+                if (multiple) {
+                    onChange([...images, ...results]);
+                } else {
+                    onChange(results[0]);
+                }
+            }
+        });
+    }
+    e.target.value = ''; 
+  };
+
+  const handleCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  const confirmCrop = async () => {
+     if (!currentCropImage || !croppedAreaPixels) return;
+     const croppedBase64 = await getCroppedImg(currentCropImage, croppedAreaPixels);
+
+     const nextProcessed = [...processedImages, croppedBase64];
+     const nextPending = pendingCrops.slice(1);
+
+     // 如果還有照片還沒裁切，就顯示下一張
+     if (nextPending.length > 0) {
+         setProcessedImages(nextProcessed);
+         setPendingCrops(nextPending);
+         setCurrentCropImage(nextPending[0]);
+         setCrop({ x: 0, y: 0 });
+         setZoom(1);
+     } else {
+         // 所有圖片都裁切完成，回傳給父層
+         if (multiple) {
+             onChange([...images, ...nextProcessed]);
+         } else {
+             onChange(nextProcessed[0]);
+         }
+         setPendingCrops([]);
+         setCurrentCropImage(null);
+         setProcessedImages([]);
+     }
+  };
+
+  const cancelCrop = () => {
+      setPendingCrops([]);
+      setCurrentCropImage(null);
+      setProcessedImages([]);
+  };
+
+  const removeImage = (e, index) => {
+      e.stopPropagation();
+      const newImages = [...images];
+      newImages.splice(index, 1);
+      onChange(newImages);
+  };
+
+  return (
+    <>
+    <div 
+      onClick={() => ref.current.click()}
+      className={`relative w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-indigo-400 transition-all bg-gray-50 overflow-hidden group ${className}`}
+    >
+      {multiple && images.length > 0 ? (
+          <div className="absolute inset-0 p-2 overflow-y-auto grid grid-cols-3 gap-2">
+              {images.map((img, idx) => (
+                  <div key={idx} className="relative aspect-[2/3] rounded overflow-hidden border">
+                      <img src={img} className="w-full h-full object-cover" />
+                      <button onClick={(e) => removeImage(e, idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl z-10"><X className="w-3 h-3" /></button>
+                  </div>
+              ))}
+              <div className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded aspect-[2/3] text-gray-400 bg-white">
+                  <Plus className="w-6 h-6" />
+              </div>
+          </div>
+      ) : image ? (
+        <>
+          <img src={image} className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <Camera className="text-white w-8 h-8" />
+          </div>
+        </>
+      ) : (
+        <div className="text-gray-400 flex flex-col items-center pointer-events-none">
+          <Camera className="w-8 h-8 mb-2" />
+          <span className="text-xs">{multiple ? "可選擇多張圖片" : label}</span>
+        </div>
+      )}
+      <input type="file" ref={ref} className="hidden" accept="image/*" multiple={multiple} onChange={handleUpload} />
+    </div>
+
+    {/* 🌟 裁切專用彈窗 (覆蓋全螢幕) */}
+    {currentCropImage && (
+        <div className="fixed inset-0 z-[350] bg-black/95 flex flex-col animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-4 flex justify-between items-center bg-black text-white z-10 pb-2">
+                <button onClick={cancelCrop} className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors">取消</button>
+                <div className="font-bold text-sm tracking-wider">
+                    {pendingCrops.length > 1 ? `裁剪 (還剩 ${pendingCrops.length - 1} 張)` : '移動並縮放'}
+                </div>
+                <button onClick={confirmCrop} className="bg-indigo-600 px-5 py-1.5 rounded-full font-bold text-sm text-white hover:bg-indigo-500 transition-colors">
+                    完成
+                </button>
+            </div>
+            <div className="flex-1 relative">
+                <Cropper
+                    image={currentCropImage}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={aspect}
+                    onCropChange={setCrop}
+                    onCropComplete={handleCropComplete}
+                    onZoomChange={setZoom}
+                />
+            </div>
+            <div className="h-28 bg-black flex flex-col items-center justify-center px-8 pb-6">
+                <input 
+                    type="range" 
+                    min={1} 
+                    max={3} 
+                    step={0.05} 
+                    value={zoom} 
+                    onChange={(e) => setZoom(e.target.value)}
+                    className="w-full max-w-sm accent-indigo-500"
+                />
+                <span className="text-gray-500 text-xs mt-2">滑動調整縮放</span>
+            </div>
+        </div>
+    )}
+    </>
+  );
+};
+
+const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allowCustom = false, placeholder = "自訂...", multiple = false, onOptionEdit, onOptionDelete }) => {
+  const [customValue, setCustomValue] = useState('');
+  const [isCustomMode, setIsCustomMode] = useState(false);
+
+  const currentValuesArray = Array.isArray(value) ? value : (value ? [value] : []);
+
+  const handleCustomSubmit = () => {
+    if (customValue.trim()) {
+      if (multiple) {
+          onChange([...currentValuesArray, customValue.trim()]);
+      } else {
+          onChange(customValue.trim());
+      }
+      setIsCustomMode(false);
+      setCustomValue('');
+    }
+  };
+
+  const handleSelect = (optValue) => {
+      if (multiple) {
+          if (currentValuesArray.includes(optValue)) {
+              onChange(currentValuesArray.filter(v => v !== optValue));
+          } else {
+              onChange([...currentValuesArray, optValue]);
+          }
+      } else {
+          if (value === optValue) {
+              onChange('');
+          } else {
+              onChange(optValue);
+          }
+          setIsCustomMode(false);
+      }
+  };
+
+  // 🌟 新增：雙擊修改與刪除邏輯
+  const handleDoubleClick = (optValue) => {
+      if (!onOptionEdit && !onOptionDelete) return;
+      const newName = window.prompt(`重新命名「${optValue}」\n(若要刪除請清空內容並按下確定)：`, optValue);
+      
+      if (newName === null) return; // 按下取消
+      
+      if (newName.trim() === '') {
+          if (onOptionDelete) onOptionDelete(optValue);
+      } else if (newName.trim() !== optValue) {
+          if (onOptionEdit) onOptionEdit(optValue, newName.trim());
+      }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center">
+         <label className="text-xs font-bold text-gray-600 block">{label}</label>
+         {multiple && <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 rounded">多選模式</span>}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar items-center">
+        {(options || []).map((opt) => {
+          const optValue = typeof opt === 'object' ? opt.id : opt;
+          const isSelected = multiple ? currentValuesArray.includes(optValue) : value === optValue;
+          return (
+            <button
+              key={optValue}
+              onClick={() => handleSelect(optValue)}
+              onDoubleClick={() => handleDoubleClick(optValue)} // 🌟 綁定雙擊事件
+              title={onOptionEdit ? "雙擊可修改或刪除" : ""} // 🌟 滑鼠游標提示
+              className={`
+                flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 select-none
+                ${isSelected 
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm ring-1 ring-indigo-200' 
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}
+              `}
+            >
+              {renderOption ? renderOption(opt) : (typeof opt === 'object' ? opt.name : opt)}
+              {isSelected && <Check className="w-3 h-3" />}
+            </button>
+          );
+        })}
+        
+        {allowCustom && (
+          <div className={`flex-shrink-0 ${isCustomMode ? 'w-32' : 'w-auto'} transition-all duration-200`}>
+             {isCustomMode ? (
+               <div className="flex items-center gap-1">
+                 <input 
+                    autoFocus
+                    value={customValue}
+                    onChange={(e) => setCustomValue(e.target.value)}
+                    onBlur={handleCustomSubmit}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCustomSubmit()}
+                    placeholder={placeholder}
+                    className="w-full text-xs px-2 py-1.5 border rounded-full outline-none focus:border-indigo-500"
+                 />
+               </div>
+             ) : (
+               <button 
+                onClick={() => setIsCustomMode(true)}
+                className={`
+                  px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 
+                  text-gray-400 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 flex items-center gap-1
+                  ${!(options || []).some(o => (typeof o === 'object' ? o.id === value : o === value)) && value && !multiple ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : ''}
+                `}
+               >
+                 <Plus className="w-3 h-3" />
+                 {!(options || []).some(o => (typeof o === 'object' ? o.id === value : o === value)) && value && !multiple ? value : '自訂'}
+               </button>
+             )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- 4. 列表項目組件 ---
+const MemberItem = ({ member, isSelected, onClick, onLongPress, onDoubleClick }) => {
+  const bind = useLongPress(() => onLongPress(member));
+  return (
+    <div 
+      {...bind}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      className="flex flex-col items-center gap-1 cursor-pointer min-w-[64px] select-none active:scale-95 transition-transform"
+    >
+      <div className={`w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${isSelected ? 'border-indigo-600 scale-105 shadow-md' : 'border-transparent'}`}>
+        <img src={member.image} className="w-full h-full object-cover pointer-events-none" alt={member.name} />
+      </div>
+      <span className={`text-xs font-medium ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`}>{member.name}</span>
+    </div>
+  );
+};
+
+const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick }) => {
+  const bind = useLongPress(() => onLongPress(series));
+  return (
+    <div 
+      {...bind}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
+    >
+        <img src={series.image} className="w-full h-full object-cover brightness-75 group-hover:brightness-100 transition-all pointer-events-none" alt={series.name} />
+        <div className="absolute inset-0 flex flex-col justify-end p-2 bg-gradient-to-t from-black/70 to-transparent">
+            <span className="text-white font-bold text-sm truncate w-full">{series.name}</span>
+            {series.shortName && <span className="text-white/70 text-[10px]">{series.shortName}</span>}
+        </div>
+    </div>
+  );
+};
+
+const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) => {
+  const bind = useLongPress(() => onLongPress(batch));
+  return (
+    <div 
+      {...bind}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
+    >
+        <img src={batch.image} className="w-full h-full object-cover opacity-90 hover:opacity-100 pointer-events-none" />
+        <div className="absolute inset-0 flex items-end p-1 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+            <span className="text-xs font-bold text-white line-clamp-2 w-full leading-tight">{batch.name}</span>
+        </div>
+    </div>
+  );
+};
+
+const FilterTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }) => {
+  const bind = useLongPress(() => onLongPress(text));
+  return (
+    <button 
+        {...bind}
+        onClick={onClick} 
+        onDoubleClick={onDoubleClick}
+        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+    >
+        {text}
+    </button>
+  );
+};
+
+// --- 5. 表單與模態框 ---
+function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '韓拍', 'Mercari', '推特', '蝦皮'] , uniqueSources, onRenameSource, onDeleteSource}) {
+    const isEdit = !!initialData.id;
+    const isBulk = !!initialData.bulkRecordId;
+    const initialSellDate = initialData.sellDate || (initialData.sellPrice > 0 ? initialData.buyDate : new Date().toISOString().split('T')[0]);
+
+    const [form, setForm] = useState({
+        buyDate: new Date().toISOString().split('T')[0],
+        buyPrice: '',
+        sellPrice: '',
+        quantity: 1,
+        source: '',
+        condition: '無損',
+        status: '到貨',
+        note: '',
+        ...initialData,
+        sellDate: initialSellDate
+    });
+
+    const dataIdRef = useRef(initialData.id);
+
+    const syncToParent = (nextForm) => {
+        onSave({
+            ...nextForm,
+            id: dataIdRef.current,
+            buyPrice: Number(nextForm.buyPrice) || 0,
+            sellPrice: Number(nextForm.sellPrice) || 0,
+            quantity: Number(nextForm.quantity) || 1
+        }, (newId) => {
+            if (newId) dataIdRef.current = newId;
+        });
+    };
+
+    useEffect(() => {
+        const initialForm = { 
+            ...form, 
+            condition: form.condition || '無損',
+            status: form.status || '到貨'
+        };
+        setForm(initialForm);
+
+        if (!isEdit && !isBulk) {
+            syncToParent(initialForm);
+        }
+    }, []);
+
+    const handleChange = (key, value) => {
+        let nextForm = { ...form, [key]: value };
+        if (key === 'sellPrice' && Number(value) > 0 && !nextForm.sellDate) {
+            nextForm.sellDate = new Date().toISOString().split('T')[0];
+        }
+        setForm(nextForm);
+        syncToParent(nextForm);
+    };
+
+    return (
+        <div className="space-y-6 px-1 py-2 pb-6">
+            {isBulk && (
+                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl flex items-start gap-3 -mt-2">
+                    <AlertCircle className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-indigo-700 leading-relaxed font-medium">
+                        此紀錄來自盤收包裹。您可以編輯售價與卡況，若需修改購入資訊請前往「盤收」管理修改。
+                    </div>
+                </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1.5 block">購買日期</label>
+                    <input type="date" disabled={isBulk} value={form.buyDate} onChange={e => handleChange('buyDate', e.target.value)} className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1.5 block">數量</label>
+                    <input type="number" min="1" disabled={isBulk} value={form.quantity} onChange={e => handleChange('quantity', e.target.value)} className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1.5 block">卡況</label>
+                     <div className="relative">
+                        <select 
+                            value={form.condition|| ''} 
+                            onChange={e => handleChange('condition', e.target.value)} 
+                            className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 appearance-none text-sm"
+                        >
+                            <option value="無損">無損</option>
+                            <option value="微損">微損</option>
+                            <option value="有損">有損</option>
+                            <option value="嚴重受損">嚴重受損</option>
+                        </select>
+                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                            <ChevronDown className="w-4 h-4" />
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1.5 block">狀態</label>
+                     <div className={`relative ${isBulk ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <select 
+                            disabled={isBulk}
+                            value={form.status} 
+                            onChange={e => handleChange('status', e.target.value)} 
+                            className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 appearance-none text-sm ${isBulk ? 'cursor-not-allowed' : ''}`}
+                        >
+                            <option value="未發貨">未發貨</option>
+                            <option value="囤貨">囤貨</option>
+                            <option value="到貨">到貨</option>
+                        </select>
+                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                            <ChevronDown className="w-4 h-4" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="col-span-2">
+            <FormCapsuleSelect 
+                label="來源"
+                options={uniqueSources || []}
+                value={form.source || ''}
+                onChange={val => handleChange('source', val)}
+                allowCustom={true}
+                placeholder="輸入新來源..."
+                onOptionEdit={onRenameSource}
+                onOptionDelete={onDeleteSource}
+            />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-1 sm:pt-2">
+                <div className="bg-green-50/50 p-3 sm:p-4 rounded-2xl flex flex-col justify-between h-24 sm:h-28 relative group border border-green-100/50 hover:border-green-200 transition-colors">
+                    <div className="flex justify-between items-center mb-1">
+                        <label className="text-[9px] sm:text-[10px] font-bold text-green-600 uppercase tracking-wider">售出價格</label>
+                         {form.sellPrice > 0 && (
+                            <input 
+                                type="date" 
+                                value={form.sellDate} 
+                                onChange={e => handleChange('sellDate', e.target.value)} 
+                                className="bg-transparent text-[9px] sm:text-[10px] text-green-600 font-bold outline-none border-b border-green-200 w-16 sm:w-20"
+                            />
+                        )}
+                    </div>
+                    <div className="flex items-baseline">
+                        <span className="text-base sm:text-lg text-green-600 font-bold mr-1">$</span>
+                        <input 
+                            type="number" 
+                            placeholder="0" 
+                            step="50"
+                            value={form.sellPrice} 
+                            onChange={e => handleChange('sellPrice', e.target.value)} 
+                            className="w-full bg-transparent text-2xl sm:text-4xl font-black text-green-600 outline-none placeholder-green-200"
+                        />
+                    </div>
+                </div>
+
+                <div className="bg-red-50/50 p-3 sm:p-4 rounded-2xl flex flex-col justify-between h-24 sm:h-28 relative group border border-red-100/50 hover:border-red-200 transition-colors">
+                    <div className="flex justify-end">
+                        <label className="text-[9px] sm:text-[10px] font-bold text-red-600 uppercase tracking-wider">購入價格</label>
+                    </div>
+                    <div className="flex items-baseline justify-end">
+                        <span className="text-base sm:text-lg text-red-600 font-bold mr-1">$</span>
+                        <input 
+                            type="number" 
+                            disabled={isBulk}
+                            placeholder="0" 
+                            step="50"
+                            value={form.buyPrice} 
+                            onChange={e => handleChange('buyPrice', e.target.value)} 
+                            className={`w-full bg-transparent text-2xl sm:text-4xl font-black text-red-600 outline-none text-right placeholder-red-200 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label className="text-[11px] sm:text-xs font-bold text-gray-500 mb-1 block">備註</label>
+                <input type="text" placeholder="卡況詳細或其他備註..." value={form.note} onChange={e => handleChange('note', e.target.value)} className="w-full border p-2.5 sm:p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 text-xs sm:text-sm" />
+            </div>
+        </div>
+    );
+}
+
+function OptionManageModal({ type, data, onClose, onRename, onDelete }) {
+    const [newName, setNewName] = useState(data.name || data.value);
+
+    return (
+        <Modal title={`管理: ${data.name || data.value}`} onClose={onClose} className="max-w-sm" footer={
+            <div className="flex justify-between items-center w-full">
+                <button 
+                    onClick={() => { 
+                        onDelete();
+                        onClose();
+                    }}
+                    className="px-4 py-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center gap-1 text-sm font-bold"
+                >
+                    <Trash2 className="w-4 h-4" /> 刪除
+                </button>
+                <div className="flex gap-2 justify-end ml-2 flex-1">
+                    <button onClick={onClose} className="flex-1 py-2 rounded-lg border text-gray-500 hover:bg-gray-100">取消</button>
+                    <button 
+                        onClick={() => { onRename(newName); onClose(); }}
+                        className="flex-1 py-2 rounded-lg bg-indigo-600 text-white font-bold"
+                    >
+                        儲存
+                    </button>
+                </div>
+            </div>
+        }>
+            <div className="space-y-4 pt-2">
+                <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">重新命名</label>
+                    <input 
+                        type="text" 
+                        value={newName} 
+                        onChange={e => setNewName(e.target.value)} 
+                        className="w-full border p-3 rounded-lg"
+                    />
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function SeriesFilterModal({ 
+    visible, onClose, 
+    seriesTypes, selectedSeriesType, setSeriesType,
+    series, selectedSeries, setSeries,
+    batches, selectedBatch, setBatch
+}) {
+    if (!visible) return null;
+
+    const RenderList = ({ options, selected, onSelect, label }) => (
+        <div className="mb-4">
+             <div className="text-xs font-bold text-gray-400 mb-2 uppercase">{label}</div>
+             <div className="flex flex-wrap gap-2">
+                 <button 
+                    onClick={() => onSelect('All')}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-all ${selected === 'All' ? 'bg-black text-white border-black font-bold' : 'bg-white text-gray-600 border-gray-200'}`}
+                 >
+                     全部
+                 </button>
+                 {(options || []).map(opt => {
+                     const val = typeof opt === 'object' ? opt.id : opt;
+                     const name = typeof opt === 'object' ? opt.name : opt;
+                     return (
+                         <button 
+                            key={val}
+                            onClick={() => onSelect(val)}
+                            className={`px-3 py-1.5 text-xs rounded-full border transition-all ${selected === val ? 'bg-black text-white border-black font-bold' : 'bg-white text-gray-600 border-gray-200'}`}
+                         >
+                             {name}
+                         </button>
+                     )
+                 })}
+             </div>
+        </div>
+    );
+
+    return (
+        <Modal title="系列與版本篩選" onClose={onClose} className="max-w-sm">
+             <div className="p-2">
+                 <RenderList 
+                    label="系列類型" 
+                    options={seriesTypes} 
+                    selected={selectedSeriesType} 
+                    onSelect={setSeriesType} 
+                 />
+                 <RenderList 
+                    label="系列" 
+                    options={series} 
+                    selected={selectedSeries} 
+                    onSelect={setSeries} 
+                 />
+                 {(batches || []).length > 0 && (
+                     <RenderList 
+                        label="批次" 
+                        options={batches} 
+                        selected={selectedBatch} 
+                        onSelect={setBatch} 
+                     />
+                 )}
+             </div>
+             <div className="mt-4 pt-4 border-t flex justify-end">
+                  <button onClick={onClose} className="px-6 py-2 bg-black text-white rounded-lg text-sm font-bold">完成</button>
+             </div>
+        </Modal>
+    );
+}
+
+function CardDetailModal({ card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, cards, onEdit, onOpenBulkRecord,uniqueSources, onRenameSource, onDeleteSource }) {
+    const [activeModal, setActiveModal] = useState(null); 
+    const [tempInvData, setTempInvData] = useState(null);
+    const saleFocusRef = useRef(null);
+
+    const SALE_COLORS = [
+        { id: 'black', class: 'bg-black/70', display: 'bg-gray-800' },
+        { id: 'red', class: 'bg-red-500/80', display: 'bg-red-500' },
+        { id: 'orange', class: 'bg-orange-500/80', display: 'bg-orange-500' },
+        { id: 'green', class: 'bg-green-600/80', display: 'bg-green-600' },
+        { id: 'blue', class: 'bg-blue-500/80', display: 'bg-blue-500' },
+        { id: 'purple', class: 'bg-purple-500/80', display: 'bg-purple-500' },
+    ];
+
+    const card = cards.find(c => c.id === initialCard.id) || initialCard;
+
+    const memberName = members.find(m => m.id === card.memberId)?.name;
+    const groupName = groups.find(g => g.id === card.groupId)?.name;
+    
+    const cardSeries = (series || []).find(s => s.id === card.seriesId);
+    const seriesName = cardSeries?.shortName || cardSeries?.name;
+    const cardBatch = (batches || []).find(b => b.id === card.batchId);
+    
+    const effectiveType = card.type;
+    const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+    const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+    
+    const effectiveChannelId = card.channel;
+    const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+    const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+    
+    const batchNumber = cardBatch?.batchNumber;
+    const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+    const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
+    const myInventory = (inventory || [])
+        .filter(i => i.cardId === card.id)
+        .sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
+        
+    const currentSale = sales.find(s => s.cardId === card.id); 
+
+    const totalQty = getOwnedQuantity(inventory, card.id); 
+    // 1. 先濾出還沒售出的庫存
+    const validInv = myInventory.filter(i => (!i.sellPrice || i.sellPrice <= 0));
+    // 2. 計算總花費金額
+    const totalAmount = validInv.reduce((acc, curr) => acc + Number(curr.buyPrice || 0), 0);
+    // 3. 計算總擁有張數
+    const totalValidQty = validInv.reduce((acc, curr) => acc + (Number(curr.quantity) || 1), 0);
+    // 4. 總金額 / 總張數 = 真實均價
+    const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
+
+    const handleSaveInventory = async (invData, callback) => {
+        const idToUse = invData.id || Date.now().toString();
+
+        if (invData.sellPrice > 0) {
+            const originalRecord = (inventory || []).find(i => i.id === idToUse);
+            const isNewSale = !originalRecord || (originalRecord.sellPrice <= 0 || !originalRecord.sellPrice);
+            
+            if (isNewSale) {
+                 setSales(prev => {
+                     const updated = prev.map(s => {
+                         if (s.cardId === card.id) {
+                             const newQty = Math.max(0, s.quantity - invData.quantity);
+                             supabase.from('ui_sales').update({ quantity: newQty }).eq('id', s.id);
+                             return { ...s, quantity: newQty };
+                         }
+                         return s;
+                     });
+                     return updated;
+                 });
+            }
+        }
+
+        const payload = { ...invData, id: idToUse, cardId: card.id };
+        if (invData.id) {
+            setInventory(prev => prev.map(i => i.id === invData.id ? payload : i));
+        } else {
+            setInventory(prev => [...prev, payload]);
+            if (callback) callback(idToUse);
+        }
+        
+        // 💾 儲存到 Supabase
+        await supabase.from('ui_inventory').upsert(toSnakeCase(payload));
+    };
+
+    const handleUpdateSale = async (key, value) => {
+        let payloadToSave;
+        setSales(prev => {
+            const existing = prev.find(s => s.cardId === card.id);
+            if (existing) {
+                payloadToSave = { ...existing, [key]: value };
+                return prev.map(s => s.cardId === card.id ? payloadToSave : s);
+            } else {
+                payloadToSave = { id: Date.now().toString(), cardId: card.id, [key]: value, date: new Date().toISOString().split('T')[0], quantity: 1, price: 0, color: 'bg-black/70' };
+                return [...prev, payloadToSave];
+            }
+        });
+        
+        // 💾 儲存到 Supabase
+        setTimeout(async () => {
+            if(payloadToSave) await supabase.from('ui_sales').upsert(toSnakeCase(payloadToSave));
+        }, 0);
+    };
+    
+    const adjustSalePrice = (amount) => {
+        const currentPrice = Number(currentSale?.price) || 0;
+        const newPrice = Math.max(0, currentPrice + amount);
+        handleUpdateSale('price', newPrice);
+    };
+
+    const handleDeleteInventory = async (invId) => {
+        setInventory(prev => prev.filter(i => i.id !== invId));
+        setActiveModal(null);
+        setTempInvData(null);
+        // 💾 刪除 Supabase 紀錄
+        await supabase.from('ui_inventory').delete().eq('id', invId);
+    };
+
+    const handleAddToList = async (listId, note) => {
+        const targetList = customLists.find(l => l.id === listId);
+        const newItems = [...(targetList.items || []), { cardId: card.id, note }];
+        setCustomLists(prev => prev.map(l => l.id === listId ? { ...l, items: newItems } : l));
+        setActiveModal(null);
+        alert("已加入收藏冊");
+        // 💾 儲存到 Supabase
+        await supabase.from('custom_lists').update({ items: newItems }).eq('id', listId);
+    };
+
+    const toggleWishlist = async () => {
+        const newVal = !card.isWishlist;
+        setCards(prev => prev.map(c => c.id === card.id ? { ...c, isWishlist: newVal } : c));
+        // 💾 儲存到 Supabase
+        await supabase.from('ui_cards').update({ is_wishlist: newVal }).eq('id', card.id);
+    };
+
+    const openEditInv = (inv) => {
+        setTempInvData(inv);
+        setActiveModal('editInv');
+    };
+    
+    useEffect(() => {
+        if(activeModal === 'focusSell' && saleFocusRef.current) {
+            saleFocusRef.current.focus();
+            setActiveModal(null);
+        }
+    }, [activeModal]);
+
+    return (
+        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in">
+            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0">
+                <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
+                <div className="font-bold text-lg">卡片詳情</div>
+                <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-indigo-600"><Edit2 className="w-5 h-5" /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-gray-50">
+                <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
+                    <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4">
+                        <img src={card.image} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
+                    <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
+                    {cardBatch?.name && <div className="text-sm text-gray-400">{cardBatch.name}</div>}
+                    
+                    <div className="flex justify-center gap-3 mt-4">
+                        {totalQty > 0 ? (
+                            <span className="text-sm font-bold text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                                持有 {totalQty} 張
+                            </span>
+                        ) : (
+                            <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">未擁有</span>
+                        )}
+                        {card.isWishlist && (
+                            <span className="text-sm font-bold text-pink-600 bg-pink-50 px-3 py-1 rounded-full border border-pink-100 flex items-center gap-1">
+                                <Heart className="w-3 h-3 fill-current" /> 許願中
+                            </span>
+                        )}
+                        {currentSale && currentSale.quantity >= 1 && (
+                             <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1">
+                                <Coins className="w-3 h-3 fill-current" /> 販售中
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="p-4 pb-24">
+                    <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-2">
+                             <div className="flex items-center gap-2">
+                                <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600">
+                                    <TrendingUp className="w-4 h-4" />
+                                </div>
+                                <div className="font-bold text-gray-800 text-sm">販售</div>
+                            </div>
+                            <div className="flex gap-1.5">
+                                {SALE_COLORS.map(c => (
+                                    <button
+                                        key={c.id}
+                                        onClick={() => handleUpdateSale('color', c.class)}
+                                        className={`w-4 h-4 rounded-full ${c.display} border-2 ${currentSale?.color === c.class || (!currentSale?.color && c.id === 'black') ? 'border-gray-400 scale-110' : 'border-transparent opacity-40 hover:opacity-100'} transition-all`}
+                                        title="設定標籤顏色"
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                                <label className="text-[10px] text-gray-400 font-bold ml-1 mb-0.5 block">數量</label>
+                                <input 
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={currentSale?.quantity || ''}
+                                    onChange={(e) => handleUpdateSale('quantity', e.target.value)}
+                                    className="w-full bg-gray-50 border-none rounded-lg py-2 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100 transition-all text-center"
+                                />
+                            </div>
+                            <div className="flex-[2]">
+                                <label className="text-[10px] text-green-500 font-bold ml-1 mb-0.5 block">價格</label>
+                                <div className="flex items-center gap-1">
+                                     <button onClick={() => adjustSalePrice(-50)} className="w-8 h-8 flex items-center justify-center bg-green-50 rounded-lg text-green-600 hover:bg-green-100 transition-colors flex-shrink-0">
+                                         <Minus className="w-4 h-4" />
+                                     </button>
+                                     <div className="relative flex-1">
+                                        <span className="absolute left-2 top-2 text-green-600 font-bold">$</span>
+                                        <input 
+                                            ref={saleFocusRef}
+                                            type="number"
+                                            min="0"
+                                            placeholder="0"
+                                            value={currentSale?.price || ''}
+                                            onChange={(e) => handleUpdateSale('price', e.target.value)}
+                                            className="w-full bg-white border-2 border-green-100 rounded-lg py-1.5 pl-5 pr-1 text-xl font-black text-green-600 outline-none focus:border-green-300 transition-all text-center placeholder-green-100"
+                                        />
+                                    </div>
+                                    <button onClick={() => adjustSalePrice(50)} className="w-8 h-8 flex items-center justify-center bg-green-50 rounded-lg text-green-600 hover:bg-green-100 transition-colors flex-shrink-0">
+                                         <Plus className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between items-end mb-3 px-1">
+                        <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider">交易紀錄</h3>
+                        {avgPrice > 0 && <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded border">均價 ${avgPrice}</span>}
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {myInventory.map(inv => (
+                            <div 
+                                key={inv.id} 
+                                onClick={() => openEditInv(inv)}
+                                className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-indigo-300 group"
+                            >
+                                <div>
+                                    <div className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                        {inv.buyDate}
+                                        {inv.sellPrice > 0 
+                                            ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">已售 x{inv.quantity}</span>
+                                            : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">x{inv.quantity}</span>
+                                        }
+                                    </div>
+                                    <div className="flex gap-2 mt-1 flex-wrap">
+                                        {inv.status && (
+                                            <span className={`text-[10px] px-1.5 rounded ${
+                                                inv.status === '到貨' ? 'bg-green-50 text-green-600' :
+                                                inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' :
+                                                inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' :
+                                                'bg-gray-50 text-gray-600'
+                                            }`}>
+                                                {inv.status}
+                                            </span>
+                                        )}
+                                        {inv.source && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded">{inv.source}</span>}
+                                        {inv.condition && <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 rounded">{inv.condition}</span>}
+                                        <span className="text-xs text-gray-500">{inv.note || '無備註'}</span>
+                                    </div>
+                                </div>
+                                <div className="text-right flex flex-col items-end gap-0.5">
+                                    <div className="text-sm font-bold text-red-600">
+                                        <span className="text-[10px] text-red-400 font-bold mr-1">買</span>
+                                        ${inv.buyPrice}
+                                    </div>
+                                    {inv.sellPrice > 0 && (
+                                        <div className="text-sm font-bold text-green-600">
+                                            <span className="text-[10px] text-green-400 font-bold mr-1">賣</span>
+                                            ${inv.sellPrice}
+                                        </div>
+                                    )}
+                                </div>
+                                <Edit2 className="w-4 h-4 text-gray-300 absolute right-2 top-2 opacity-0 group-hover:opacity-100" />
+                            </div>
+                        ))}
+                        {myInventory.length === 0 && (
+                            <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                                尚未登錄任何庫存
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="border-t bg-white p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] grid grid-cols-3 gap-3 z-20">
+                <button 
+                    onClick={toggleWishlist}
+                    className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all active:scale-95 ${card.isWishlist ? 'bg-pink-50 text-pink-600 ring-1 ring-pink-200' : 'hover:bg-gray-50 text-gray-600'}`}
+                >
+                    <Heart className={`w-5 h-5 ${card.isWishlist ? 'fill-current' : ''}`} />
+                    <span className="text-[10px] font-bold">想要</span>
+                </button>
+                
+                <button 
+                    onClick={() => setActiveModal('own')}
+                    className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl hover:bg-gray-50 text-gray-600 active:scale-95"
+                >
+                    <ShoppingBag className="w-5 h-5" />
+                    <span className="text-[10px] font-bold">擁有</span>
+                </button>
+                
+                <button 
+                     onClick={() => setActiveModal('list')}
+                    className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl hover:bg-gray-50 text-gray-600 active:scale-95"
+                >
+                    <FolderPlus className="w-5 h-5" />
+                    <span className="text-[10px] font-bold">收藏冊</span>
+                </button>
+            </div>
+
+            {(activeModal === 'own' || activeModal === 'editInv') && (
+                <Modal 
+                    title={
+                        <span className="flex items-center gap-2">
+                            {activeModal === 'own' ? "新增購買紀錄" : "編輯紀錄"}
+                            {tempInvData?.bulkRecordId && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
+                                    }}
+                                    className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
+                                >
+                                    <Package className="w-3 h-3" />
+                                    編輯盤收
+                                </button>
+                            )}
+                        </span>
+                    } 
+                    headerAction={
+                        activeModal === 'editInv' && !tempInvData?.bulkRecordId && (
+                            <button 
+                                onClick={() => handleDeleteInventory(tempInvData.id)}
+                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                title="刪除紀錄"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                        )
+                    }
+                    onClose={() => { setActiveModal(null); setTempInvData(null); }} 
+                    className="max-w-sm"
+                    footer={null} 
+                >
+                    <div className="flex flex-col h-full">
+                        <form id="invForm" className="flex-1" key={tempInvData?.id || 'new'} onSubmit={(e) => e.preventDefault()}>
+                            <InventoryForm 
+                                initialData={tempInvData || {}} 
+                                onSave={handleSaveInventory} 
+                                sourceOptions={uniqueSources}
+                                uniqueSources={uniqueSources}
+                                onRenameSource={onRenameSource}
+                                onDeleteSource={onDeleteSource}
+                            />
+                        </form>
+                    </div>
+                </Modal>
+            )}
+
+            {activeModal === 'list' && (
+                <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
+                    <div className="space-y-2">
+                        {(customLists || []).map(list => (
+                            <button 
+                                key={list.id}
+                                onClick={() => handleAddToList(list.id, prompt("備註文字"))}
+                                className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
+                            >
+                                <span className="font-bold text-gray-700">{list.title}</span>
+                                <Plus className="w-5 h-5 text-gray-300 group-hover:text-indigo-600" />
+                            </button>
+                        ))}
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+// --- 6. 分頁組件 ---
+// (因篇幅關係，Tab組件內的內部邏輯已接通傳入的 props，未作大幅刪改)
+// [... 這裡省略 Tab 組件如 LibraryTab, CollectionTab 等等 ...]
+// (為了確保你能直接貼上，我保留所有你的 Tab 程式碼如下！)
+
+function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedCardIds, setSelectedCardIds, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
+  const [filterMemberId, setFilterMemberId] = useState('All');
+  const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊篩選狀態
+  const [filterSeriesId, setFilterSeriesId] = useState('All');
+  const [filterSeriesType, setFilterSeriesType] = useState('All'); 
+  const [filterBatchId, setFilterBatchId] = useState('All');
+  const [filterType, setFilterType] = useState('All');
+  const [filterChannel, setFilterChannel] = useState('All');
+  
+  const [editingOption, setEditingOption] = useState(null);
+
+  useEffect(() => {
+    setFilterMemberId('All');
+    setFilterSeriesId('All');
+    setFilterBatchId('All');
+    setFilterType('All');
+    setFilterChannel('All');
+    setFilterSeriesType('All');
+    // 注意：把 setFilterSubunit('All') 移除了，交給下方的特效自動判斷
+  }, [currentGroupId]);
+
+  // 🌟 新增：自動監聽並預設為「第一個分隊」
+  useEffect(() => {
+      const groupMembers = (members || []).filter(m => m.groupId === currentGroupId);
+      const subs = [...new Set(groupMembers.map(m => m.subunit).filter(Boolean))];
+      
+      if (subs.length > 0) {
+          // 如果目前沒有選中分隊 (或是選中的分隊被刪除了)，自動切換到第一個
+          if (filterSubunit === 'All' || !subs.includes(filterSubunit)) {
+              setFilterSubunit(subs[0]);
+          }
+      } else {
+          setFilterSubunit('All'); // 如果這個團體沒有任何分隊，才保持 All
+      }
+  }, [currentGroupId, members, filterSubunit]);
+
+  const handleLongPress = (type, value, name) => {
+      setIsSelectionMode(true);
+      setBatchCategorizeTarget({ type, value, name });
+      
+      const preSelectedIds = (allCards || [])
+        .filter(c => c.groupId === currentGroupId && c[type] === value)
+        .map(c => c.id);
+      
+      setSelectedCardIds(preSelectedIds);
+  };
+
+  const handleOptionDoubleClick = (type, data) => {
+      if (type === 'series' || type === 'batch' || type === 'channel' || type === 'type') {
+          openModal(type, data);
+      } else {
+          setEditingOption({ type, data });
+      }
+  };
+
+  const handleOptionRename = async (newName) => {
+      if (!editingOption) return;
+      const { type, data } = editingOption;
+
+      if (type === 'seriesType') {
+          setSeries(prev => prev.map(s => s.type === data.value ? { ...s, type: newName } : s));
+          await supabase.from('series').update({ type: newName }).eq('type', data.value);
+      }
+  };
+
+  const handleOptionDelete = async () => {
+      if (!editingOption) return;
+      const { type, data } = editingOption;
+
+      if (type === 'seriesType') {
+          setSeries(prev => prev.map(s => s.type === data.value ? { ...s, type: '' } : s));
+          await supabase.from('series').update({ type: '' }).eq('type', data.value);
+      } 
+  };
+
+  const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
+  // 🌟 自動抓取該團體所有有設定的分隊，並過濾成員大頭貼
+  const uniqueSubunits = useMemo(() => [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))], [currentMembers]);
+  const displayMembers = currentMembers.filter(m => filterSubunit === 'All' || m.subunit === filterSubunit);
+
+  // 1. 系列依時間排序 (越舊越前面)
+  // 1. 系列依時間排序 (越舊越前面)，並受分隊過濾影響
+  const currentSeries = (series || []).filter(s => {
+      if (s.groupId !== currentGroupId) return false;
+      // 🌟 新增這行：如果有選分隊，只顯示該分隊的系列
+      if (filterSubunit !== 'All' && s.subunit !== filterSubunit) return false;
+      if (filterSeriesType !== 'All' && s.type !== filterSeriesType) return false;
+      return true;
+  }).sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
+  
+  // 2. 批次依時間排序 (越舊越前面)
+  // 🌟 2. 批次排序：優先依子類順序 -> 相同子類依字母(或數字)排序
+  // 🌟 2. 批次排序：優先依子類順序 -> 相同子類依日期(舊到新) -> 日期相同依名稱
+  const currentBatches = (batches || []).filter(b => {
+      if (b.groupId !== currentGroupId) return false;
+      if (filterSeriesId !== 'All' && b.seriesId !== filterSeriesId) return false;
+      if (filterType !== 'All' && b.type !== filterType) return false;
+      if (filterChannel !== 'All' && b.channel !== filterChannel) return false;
+      return true;
+  }).sort((a, b) => {
+      // (1) 先比對子類的 sortOrder
+      const typeA = (types || []).find(t => t.id === a.type || t.name === a.type);
+      const typeB = (types || []).find(t => t.id === b.type || t.name === b.type);
+      const sortOrderA = typeA ? (Number(typeA.sortOrder) || 0) : 999;
+      const sortOrderB = typeB ? (Number(typeB.sortOrder) || 0) : 999;
+      
+      if (sortOrderA !== sortOrderB) {
+          return sortOrderA - sortOrderB;
+      }
+      
+      // 🌟 (2) 如果子類相同，依照「批次日期」排序 (舊到新)
+      const dateA = a.date ? new Date(a.date).getTime() : 253402214400000;
+      const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
+      if (dateA !== dateB) return dateA - dateB;
+      
+      // (3) 如果連日期都一樣(或都沒填)，就依照批次名稱字母順序
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+  });
+  
+  // 3. 卡片先篩選，再依系列時間與批次時間雙重排序
+  // 3. 卡片先篩選，再依系列時間與批次時間雙重排序
+  // 🌟 圖鑑卡片：超安全排序版
+  // 3. 卡片先篩選，再依系列時間與批次時間雙重排序
+  const filteredCards = (cards || []).filter(card => {
+    if (card.groupId !== currentGroupId) return false;
+    // 🌟 修正：永遠套用目前的篩選條件，讓批量歸類時「只顯示原目前頁面的卡片」
+    
+    // 👇 補上這四行：如果你選了分隊，卡片區就只會出現該分隊成員的卡！
+    if (filterSubunit !== 'All' && filterMemberId === 'All') {
+        const mem = currentMembers.find(m => m.id === card.memberId);
+        if (!mem || mem.subunit !== filterSubunit) return false;
+    }
+    
+    // 🌟 修正：永遠套用目前的篩選條件，讓批量歸類時「只顯示原目前頁面的卡片」
+    if (filterMemberId !== 'All' && card.memberId !== filterMemberId) return false;
+    if (filterSeriesId !== 'All' && card.seriesId !== filterSeriesId) return false;
+    if (filterSeriesType !== 'All' && filterSeriesId === 'All') {
+        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+        if (!cardSeries || cardSeries.type !== filterSeriesType) return false;
+    }
+    if (filterType !== 'All' && card.type !== filterType) return false;
+    if (filterChannel !== 'All' && card.channel !== filterChannel) return false;
+    if (filterBatchId !== 'All' && card.batchId !== filterBatchId) return false;
+    
+    return true;
+  }).sort((cardA, cardB) => {
+      const safeString = (val) => val ? String(val) : '';
+      const safeNum = (val, defaultVal) => {
+          const n = Number(val);
+          return isNaN(n) ? defaultVal : n;
+      };
+
+      // 1. 確保系列時間與分群 (舊到新)
+      const sA = (series || []).find(s => s.id === cardA.seriesId);
+      const sB = (series || []).find(s => s.id === cardB.seriesId);
+      const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
+      const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+      if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+
+      const seriesIdA = safeString(cardA.seriesId);
+      const seriesIdB = safeString(cardB.seriesId);
+      if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
+
+      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
+      const bA = (batches || []).find(b => b.id === cardA.batchId);
+      const bB = (batches || []).find(b => b.id === cardB.batchId);
+      
+      if (bA && bB && bA.id !== bB.id) {
+          // (1) 比較兩個批次所屬的「子類順序」
+          const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
+          const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
+          const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
+          const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
+          if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+          
+          // (2) 比較兩個批次的「日期」 (舊到新)
+          const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
+          const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
+          if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+          
+          // (3) 日期相同，比較批次「名稱」
+          const nameA = safeString(bA.name);
+          const nameB = safeString(bB.name);
+          const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+      } else if (bA && !bB) {
+          return -1; // 有批次的卡片往前排
+      } else if (!bA && bB) {
+          return 1;
+      }
+
+      // 3. 確保相同批次的小卡絕對群聚在一起
+      const batchIdA = safeString(cardA.batchId);
+      const batchIdB = safeString(cardB.batchId);
+      if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
+
+      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
+      if (!bA && !bB) {
+          const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
+          const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
+          const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
+          const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
+          if (cSortA !== cSortB) return cSortA - cSortB;
+      }
+
+      // 5. 相同批次/子類內，看「成員順序」
+      const mA = (members || []).find(m => m.id === cardA.memberId);
+      const mB = (members || []).find(m => m.id === cardB.memberId);
+      const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+      const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+      if (mSortA !== mSortB) return mSortA - mSortB;
+
+      // 防呆：最後用 ID
+      return safeString(cardA.id).localeCompare(safeString(cardB.id));
+  });
+
+  const getCardQuantity = (cardId) => (inventory || []).filter(i => i.cardId === cardId && (!i.sellPrice || i.sellPrice <= 0)).reduce((s, i) => s + Number(i.quantity), 0);
+
+  const toggleSelection = (id) => {
+      setSelectedCardIds(prev => prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]);
+  };
+
+  const handleAddNewCard = () => {
+    openModal('card', {
+      memberId: filterMemberId !== 'All' ? filterMemberId : '',
+      seriesId: filterSeriesId !== 'All' ? filterSeriesId : '',
+      batchId: filterBatchId !== 'All' ? filterBatchId : '',
+      type: filterType !== 'All' ? filterType : '',
+      channel: filterChannel !== 'All' ? filterChannel : ''
+    });
+  };
+
+  return (
+    <div className="space-y-6 pb-24">
+      {editingOption && (
+          <OptionManageModal 
+             type={editingOption.type}
+             data={editingOption.data}
+             onClose={() => setEditingOption(null)}
+             onRename={handleOptionRename}
+             onDelete={handleOptionDelete}
+          />
+      )}
+
+      <section>
+        {/* 🌟 分隊切換按鈕列 (純切換模式，點擊不會變回全體) */}
+        {uniqueSubunits.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 mb-3">
+                {uniqueSubunits.map(sub => (
+                    <button
+                        key={sub}
+                        onClick={() => { 
+                            // 🌟 如果點擊的已經是目前的分隊，就不做任何動作
+                            if (filterSubunit !== sub) {
+                                setFilterSubunit(sub); 
+                                setFilterMemberId('All'); 
+                                setFilterSeriesId('All'); 
+                            }
+                        }}
+                        className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap ${filterSubunit === sub ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                        {sub}
+                    </button>
+                ))}
+            </div>
+        )}
+        
+        {/* 🌟 成員大頭貼列表 (依據分隊動態過濾) */}
+        <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar px-1">
+           {displayMembers.map(m => (
+             <MemberItem 
+                key={m.id} 
+                member={m} 
+                isSelected={filterMemberId === m.id} 
+                onClick={() => setFilterMemberId(filterMemberId === m.id ? 'All' : m.id)}
+                onLongPress={(m) => handleLongPress('memberId', m.id, m.name)}
+                onDoubleClick={() => openModal('member', m)}
+             />
+           ))}
+           <button onClick={() => openModal('member', { subunit: filterSubunit !== 'All' ? filterSubunit : '' })} className="flex flex-col items-center gap-1 min-w-[64px] group">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 group-hover:bg-indigo-50 group-hover:border-indigo-300 transition-colors">
+                <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500" />
+              </div>
+              <span className="text-xs text-gray-400">新增成員</span>
+           </button>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex flex-col gap-2 mb-2 px-1">
+          <div className="flex justify-between items-center">
+             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setFilterSeriesId('All')}>
+                <h3 className="font-bold text-lg text-gray-800">系列</h3>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+             </div>
+             <button onClick={() => openModal('series', { subunit: filterSubunit !== 'All' ? filterSubunit : '' })} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> 新增系列
+             </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+              <button onClick={() => setFilterSeriesType('All')} className={`px-2 py-1 text-[10px] rounded-full whitespace-nowrap border ${filterSeriesType === 'All' ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>全部類型</button>
+              {(uniqueSeriesTypes || []).map(t => (
+                  <button 
+                    key={t} 
+                    onClick={() => setFilterSeriesType(filterSeriesType === t ? 'All' : t)} 
+                    onDoubleClick={() => handleOptionDoubleClick('seriesType', { value: t })}
+                    className={`px-2 py-1 text-[10px] rounded-full whitespace-nowrap border ${filterSeriesType === t ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}
+                  >
+                    {t}
+                  </button>
+              ))}
+          </div>
+        </div>
+
+        <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+            {currentSeries.map(s => (
+                <SeriesItem 
+                    key={s.id} 
+                    series={s} 
+                    isSelected={filterSeriesId === s.id}
+                    onClick={() => {
+                      setFilterSeriesId(filterSeriesId === s.id ? 'All' : s.id);
+                      setFilterBatchId('All'); // 切換系列時，順便把已選的批次清除
+                    }}
+                    onLongPress={(s) => handleLongPress('seriesId', s.id, s.name)}
+                    onDoubleClick={() => handleOptionDoubleClick('series', s)}
+                />
+            ))}
+        </div>
+      </section>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="flex flex-col gap-3 mb-4 border-b pb-3">
+            <div className="flex justify-between items-center">
+                 <h3 className="font-bold text-gray-800 flex items-center gap-1">圖鑑 <span className="text-xs font-normal text-gray-500">{filteredCards.length}</span></h3>
+                 <div className="flex gap-2 items-center">
+                     <div className="flex bg-gray-100 p-1 rounded-full items-center h-8 shadow-sm">
+                       <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
+                       <select 
+                          value={cols}
+                          onChange={(e) => setCols(Number(e.target.value))}
+                          className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
+                       >
+                          {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                       </select>
+                    </div>
+                     <button 
+                        onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedCardIds([]); setBatchCategorizeTarget(null); }}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-colors ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-white border hover:bg-gray-50'}`}
+                     >
+                        <CheckSquare className="w-3 h-3" /> 批量選取
+                     </button>
+                     <button onClick={handleAddNewCard} className="flex items-center gap-1 bg-black text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-gray-800">
+                        <Plus className="w-3 h-3" /> 新增
+                     </button>
+                 </div>
+            </div>
+            
+            <div className="space-y-3">
+               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                   <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('type', { groupId: currentGroupId })}>
+                        <span className="text-xs font-bold text-gray-400 whitespace-nowrap">子類</span>
+                        <Plus className="w-3 h-3 text-gray-300 group-hover:text-indigo-500" />
+                   </div>
+                   {(combinedTypes || []).map(t => (
+                       <FilterTagItem 
+                            key={t.id}
+                            text={t.name}
+                            isSelected={filterType === t.id}
+                            onClick={() => setFilterType(filterType === t.id ? 'All' : t.id)}
+                            onLongPress={(val) => handleLongPress('type', t.id, t.name)}
+                            onDoubleClick={() => handleOptionDoubleClick('type', t)}
+                       />
+                   ))}
+               </div>
+               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                   <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('channel', { groupId: currentGroupId })}>
+                        <span className="text-xs font-bold text-gray-400 whitespace-nowrap">通路</span>
+                        <Plus className="w-3 h-3 text-gray-300 group-hover:text-indigo-500" />
+                   </div>
+                   {(combinedChannels || []).map(c => (
+                       <FilterTagItem 
+                            key={c.id}
+                            text={c.name}
+                            isSelected={filterChannel === c.id}
+                            onClick={() => setFilterChannel(filterChannel === c.id ? 'All' : c.id)}
+                            onLongPress={(val) => handleLongPress('channel', c.id, c.name)}
+                            onDoubleClick={() => handleOptionDoubleClick('channel', c)}
+                       />
+                   ))}
+               </div>
+              {/* 🌟 只有當選取了特定系列 (filterSeriesId !== 'All') 時，才顯示批次這整行 */}
+               {filterSeriesId !== 'All' && (
+                   <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                       <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('batch', { seriesId: filterSeriesId, type: filterType !== 'All' ? filterType : '', channel: filterChannel !== 'All' ? filterChannel : '' })}>
+                            <span className="text-xs font-bold text-gray-400 whitespace-nowrap">批次</span>
+                            <Plus className="w-3 h-3 text-gray-300 group-hover:text-indigo-500" />
+                       </div>
+                       <div className="flex gap-3">
+                            {currentBatches.length > 0 ? currentBatches.map(b => (
+                                <BatchItem 
+                                    key={b.id} 
+                                    batch={b}
+                                    isSelected={filterBatchId === b.id}
+                                    onClick={() => setFilterBatchId(filterBatchId === b.id ? 'All' : b.id)}
+                                    onLongPress={(b) => handleLongPress('batchId', b.id, b.name)}
+                                    onDoubleClick={() => handleOptionDoubleClick('batch', b)}
+                                />
+                            )) : (
+                                <div className="text-xs text-gray-400 flex items-center px-1">無相關批次資料</div>
+                            )}
+                       </div>
+                   </div>
+               )}
+            </div>
+        </div>
+
+        <div 
+            className="grid gap-x-4 gap-y-6 transition-all duration-300 ease-in-out"
+            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        >
+            {filteredCards.map(card => {
+                const qty = getCardQuantity(card.id);
+                const isSelected = selectedCardIds.includes(card.id);
+                
+                const memberName = (members || []).find(m => m.id === card.memberId)?.name;
+                const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                const seriesName = cardSeries?.shortName || cardSeries?.name;
+                const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                
+                const effectiveType = card.type;
+                const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                
+                const effectiveChannelId = card.channel;
+                const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                
+                const batchNumber = cardBatch?.batchNumber;
+                const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
+                return (
+                    <div 
+                        key={card.id} 
+                        onClick={() => isSelectionMode ? toggleSelection(card.id) : setViewingCard(card)} 
+                        className={`cursor-pointer group relative select-none ${isSelectionMode && isSelected ? 'ring-2 ring-indigo-500 rounded-lg p-1 -m-1' : ''}`}
+                    >
+                        <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-2 shadow-sm border border-gray-100">
+                            <img src={card.image} className="w-full h-full object-cover pointer-events-none" />
+                            
+                            {card.isWishlist && (
+                                <div className="absolute top-2 left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
+                                    <Heart className="w-3 h-3 fill-current" />
+                                </div>
+                            )}
+
+                            {isSelectionMode && (
+                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white/50 border-gray-400'}`}
+                                >
+                                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                            )}
+                            {!isSelectionMode && qty > 0 && (
+                                <div className="absolute top-2 right-2 bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
+                                    {qty}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-1">
+                            <div className="text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
+                            <div className="text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">
+                                {displayTitle || '未命名卡片'}
+                            </div>
+                            {cardBatch?.name && <div className="text-[10px] text-gray-400">{cardBatch.name}</div>}
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols }) {
+  const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊狀態
+  const [filterMember, setFilterMember] = useState('All');
+  const [filterSeriesType, setFilterSeriesType] = useState('All'); 
+  const [filterSeries, setFilterSeries] = useState('All');
+  const [filterBatch, setFilterBatch] = useState('All');
+  const [filterType, setFilterType] = useState('All');
+  const [filterChannel, setFilterChannel] = useState('All');
+  const [viewMode, setViewMode] = useState('all'); 
+  const [showSeriesModal, setShowSeriesModal] = useState(false);
+  const [showDetails, setShowDetails] = useState(true); 
+
+  // 🌟 關鍵修復：把 allOwnedCards 搬到所有計算的最前面！
+  const allOwnedCards = useMemo(() => cards || [], [cards]);
+
+  // 🌟 1. 抓取目前擁有的卡片包含哪些分隊
+  const availableSubunits = useMemo(() => {
+      const ids = new Set(allOwnedCards.map(c => c.memberId));
+      return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+  }, [allOwnedCards, members]);
+
+  // 🌟 2. 讓成員選項連動：如果選了分隊，就只顯示該分隊的成員
+  const availableMembers = useMemo(() => {
+      let currentCards = allOwnedCards;
+      if (filterSubunit !== 'All') {
+          currentCards = currentCards.filter(c => {
+              const m = (members || []).find(mem => mem.id === c.memberId);
+              return m && m.subunit === filterSubunit;
+          });
+      }
+      return [...new Set(currentCards.map(c => c.memberId))];
+  }, [allOwnedCards, members, filterSubunit]);
+  
+  const availableTypeIds = useMemo(() => {
+      return [...new Set(allOwnedCards.map(c => c.type).filter(Boolean))];
+  }, [allOwnedCards]);
+  
+  const availableTypes = useMemo(() => {
+      return availableTypeIds.map(id => {
+          const tObj = (types || []).find(t => t.id === id || t.name === id);
+          return tObj || { id, name: id, shortName: '' };
+      });
+  }, [availableTypeIds, types]);
+  
+  const availableChannelIds = useMemo(() => {
+      return [...new Set(allOwnedCards.map(c => c.channel).filter(Boolean))];
+  }, [allOwnedCards]);
+
+  const availableChannels = useMemo(() => {
+      return availableChannelIds.map(id => {
+          const ch = (channels || []).find(c => c.id === id || c.name === id);
+          return ch || { id, name: id, shortName: '' };
+      });
+  }, [availableChannelIds, channels]);
+  
+  const availableSeriesTypes = useMemo(() => {
+      const ids = new Set(allOwnedCards.map(c => c.seriesId));
+      return [...new Set((series || []).filter(s => ids.has(s.id)).map(s => s.type).filter(Boolean))];
+  }, [allOwnedCards, series]);
+  
+  const availableSeriesList = useMemo(() => {
+      let filtered = (series || []).filter(s => allOwnedCards.some(c => c.seriesId === s.id));
+      if (filterSeriesType !== 'All') {
+          filtered = filtered.filter(s => s.type === filterSeriesType);
+      }
+      return filtered;
+  }, [allOwnedCards, series, filterSeriesType]);
+
+  const availableBatchesList = useMemo(() => {
+      let filtered = (batches || []).filter(b => allOwnedCards.some(c => c.batchId === b.id));
+      if (filterSeries !== 'All') {
+          filtered = filtered.filter(b => b.seriesId === filterSeries);
+      }
+      return filtered;
+  }, [allOwnedCards, batches, filterSeries]);
+
+  const getMemberName = (id) => (members || []).find(m => m.id === id)?.name || 'Unknown';
+  
+  const getSeriesSummary = () => {
+      const parts = [];
+      if (filterSeriesType !== 'All') parts.push(filterSeriesType);
+      if (filterSeries !== 'All') parts.push((series || []).find(s => s.id === filterSeries)?.name);
+      if (filterBatch !== 'All') parts.push((batches || []).find(b => b.id === filterBatch)?.name);
+      
+      return parts.length > 0 ? parts.join(' · ') : '全部系列';
+  };
+
+  const cardsInScope = useMemo(() => {
+    return allOwnedCards.filter(card => {
+         const cardBatch = (batches || []).find(b => b.id === card.batchId);
+         const effectiveType = card.type;
+         const effectiveChannel = card.channel;
+         // 🌟 新增分隊過濾判斷
+         if (filterSubunit !== 'All') {
+             const mem = (members || []).find(m => m.id === card.memberId);
+             if (!mem || mem.subunit !== filterSubunit) return false;
+         }
+
+         if (filterMember !== 'All' && card.memberId !== filterMember) return false;
+         if (filterType !== 'All' && effectiveType !== filterType) return false;
+         if (filterChannel !== 'All' && effectiveChannel !== filterChannel) return false;
+         
+         if (filterSeriesType !== 'All') {
+            const s = (series || []).find(ser => ser.id === card.seriesId);
+            if (!s || s.type !== filterSeriesType) return false;
+         }
+         if (filterSeries !== 'All' && card.seriesId !== filterSeries) return false;
+         if (filterBatch !== 'All' && card.batchId !== filterBatch) return false;
+         
+         return true;
+    });
+  }, [allOwnedCards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, series, batches, members, filterSubunit]);
+
+  const filteredCards = cardsInScope.filter(card => {
+     if (viewMode === 'wishlist' && !card.isWishlist) return false;
+     if (viewMode === 'selling') {
+         const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
+         if (!isSelling) return false;
+     }
+     return true;
+  }).sort((cardA, cardB) => {
+      const safeString = (val) => val ? String(val) : '';
+      const safeNum = (val, defaultVal) => {
+          const n = Number(val);
+          return isNaN(n) ? defaultVal : n;
+      };
+
+      // 1. 確保系列時間與分群 (舊到新)
+      const sA = (series || []).find(s => s.id === cardA.seriesId);
+      const sB = (series || []).find(s => s.id === cardB.seriesId);
+      const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
+      const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+      if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+
+      const seriesIdA = safeString(cardA.seriesId);
+      const seriesIdB = safeString(cardB.seriesId);
+      if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
+
+      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
+      const bA = (batches || []).find(b => b.id === cardA.batchId);
+      const bB = (batches || []).find(b => b.id === cardB.batchId);
+      
+      if (bA && bB && bA.id !== bB.id) {
+          // (1) 比較兩個批次所屬的「子類順序」
+          const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
+          const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
+          const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
+          const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
+          if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+          
+          // (2) 比較兩個批次的「日期」 (舊到新)
+          const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
+          const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
+          if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+          
+          // (3) 日期相同，比較批次「名稱」
+          const nameA = safeString(bA.name);
+          const nameB = safeString(bB.name);
+          const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+      } else if (bA && !bB) {
+          return -1; // 有批次的卡片往前排
+      } else if (!bA && bB) {
+          return 1;
+      }
+
+      // 3. 確保相同批次的小卡絕對群聚在一起
+      const batchIdA = safeString(cardA.batchId);
+      const batchIdB = safeString(cardB.batchId);
+      if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
+
+      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
+      if (!bA && !bB) {
+          const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
+          const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
+          const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
+          const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
+          if (cSortA !== cSortB) return cSortA - cSortB;
+      }
+
+      // 5. 相同批次/子類內，看「成員順序」
+      const mA = (members || []).find(m => m.id === cardA.memberId);
+      const mB = (members || []).find(m => m.id === cardB.memberId);
+      const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+      const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+      if (mSortA !== mSortB) return mSortA - mSortB;
+
+      // 防呆：最後用 ID
+      return safeString(cardA.id).localeCompare(safeString(cardB.id));
+  });
+  
+  const totalCount = filteredCards.length;
+  const ownedCount = filteredCards.filter(c => {
+      const qty = (inventory || []).filter(i => i.cardId === c.id && (!i.sellPrice || i.sellPrice <= 0)).reduce((s, i) => s + Number(i.quantity), 0); 
+      return qty > 0;
+  }).length;
+  const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
+
+  const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+     <div className="flex items-center gap-3 overflow-hidden">
+        <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+            {(options || []).map(opt => {
+                const id = typeof opt === 'object' ? opt.id : opt;
+                const name = mapName ? mapName(opt) : opt;
+                const isSelected = current === id;
+                return (
+                    <FilterTagItem 
+                        key={id}
+                        text={name}
+                        isSelected={isSelected}
+                        onClick={() => onChange(isSelected ? 'All' : id)}
+                        onLongPress={() => {}} 
+                        onDoubleClick={() => {}}
+                    />
+                )
+            })}
+        </div>
+     </div>
+  );
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-1 sm:px-2 gap-3 sm:gap-0">
+            <h2 className="font-bold text-lg sm:text-xl flex items-center gap-2">
+                我的收藏櫃 
+                <span className="text-xs sm:text-sm font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {percentage}% ({ownedCount}/{totalCount})
+                </span>
+            </h2>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                 <div className="flex items-center gap-2">
+                     <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0 flex-1 sm:flex-none">
+                       <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
+                       <select 
+                          value={cols}
+                          onChange={(e) => setCols(Number(e.target.value))}
+                          className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full"
+                       >
+                          {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                       </select>
+                    </div>
+
+                    <button
+                        onClick={() => setShowDetails(!showDetails)}
+                        className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                    >
+                        {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                </div>
+                <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
+                    <button 
+                        onClick={() => setViewMode('all')}
+                        className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}
+                    >
+                        全部
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('wishlist')}
+                        className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'wishlist' ? 'bg-white text-pink-500 shadow-sm' : 'text-gray-400'}`}
+                    >
+                        想要
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('selling')}
+                        className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'selling' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}
+                    >
+                        販售
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
+            {/* 🌟 收藏櫃的頂部分隊篩選 */}
+            {availableSubunits.length > 0 && (
+                <RenderFilterSection 
+                    label="分隊" 
+                    options={availableSubunits} 
+                    current={filterSubunit} 
+                    onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} 
+                />
+            )}
+            <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={getMemberName} />
+            <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />
+            <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />
+            
+            <div 
+                onClick={() => setShowSeriesModal(true)}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group"
+            >
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
+                    <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                    <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>
+                        {getSeriesSummary()}
+                    </span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+            </div>
+        </div>
+
+        <SeriesFilterModal 
+            visible={showSeriesModal}
+            onClose={() => setShowSeriesModal(false)}
+            seriesTypes={availableSeriesTypes}
+            selectedSeriesType={filterSeriesType}
+            setSeriesType={setFilterSeriesType}
+            series={availableSeriesList}
+            selectedSeries={filterSeries}
+            setSeries={setFilterSeries}
+            batches={availableBatchesList}
+            selectedBatch={filterBatch}
+            setBatch={setFilterBatch}
+        />
+
+        <div 
+            className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2"
+            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        >
+            {filteredCards.map(card => {
+                const qty = (inventory || []).filter(i => i.cardId === card.id && (!i.sellPrice || i.sellPrice <= 0)).reduce((s, i) => s + Number(i.quantity), 0);
+                const isOwned = qty > 0;
+                
+                const memberName = (members || []).find(m => m.id === card.memberId)?.name;
+                const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                const seriesName = cardSeries?.shortName || cardSeries?.name;
+                const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                
+                const effectiveType = card.type;
+                const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                
+                const effectiveChannelId = card.channel;
+                const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                
+                const batchNumber = cardBatch?.batchNumber;
+                const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
+                return (
+                    <div 
+                        key={card.id} 
+                        onClick={() => setViewingCard(card)} 
+                        className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`} 
+                    >
+                        <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
+                            <img src={card.image} className="w-full h-full object-cover pointer-events-none" />
+                            
+                            {card.isWishlist && (
+                                <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
+                                    <Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
+                                </div>
+                            )}
+
+                            {qty > 0 && (
+                                <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">
+                                    {qty}
+                                </div>
+                            )}
+                        </div>
+                        
+                        {showDetails && (
+                            <div className="px-0.5 sm:px-1">
+                                <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
+                                <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">
+                                    {displayTitle || '未命名卡片'}
+                                </div>
+                                {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+        {filteredCards.length === 0 && (
+            <div className="text-center py-20 text-gray-400 bg-white rounded-xl border border-dashed">
+                <BookOpen className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p>沒有符合條件的卡片</p>
+            </div>
+        )}
+    </div>
+  );
+}
+
+function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types }) {
+    const [dateFilterMode, setDateFilterMode] = useState('month');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [year, setYear] = useState(new Date().getFullYear());
+    const [month, setMonth] = useState(new Date().getMonth() + 1);
+    const [filterType, setFilterType] = useState('all'); 
+    
+    const touchStartX = useRef(0);
+    const touchEndX = useRef(0);
+
+    const handleTouchStart = (e) => {
+        touchStartX.current = e.targetTouches[0].clientX;
+    };
+
+    const handleTouchEnd = (e) => {
+        touchEndX.current = e.changedTouches[0].clientX;
+        handleSwipe();
+    };
+
+    const handleSwipe = () => {
+        if (dateFilterMode === 'range') return;
+        const diff = touchStartX.current - touchEndX.current;
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) handleNext();
+            else handlePrev();
+        }
+    };
+
+    const handlePrev = () => {
+        if (dateFilterMode === 'month') {
+            if (month === 1) { setMonth(12); setYear(y => y - 1); }
+            else setMonth(m => m - 1);
+        } else if (dateFilterMode === 'year') {
+            setYear(y => y - 1);
+        }
+    };
+
+    const handleNext = () => {
+        if (dateFilterMode === 'month') {
+            if (month === 12) { setMonth(1); setYear(y => y + 1); }
+            else setMonth(m => m - 1);
+        } else if (dateFilterMode === 'year') {
+            setYear(y => y + 1);
+        }
+    };
+
+    const handleJumpToCurrent = () => {
+        const today = new Date();
+        setYear(today.getFullYear());
+        setMonth(today.getMonth() + 1);
+    };
+
+    const availableYears = useMemo(() => {
+        const years = new Set([new Date().getFullYear(), year]);
+        (inventory || []).forEach(inv => { if (inv.buyDate) years.add(new Date(inv.buyDate).getFullYear()); });
+        return Array.from(years).sort((a, b) => b - a);
+    }, [inventory, year]);
+
+    const { displayItems, totalIncome, totalExpense } = useMemo(() => {
+        const items = [];
+        let income = 0;
+        let expense = 0;
+        
+        const isDateInRange = (dateStr) => {
+            if (!dateStr) return false;
+            if (dateFilterMode === 'month') {
+                const targetPrefix = `${year}-${String(month).padStart(2, '0')}`;
+                return dateStr.startsWith(targetPrefix);
+            } else if (dateFilterMode === 'year') {
+                return dateStr.startsWith(`${year}`);
+            } else if (dateFilterMode === 'range') {
+                if (!startDate && !endDate) return true;
+                const targetDate = new Date(dateStr).getTime();
+                const start = startDate ? new Date(startDate).getTime() : 0;
+                const end = endDate ? new Date(endDate).getTime() + 86400000 - 1 : Infinity;
+                return targetDate >= start && targetDate <= end;
+            }
+            return true;
+        };
+
+        (inventory || []).forEach(inv => {
+            if (inv.buyDate && isDateInRange(inv.buyDate)) {
+                if (filterType === 'all' || filterType === 'expense') {
+                    items.push({ ...inv, _virtualId: `${inv.id}_buy`, _type: 'expense', _displayPrice: inv.buyPrice, _displayDate: inv.buyDate });
+                }
+                expense += (Number(inv.buyPrice) || 0);
+            }
+            if (inv.sellPrice > 0 && inv.sellDate && isDateInRange(inv.sellDate)) {
+                if (filterType === 'all' || filterType === 'income') {
+                    items.push({ ...inv, _virtualId: `${inv.id}_sell`, _type: 'income', _displayPrice: inv.sellPrice, _displayDate: inv.sellDate });
+                }
+                income += (Number(inv.sellPrice) || 0);
+            }
+        });
+
+        (bulkRecords || []).forEach(record => {
+            if (record.buyDate && isDateInRange(record.buyDate)) {
+                if (filterType === 'all' || filterType === 'expense') {
+                    items.push({
+                        id: `bulk_total_${record.id}`,
+                        _virtualId: `bulk_total_${record.id}`,
+                        _type: 'expense',
+                        _isBulkHeader: true,
+                        name: record.name,
+                        _displayPrice: record.totalAmount,
+                        _displayDate: record.buyDate,
+                        image: record.image
+                    });
+                }
+                expense += (Number(record.totalAmount) || 0);
+            }
+        });
+
+        const filteredItems = items.filter(item => !(item.bulkRecordId && item._type === 'expense'));
+        filteredItems.sort((a, b) => new Date(b._displayDate) - new Date(a._displayDate));
+
+        return { displayItems: filteredItems, totalIncome: income, totalExpense: expense };
+    }, [inventory, year, month, filterType, bulkRecords, dateFilterMode, startDate, endDate]);
+
+    return (
+        <div 
+            className="bg-gray-50 min-h-screen pb-20"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+        >
+             <div className="bg-white border-b sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
+                 <div className="flex justify-center items-center relative">
+                     <div className="relative">
+                         <select 
+                             value={dateFilterMode}
+                             onChange={(e) => setDateFilterMode(e.target.value)}
+                             className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm"
+                         >
+                             <option value="month">篩選年月</option>
+                             <option value="year">只篩選年</option>
+                             <option value="range">自訂日期範圍</option>
+                         </select>
+                         <ChevronDown className="w-3 h-3 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                     </div>
+                     {dateFilterMode !== 'range' && (
+                         <button onClick={handleJumpToCurrent} className="absolute right-0 p-1.5 bg-gray-100 hover:bg-gray-200 text-indigo-600 rounded-lg transition-colors" title="回到目前">
+                             <Calendar className="w-4 h-4" />
+                         </button>
+                     )}
+                 </div>
+
+                 {dateFilterMode === 'range' ? (
+                     <div className="flex items-center gap-2">
+                         <input 
+                             type="date" 
+                             value={startDate} 
+                             onChange={e => setStartDate(e.target.value)} 
+                             className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" 
+                         />
+                         <span className="text-gray-400 font-bold">-</span>
+                         <input 
+                             type="date" 
+                             value={endDate} 
+                             onChange={e => setEndDate(e.target.value)} 
+                             className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" 
+                         />
+                     </div>
+                 ) : (
+                     <div className="flex justify-between items-center">
+                         <button onClick={handlePrev} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 active:bg-gray-100 rounded-full transition-colors">
+                            <ChevronLeft className="w-6 h-6" />
+                         </button>
+                         
+                         <div className="flex gap-2 items-center">
+                             <div className="relative">
+                                 <select 
+                                    value={year} 
+                                    onChange={(e) => setYear(Number(e.target.value))}
+                                    className="appearance-none bg-gray-100 border border-transparent hover:border-gray-300 text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer text-sm"
+                                 >
+                                     {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
+                                 </select>
+                                 <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                             </div>
+                             
+                             {dateFilterMode === 'month' && (
+                                 <div className="relative">
+                                     <select 
+                                        value={month} 
+                                        onChange={(e) => setMonth(Number(e.target.value))}
+                                        className="appearance-none bg-gray-100 border border-transparent hover:border-gray-300 text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer text-sm"
+                                     >
+                                         {Array.from({length: 12}, (_, i) => i + 1).map(m => (
+                                             <option key={m} value={m}>{m}月</option>
+                                         ))}
+                                     </select>
+                                     <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                 </div>
+                             )}
+                         </div>
+
+                         <button onClick={handleNext} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 active:bg-gray-100 rounded-full transition-colors">
+                            <ChevronRight className="w-6 h-6" />
+                         </button>
+                     </div>
+                 )}
+             </div>
+
+             <div className="grid grid-cols-2 gap-4 p-4">
+                 <button onClick={() => setFilterType(filterType === 'income' ? 'all' : 'income')} className={`bg-white p-4 rounded-2xl shadow-sm border transition-all ${filterType === 'income' ? 'border-green-500 ring-1 ring-green-500' : 'border-transparent'}`}>
+                     <div className="text-xs text-gray-400 font-bold mb-1">收入</div>
+                     <div className="text-2xl font-black text-green-600">${totalIncome.toLocaleString()}</div>
+                 </button>
+                 <button onClick={() => setFilterType(filterType === 'expense' ? 'all' : 'expense')} className={`bg-white p-4 rounded-2xl shadow-sm border transition-all ${filterType === 'expense' ? 'border-red-500 ring-1 ring-red-500' : 'border-transparent'}`}>
+                     <div className="text-xs text-gray-400 font-bold mb-1">支出</div>
+                     <div className="text-2xl font-black text-gray-800">${totalExpense.toLocaleString()}</div>
+                 </button>
+             </div>
+
+             <div className="px-4 space-y-3">
+                {displayItems.map(item => {
+                    const card = (cards || []).find(c => c.id === item.cardId);
+                    const isIncome = item._type === 'income';
+                    const dateObj = new Date(item._displayDate);
+                    
+                    const cardSeries = card ? (series || []).find(s => s.id === card.seriesId) : null;
+                    const seriesName = cardSeries?.shortName || cardSeries?.name;
+                    const cardBatch = card ? (batches || []).find(b => b.id === card.batchId) : null;
+                    
+                    const effectiveType = card?.type;
+                    const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                    const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                    
+                    const effectiveChannelId = card?.channel;
+                    const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                    const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                    
+                    const batchNumber = cardBatch?.batchNumber;
+                    const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                    const displayTitle = card ? [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ') : '';
+                    const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片');
+
+                    return (
+                        <div key={item._virtualId} onClick={() => !item._isBulkHeader && card && setViewingCard(card)} className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
+                                    <span className="text-[8px] text-gray-400 font-bold leading-none">{dateObj.getFullYear()}</span>
+                                    <span className="text-[10px] text-gray-500 font-bold leading-none mt-0.5">{dateObj.getMonth() + 1}月</span>
+                                    <span className="text-sm text-gray-800 font-black leading-none mt-0.5">{dateObj.getDate()}</span>
+                                </div>
+                                <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
+                                    {item._isBulkHeader ? (
+                                        item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                    ) : (card && <img src={card.image} className="w-full h-full object-cover" />)}
+                                    {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
+                                </div>
+                                <div className="min-w-0 flex flex-col justify-center">
+                                    <div className="font-bold text-gray-800 text-xs truncate">
+                                        {finalName}
+                                    </div>
+                                    {!item._isBulkHeader && cardBatch?.name && (
+                                        <div className="text-[10px] text-gray-500 truncate mb-0.5">{cardBatch.name}</div>
+                                    )}
+                                    <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                                        {isIncome && <span className="text-[9px] bg-green-100 text-green-600 px-1 rounded-sm font-bold">售出</span>}
+                                        <span className="truncate">{item.note || (item._isBulkHeader ? '批量購入支出' : (isIncome ? '出售' : '購買'))}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={`text-sm font-black whitespace-nowrap ml-2 ${isIncome ? 'text-green-600' : 'text-gray-900'}`}>
+                                {isIncome ? '+' : '-'}${Number(item._displayPrice).toLocaleString()}
+                            </div>
+                        </div>
+                    )
+                })}
+
+                {displayItems.length === 0 && (
+                    <div className="text-center py-10 text-gray-300 text-sm">
+                        此範圍尚無{filterType === 'all' ? '交易' : filterType === 'income' ? '收入' : '支出'}紀錄
+                    </div>
+                )}
+             </div>
+        </div>
+    );
+}
+
+function BulkTab({ records, allRecords, onAdd, onEdit }) {
+    const [filterStatus, setFilterStatus] = useState('All');
+    const [filterSource, setFilterSource] = useState('All');
+
+    const availableStatuses = ['未發貨', '囤貨', '到貨'];
+    const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r.source).filter(Boolean))], [allRecords, records]);
+
+    const filteredRecords = useMemo(() => {
+        const filtered = (records || []).filter(r => {
+            if (filterStatus !== 'All' && r.status !== filterStatus) return false;
+            if (filterSource !== 'All' && r.source !== filterSource) return false;
+            return true;
+        });
+        return [...filtered].sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
+    }, [records, filterStatus, filterSource]);
+
+    const getStatusStyle = (status) => {
+        switch(status) {
+            case '到貨': return 'bg-green-50 text-green-600 border-green-200';
+            case '囤貨': return 'bg-blue-50 text-blue-600 border-blue-200';
+            case '未發貨': return 'bg-orange-50 text-orange-600 border-orange-200';
+            default: return 'bg-gray-50 text-gray-500 border-gray-200';
+        }
+    };
+
+    const RenderFilterSection = ({ label, options, current, onChange }) => (
+        <div className="flex items-center gap-3 overflow-hidden">
+           <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+               <button onClick={() => onChange('All')} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-all ${current === 'All' ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>全部</button>
+               {(options || []).map(opt => (
+                   <button key={opt} onClick={() => onChange(opt)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-all ${current === opt ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>{opt}</button>
+               ))}
+           </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-6 pb-24">
+            <div className="flex justify-between items-center px-2">
+                <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收包裹管理</h2>
+                <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增包裹</button>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
+                <RenderFilterSection label="狀態" options={availableStatuses} current={filterStatus} onChange={setFilterStatus} />
+                {availableSources.length > 0 && <RenderFilterSection label="來源" options={availableSources} current={filterSource} onChange={setFilterSource} />}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {filteredRecords.map(record => (
+                    <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
+                        <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
+                            {record.image ? <img src={record.image} className="w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
+                        </div>
+                        <div className="px-1 flex flex-col flex-1 justify-between">
+                            <div>
+                                <div className="font-bold text-sm text-gray-800 leading-tight line-clamp-2 mb-1">{record.name}</div>
+                                <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 truncate mb-1.5"><span className="text-red-500">${Number(record.totalAmount).toLocaleString()}</span><span>· {(record.items || []).length} 張卡片</span></div>
+                            </div>
+                            <div className="flex gap-1.5 flex-wrap mt-auto pt-1">
+                                {record.status && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${getStatusStyle(record.status)}`}>{record.status}</span>}
+                                {record.source && <span className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 font-bold truncate max-w-[80px]">{record.source}</span>}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes }) {
+    const [localSelected, setLocalSelected] = useState(selectedIds);
+    const toggle = (id) => setLocalSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+
+    const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊狀態
+    const [filterMember, setFilterMember] = useState('All');
+    const [filterSeriesType, setFilterSeriesType] = useState('All');
+    const [filterSeries, setFilterSeries] = useState('All');
+    const [filterBatch, setFilterBatch] = useState('All');
+    const [filterType, setFilterType] = useState('All');
+    const [filterChannel, setFilterChannel] = useState('All');
+    const [showSeriesModal, setShowSeriesModal] = useState(false);
+
+    // 🌟 1. 抓取目前可選的卡片包含哪些分隊
+    const availableSubunits = useMemo(() => {
+        const ids = new Set((cards || []).map(c => c.memberId));
+        return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+    }, [cards, members]);
+
+    // 🌟 2. 讓成員選項連動分隊
+    const availableMembers = useMemo(() => {
+        let currentCards = cards || [];
+        if (filterSubunit !== 'All') {
+            currentCards = currentCards.filter(c => {
+                const m = (members || []).find(mem => mem.id === c.memberId);
+                return m && m.subunit === filterSubunit;
+            });
+        }
+        return [...new Set(currentCards.map(c => c.memberId))];
+    }, [cards, members, filterSubunit]);
+
+    const availableTypeIds = useMemo(() => {
+        return [...new Set((cards || []).map(c => c.type).filter(Boolean))];
+    }, [cards]);
+    const availableTypes = useMemo(() => {
+        return availableTypeIds.map(id => {
+            const tObj = (types || []).find(t => t.id === id || t.name === id);
+            return tObj || { id, name: id, shortName: '' };
+        });
+    }, [availableTypeIds, types]);
+    const availableChannelIds = useMemo(() => {
+        return [...new Set((cards || []).map(c => c.channel).filter(Boolean))];
+    }, [cards]);
+
+    const availableChannels = useMemo(() => {
+        return availableChannelIds.map(id => {
+            const ch = (channels || []).find(c => c.id === id || c.name === id);
+            return ch || { id, name: id, shortName: '' };
+        });
+    }, [availableChannelIds, channels]);
+    
+    const availableSeriesTypes = useMemo(() => {
+        const ids = new Set((cards || []).map(c => c.seriesId));
+        return [...new Set((series || []).filter(s => ids.has(s.id)).map(s => s.type).filter(Boolean))];
+    }, [cards, series]);
+    
+    const availableSeriesList = useMemo(() => {
+        let filtered = (series || []).filter(s => (cards || []).some(c => c.seriesId === s.id));
+        if (filterSeriesType !== 'All') {
+            filtered = filtered.filter(s => s.type === filterSeriesType);
+        }
+        return filtered;
+    }, [cards, series, filterSeriesType]);
+
+    const availableBatchesList = useMemo(() => {
+        let filtered = (batches || []).filter(b => (cards || []).some(c => c.batchId === b.id));
+        if (filterSeries !== 'All') {
+            filtered = filtered.filter(b => b.seriesId === filterSeries);
+        }
+        return filtered;
+    }, [cards, batches, filterSeries]);
+
+    const getMemberName = (id) => (members || []).find(m => m.id === id)?.name || 'Unknown';
+    
+    const getSeriesSummary = () => {
+        const parts = [];
+        if (filterSeriesType !== 'All') parts.push(filterSeriesType);
+        if (filterSeries !== 'All') parts.push((series || []).find(s => s.id === filterSeries)?.name);
+        if (filterBatch !== 'All') parts.push((batches || []).find(b => b.id === filterBatch)?.name);
+        return parts.length > 0 ? parts.join(' · ') : '全部系列';
+    };
+
+    const filteredCards = useMemo(() => {
+        return (cards || []).filter(card => {
+             const effectiveType = card.type;
+             const effectiveChannel = card.channel;
+             if (filterSubunit !== 'All') {
+                 const mem = (members || []).find(m => m.id === card.memberId);
+                 if (!mem || mem.subunit !== filterSubunit) return false;
+             }
+             if (filterMember !== 'All' && card.memberId !== filterMember) return false;
+             if (filterType !== 'All' && effectiveType !== filterType) return false;
+             if (filterChannel !== 'All' && effectiveChannel !== filterChannel) return false;
+             
+             if (filterSeriesType !== 'All') {
+                const s = (series || []).find(ser => ser.id === card.seriesId);
+                if (!s || s.type !== filterSeriesType) return false;
+             }
+             if (filterSeries !== 'All' && card.seriesId !== filterSeries) return false;
+             if (filterBatch !== 'All' && card.batchId !== filterBatch) return false;
+             
+             return true;
+        }).sort((cardA, cardB) => {
+      const safeString = (val) => val ? String(val) : '';
+      const safeNum = (val, defaultVal) => {
+          const n = Number(val);
+          return isNaN(n) ? defaultVal : n;
+      };
+
+      // 1. 確保系列時間與分群 (舊到新)
+      const sA = (series || []).find(s => s.id === cardA.seriesId);
+      const sB = (series || []).find(s => s.id === cardB.seriesId);
+      const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
+      const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+      if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+
+      const seriesIdA = safeString(cardA.seriesId);
+      const seriesIdB = safeString(cardB.seriesId);
+      if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
+
+      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
+      const bA = (batches || []).find(b => b.id === cardA.batchId);
+      const bB = (batches || []).find(b => b.id === cardB.batchId);
+      
+      if (bA && bB && bA.id !== bB.id) {
+          // (1) 比較兩個批次所屬的「子類順序」
+          const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
+          const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
+          const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
+          const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
+          if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+          
+          // (2) 比較兩個批次的「日期」 (舊到新)
+          const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
+          const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
+          if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+          
+          // (3) 日期相同，比較批次「名稱」
+          const nameA = safeString(bA.name);
+          const nameB = safeString(bB.name);
+          const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+      } else if (bA && !bB) {
+          return -1; // 有批次的卡片往前排
+      } else if (!bA && bB) {
+          return 1;
+      }
+
+      // 3. 確保相同批次的小卡絕對群聚在一起
+      const batchIdA = safeString(cardA.batchId);
+      const batchIdB = safeString(cardB.batchId);
+      if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
+
+      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
+      if (!bA && !bB) {
+          const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
+          const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
+          const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
+          const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
+          if (cSortA !== cSortB) return cSortA - cSortB;
+      }
+
+      // 5. 相同批次/子類內，看「成員順序」
+      const mA = (members || []).find(m => m.id === cardA.memberId);
+      const mB = (members || []).find(m => m.id === cardB.memberId);
+      const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+      const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+      if (mSortA !== mSortB) return mSortA - mSortB;
+
+      // 防呆：最後用 ID
+      return safeString(cardA.id).localeCompare(safeString(cardB.id));
+  });
+    }, [cards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, series, batches, types, members, filterSubunit]);
+    const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+        <div className="flex items-center gap-3 overflow-hidden">
+           <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+               {(options || []).map(opt => {
+                   const id = typeof opt === 'object' ? opt.id : opt;
+                   const name = mapName ? mapName(opt) : opt;
+                   const isSelected = current === id;
+                   return (
+                       <button 
+                           key={id}
+                           onClick={() => onChange(isSelected ? 'All' : id)}
+                           className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                       >
+                           {name}
+                       </button>
+                   )
+               })}
+           </div>
+        </div>
+     );
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-gray-50 flex flex-col animate-slide-up">
+            <div className="px-4 py-3 border-b flex justify-between items-center bg-white shadow-sm z-10 sticky top-0">
+                <div className="font-bold text-lg text-gray-800">選擇卡片 加入盤收</div>
+                <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-6 h-6 text-gray-500" /></button>
+            </div>
+
+            <div className="bg-white p-4 border-b border-gray-100 shadow-sm space-y-4 flex-shrink-0">
+                {/* 🌟 盤收選擇卡的頂部分隊篩選 */}
+                {availableSubunits.length > 0 && (
+                    <RenderFilterSection 
+                        label="分隊" 
+                        options={availableSubunits} 
+                        current={filterSubunit} 
+                        onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} 
+                    />
+                )}
+                {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={getMemberName} />}
+                {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
+                {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
+                
+                <div 
+                    onClick={() => setShowSeriesModal(true)}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group"
+                >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
+                        <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                        <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>
+                            {getSeriesSummary()}
+                        </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-3 pb-20">
+                    {filteredCards.map(card => {
+                        const isSelected = localSelected.includes(card.id);
+                        return (
+                            <div key={card.id} onClick={() => toggle(card.id)} className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}>
+                                <div className="aspect-[2/3] bg-gray-100">
+                                    <img src={card.image} className="w-full h-full object-cover pointer-events-none" />
+                                </div>
+                                {isSelected && (
+                                    <div className="absolute top-2 right-2 bg-indigo-600 text-white rounded-full p-1 shadow z-10">
+                                        <Check className="w-4 h-4"/>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
+                    {filteredCards.length === 0 && <div className="col-span-full py-10 text-center text-gray-400">沒有符合條件的卡片</div>}
+                </div>
+            </div>
+            <div className="p-4 border-t bg-white sticky bottom-0 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+                <div className="flex gap-2">
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                    <button onClick={() => onConfirm(localSelected)} className="flex-[2] py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認選取 ({localSelected.length})</button>
+                </div>
+            </div>
+
+            <SeriesFilterModal 
+                visible={showSeriesModal}
+                onClose={() => setShowSeriesModal(false)}
+                seriesTypes={availableSeriesTypes}
+                selectedSeriesType={filterSeriesType}
+                setSeriesType={setFilterSeriesType}
+                series={availableSeriesList}
+                selectedSeries={filterSeries}
+                setSeries={setFilterSeries}
+                batches={availableBatchesList}
+                selectedBatch={filterBatch}
+                setBatch={setFilterBatch}
+            />
+        </div>
+    );
+}
+
+function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory }) {
+    const isEdit = !!record;
+    
+    const [form, setForm] = useState({
+        name: record?.name || '',
+        image: record?.image || null,
+        status: record?.status || '未發貨',
+        buyDate: record?.buyDate || new Date().toISOString().split('T')[0],
+        source: record?.source || '',
+    });
+
+    const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
+    const [manualIds, setManualIds] = useState(
+        (record?.items || []).filter(i => i.isManual).map(i => i.cardId)
+    );
+    const [cardDetails, setCardDetails] = useState(
+        (record?.items || []).reduce((acc, item) => ({
+            ...acc,
+            [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice }
+        }), {})
+    );
+    
+    const [showCardSelector, setShowCardSelector] = useState(false);
+    const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
+
+    const totalSoldPrice = useMemo(() => {
+        if (!record?.id || !inventory) return 0;
+        return selectedCards.reduce((sum, card) => {
+            const invItem = inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id);
+            return sum + (Number(invItem?.sellPrice) || 0);
+        }, 0);
+    }, [record?.id, selectedCards, inventory]);
+
+    const recordIdRef = useRef(record?.id);
+    useEffect(() => {
+        recordIdRef.current = record?.id;
+    }, [record?.id]);
+
+    const syncToParent = (updatedForm, updatedTotal, updatedManualIds, updatedDetails) => {
+        if (!updatedForm.name.trim() && !recordIdRef.current) return;
+
+        const finalItems = Object.keys(updatedDetails).map(cardId => ({
+            cardId,
+            quantity: Number(updatedDetails[cardId].quantity) || 1,
+            buyPrice: Number(updatedDetails[cardId].buyPrice) || 0,
+            isManual: updatedManualIds.includes(cardId)
+        }));
+
+        onSave({
+            ...updatedForm,
+            id: recordIdRef.current,
+            totalAmount: Number(updatedTotal) || 0,
+            items: finalItems
+        });
+    };
+
+    const recalculatePrices = (totalVal, currentManualIds, currentDetails) => {
+        if (totalVal === '' || totalVal === undefined) {
+            const next = { ...currentDetails };
+            Object.keys(next).forEach(cardId => {
+                if (!currentManualIds.includes(cardId)) {
+                    next[cardId] = { ...next[cardId], buyPrice: '' };
+                }
+            });
+            return next;
+        }
+
+        const total = Number(totalVal) || 0;
+        let manualSum = 0;
+        let autoQty = 0;
+
+        Object.keys(currentDetails).forEach(cardId => {
+            const qty = Number(currentDetails[cardId]?.quantity || 1);
+            if (currentManualIds.includes(cardId)) {
+                manualSum += (Number(currentDetails[cardId]?.buyPrice || 0) * qty);
+            } else {
+                autoQty += qty;
+            }
+        });
+
+        const remaining = Math.max(0, total - manualSum);
+        const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
+
+        const next = { ...currentDetails };
+        let hasChanges = false;
+        Object.keys(next).forEach(cardId => {
+            if (!currentManualIds.includes(cardId)) {
+                if (next[cardId].buyPrice !== autoPrice) {
+                    next[cardId] = { ...next[cardId], buyPrice: autoPrice };
+                    hasChanges = true;
+                }
+            }
+        });
+        return hasChanges ? next : currentDetails;
+    };
+
+    const handleFormChange = (key, value) => {
+        const nextForm = { ...form, [key]: value };
+        setForm(nextForm);
+        syncToParent(nextForm, totalAmount, manualIds, cardDetails);
+    };
+
+    const handleTotalAmountChange = (e) => {
+        const val = e.target.value;
+        setTotalAmount(val);
+        const nextDetails = recalculatePrices(val, manualIds, cardDetails);
+        setCardDetails(nextDetails);
+        syncToParent(form, val, manualIds, nextDetails);
+    };
+
+    const handleDetailChange = (id, field, value) => {
+        let nextManualIds = [...manualIds];
+        
+        if (field === 'buyPrice') {
+            if (value === '' || Number(value) === 0) {
+                nextManualIds = nextManualIds.filter(x => x !== id);
+            } else if (!nextManualIds.includes(id)) {
+                nextManualIds.push(id);
+            }
+        }
+        
+        setManualIds(nextManualIds);
+
+        let nextDetails = {
+            ...cardDetails,
+            [id]: { ...cardDetails[id], [field]: value }
+        };
+        
+        nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
+        setCardDetails(nextDetails);
+        syncToParent(form, totalAmount, nextManualIds, nextDetails);
+    };
+
+    const handleConfirmSelectCards = (newSelectedIds) => {
+        const nextDetails = {};
+        let nextManualIds = manualIds.filter(id => newSelectedIds.includes(id));
+
+        newSelectedIds.forEach(id => {
+            nextDetails[id] = cardDetails[id] || { quantity: 1, buyPrice: '' };
+        });
+
+        const finalDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
+        
+        setCardDetails(finalDetails);
+        setManualIds(nextManualIds);
+        syncToParent(form, totalAmount, nextManualIds, finalDetails);
+        setShowCardSelector(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
+            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0 shadow-sm">
+                <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
+                <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
+                <div className="flex gap-1 items-center">
+                    {isEdit && (
+                        <button 
+                            onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }}
+                            className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+                
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
+                    <div className="w-28 h-28 flex-shrink-0">
+                        <ImageUploader 
+                            image={form.image} 
+                            aspect={1} /* 🌟 盤收封面也是正方形 */
+                            onChange={img => handleFormChange('image', img)} 
+                            className="w-full h-full rounded-xl"
+                        />
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <input 
+                            type="text" 
+                            placeholder="輸入盤收名稱 (例: Savage 未拆專)"
+                            value={form.name} 
+                            onChange={e => handleFormChange('name', e.target.value)} 
+                            className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300"
+                        />
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                             <div className="relative">
+                                <select 
+                                    value={form.status} 
+                                    onChange={e => handleFormChange('status', e.target.value)} 
+                                    className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200"
+                                >
+                                    <option value="未發貨">未發貨</option>
+                                    <option value="囤貨">囤貨</option>
+                                    <option value="到貨">到貨</option>
+                                </select>
+                                <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                            <input 
+                                type="date" 
+                                value={form.buyDate} 
+                                onChange={e => handleFormChange('buyDate', e.target.value)} 
+                                className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" 
+                            />
+                        </div>
+                        <div className="mt-3">
+                            <FormCapsuleSelect 
+                                label="來源"
+                                options={uniqueSources || []}
+                                value={form.source}
+                                onChange={val => handleFormChange('source', val)}
+                                allowCustom={true}
+                                placeholder="自訂來源..."
+                                onOptionEdit={onRenameSource}
+                                onDelete={onDeleteSource} /* 🌟 綁定刪除 */
+                                onOptionDelete={onDeleteSource} /* 🌟 確保新舊屬性名都有接到 */
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-green-50/50 p-4 rounded-2xl flex flex-col justify-between border border-green-100/50 relative shadow-sm min-h-[100px]">
+                        <label className="text-xs font-bold text-green-600 uppercase tracking-widest flex items-center gap-2">
+                            總售價
+                        </label>
+                        <div className="flex items-baseline mt-2">
+                            <span className="text-xl text-green-600 font-bold mr-1">$</span>
+                            <span className="text-3xl sm:text-4xl font-black text-green-600 truncate">{totalSoldPrice.toLocaleString()}</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-red-50/50 p-4 rounded-2xl flex flex-col justify-between border border-red-100/50 hover:border-red-200 transition-colors relative shadow-sm min-h-[100px]">
+                        <div className="flex justify-between items-start">
+                            <label className="text-[10px] sm:text-xs font-bold text-red-600 uppercase tracking-widest">
+                                批量總金額
+                            </label>
+                            {manualIds.length > 0 && (
+                                <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold shadow-sm whitespace-nowrap">
+                                    {manualIds.length} 自訂
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-baseline mt-2">
+                            <span className="text-xl text-red-600 font-bold mr-1">$</span>
+                            <input 
+                                type="number" 
+                                placeholder="0" 
+                                step="50"
+                                min="0"
+                                value={totalAmount} 
+                                onChange={handleTotalAmountChange} 
+                                className="w-full bg-transparent text-3xl sm:text-4xl font-black text-red-600 outline-none placeholder-red-200"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex justify-between items-end mb-3 px-1">
+                        <div className="font-bold text-gray-800 text-sm">盤收內容清單 <span className="text-gray-400 text-xs ml-1">({selectedCards.length} 張)</span></div>
+                        <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                            <Plus className="w-3 h-3"/> 新增卡片
+                        </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {selectedCards.map(card => {
+                            const invItem = inventory?.find(i => i.bulkRecordId === record?.id && i.cardId === card.id);
+                            const sellPrice = invItem?.sellPrice || 0;
+
+                            const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                            const seriesName = cardSeries?.shortName || cardSeries?.name;
+                            const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                            
+                            const effectiveType = card.type;
+                            const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                            const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                            
+                            const effectiveChannelId = card.channel;
+                            const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                            const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                            
+                            const batchNumber = cardBatch?.batchNumber;
+                            const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                            const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
+                            return (
+                                <div key={card.id} className={`flex items-center gap-2 sm:gap-4 bg-white p-3 rounded-xl border shadow-sm transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/20 border-indigo-200' : 'border-gray-100'}`}>
+                                    <div 
+                                        onClick={() => onViewCard && onViewCard(card)}
+                                        className="w-14 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-inner cursor-pointer hover:opacity-80 transition-opacity relative"
+                                    >
+                                        <img src={card.image} className="w-full h-full object-cover" />
+                                        {sellPrice > 0 && (
+                                            <div className="absolute inset-x-0 bottom-0 bg-green-500/90 text-white text-[9px] font-bold text-center py-0.5">
+                                                已售
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div 
+                                        onClick={() => onViewCard && onViewCard(card)}
+                                        className="flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity flex flex-col justify-center"
+                                    >
+                                        <div className="text-sm font-bold text-gray-800 truncate mb-0.5">{displayTitle || '未命名卡片'}</div>
+                                        {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate mb-1">{cardBatch.name}</div>}
+                                        {sellPrice > 0 && (
+                                            <div className="inline-flex">
+                                                <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
+                                                    售出 ${sellPrice}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2 sm:gap-4">
+                                        <div className="flex flex-col items-end">
+                                            <label className="text-[10px] text-gray-400 font-bold uppercase mb-1">數量</label>
+                                            <input 
+                                                type="number" min="1"
+                                                value={cardDetails[card.id]?.quantity}
+                                                onChange={e => handleDetailChange(card.id, 'quantity', e.target.value)}
+                                                className="w-10 sm:w-12 text-right border-b-2 border-gray-200 focus:border-black outline-none font-bold text-base py-0.5 bg-transparent"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <label className="text-[10px] font-bold uppercase mb-1 flex items-center gap-1">
+                                                {manualIds.includes(card.id) ? (
+                                                    <span className="text-indigo-500">自訂單價</span>
+                                                ) : (
+                                                    <span className="text-red-400">單價</span>
+                                                )}
+                                            </label>
+                                            <div className="flex items-baseline">
+                                                <span className={`text-sm font-bold mr-0.5 ${manualIds.includes(card.id) ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                <input 
+                                                    type="number" placeholder="0" step="50"
+                                                    value={cardDetails[card.id]?.buyPrice}
+                                                    onChange={e => handleDetailChange(card.id, 'buyPrice', e.target.value)}
+                                                    className={`w-14 sm:w-16 text-right border-none outline-none font-black text-lg sm:text-xl bg-transparent p-0 ${manualIds.includes(card.id) ? 'text-indigo-600 placeholder-indigo-200' : 'text-red-600 placeholder-red-200'}`}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        
+                        {selectedCards.length === 0 && (
+                            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">
+                                點擊右上角「+ 新增卡片」加入這筆盤收的內容
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {showCardSelector && (
+                <MiniCardSelector 
+                    cards={cards} 
+                    selectedIds={Object.keys(cardDetails)}
+                    onConfirm={handleConfirmSelectCards}
+                    onClose={() => setShowCardSelector(false)}
+                    members={members}
+                    series={series}
+                    batches={batches}
+                    channels={channels}
+                    types={types}
+                    uniqueTypes={uniqueTypes}
+                    uniqueChannels={uniqueChannels}
+                    uniqueSeriesTypes={uniqueSeriesTypes}
+                />
+            )}
+        </div>
+    );
+}
+
+function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, initialData = {}, extraOptions = {} }) {
+  const isEdit = !!initialData.id;
+  
+  const [form, setForm] = useState({ 
+    name: '', shortName: '', batchNumber: '', image: null, type: '', date: '', 
+    seriesId: '', batchId: '', memberId: '', channel: '', memberIds: [], 
+    sortOrder: 0, // 🌟 補上這個
+    ...initialData 
+  });
+  
+  const [bulkImages, setBulkImages] = useState([]);
+  const [enableCrop, setEnableCrop] = useState(true);
+
+  const handleDuplicate = () => {
+    const duplicatedForm = { ...form };
+    delete duplicatedForm.id;
+    if (duplicatedForm.name) duplicatedForm.name = duplicatedForm.name + ' (複製)';
+    if (onDuplicate) onDuplicate(duplicatedForm);
+    onClose();
+  };
+
+  const handleSave = () => {
+    if (!form.name && type !== 'card') return alert('請輸入名稱');
+    
+    if (isEdit) {
+        onSave(form);
+    } else if (type === 'card' && bulkImages.length > 0) {
+        const cardsToCreate = bulkImages.map(img => ({ ...form, image: img }));
+        onSave(cardsToCreate);
+    } else if (type === 'card' && form.memberIds && form.memberIds.length > 0) {
+         const cardsToCreate = form.memberIds.map(mId => ({ ...form, memberId: mId, memberIds: undefined }));
+        onSave(cardsToCreate);
+    } else {
+        onSave(form);
+    }
+    onClose();
+  };
+
+  return (
+    <Modal title={title} onClose={onClose} footer={
+      <div className="flex justify-between items-center w-full">
+         <div className="flex gap-2">
+             {(isEdit && ['card', 'series', 'batch', 'group', 'member', 'channel', 'type'].includes(type)) && (
+                 <button 
+                    onClick={() => { onDelete(type, initialData.id); onClose(); }} 
+                    className="px-4 py-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center gap-1 text-sm font-bold"
+                 >
+                     <Trash2 className="w-4 h-4" /> 刪除
+                 </button>
+             )}
+             {isEdit && type === 'batch' && (
+                 <button 
+                    onClick={handleDuplicate} 
+                    className="px-4 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center gap-1 text-sm font-bold"
+                 >
+                     <Copy className="w-4 h-4" /> 複製
+                 </button>
+             )}
+         </div>
+         <div className={`flex gap-2 ${isEdit ? 'flex-1 justify-end ml-2' : 'w-full'}`}>
+            <button onClick={onClose} className="flex-1 py-2 rounded-lg border text-gray-500 hover:bg-gray-100">取消</button>
+            <button onClick={handleSave} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-bold">
+                {type === 'card' && bulkImages.length > 1 ? `批量建立 (${bulkImages.length}張)` : isEdit ? '儲存修改' : '確認新增'}
+            </button>
+         </div>
+      </div>
+    }>
+      <div className="space-y-4">
+       {type !== 'card' && type !== 'channel' && type !== 'type' && (
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">名稱</label>
+              <input className="w-full border p-2 rounded-lg" placeholder="請輸入名稱" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            </div>
+        )}
+
+        {/* 🌟 新增成員的專屬排序輸入框 */}
+        {/* 🌟 新增成員的專屬排序與分隊輸入框 */}
+        {type === 'member' && (
+            <div className="space-y-3 bg-gray-50 p-3 rounded-xl border border-gray-100">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">所屬分隊 (選填)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex. 舞蹈小分隊、子團名稱..." 
+                  className="w-full border p-2 rounded-lg" 
+                  value={form.subunit || ''} 
+                  onChange={e => setForm({...form, subunit: e.target.value})} 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">自訂排序 (數字越小排越前面)</label>
+                <input 
+                  type="number" 
+                  className="w-full border p-2 rounded-lg" 
+                  value={form.sortOrder ?? 0} 
+                  onChange={e => setForm({...form, sortOrder: Number(e.target.value)})} 
+                />
+              </div>
+            </div>
+        )}
+
+        {(type === 'channel' || type === 'type') && (
+            <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">{type === 'channel' ? '通路名稱' : '子類名稱'}</label>
+                  <input className="w-full border p-2 rounded-lg" placeholder={`Ex. ${type === 'channel' ? 'Ktown4u' : '特典'}`} value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">簡稱 (選填)</label>
+                  <input className="w-full border p-2 rounded-lg" placeholder={`Ex. ${type === 'channel' ? 'K4' : '特'}`} value={form.shortName || ''} onChange={e => setForm({...form, shortName: e.target.value})} />
+                </div>
+                {/* 🌟 只有「子類」才有自訂排序輸入框 */}
+                {type === 'type' && (
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">自訂排序 (數字越小排越前面)</label>
+                      <input 
+                        type="number" 
+                        className="w-full border p-2 rounded-lg" 
+                        value={form.sortOrder ?? 0} 
+                        onChange={e => setForm({...form, sortOrder: Number(e.target.value)})} 
+                      />
+                    </div>
+                )}
+            </div>
+        )}
+
+        {type === 'card' && !isEdit ? (
+            <div className="space-y-2">
+                {/* 🌟 新增的打勾核取方塊 */}
+                <div className="flex items-center gap-2 mb-1">
+                    <input 
+                        type="checkbox" 
+                        id="enableCrop"
+                        checked={enableCrop} 
+                        onChange={e => setEnableCrop(e.target.checked)} 
+                        className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="enableCrop" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                        上傳後進行圖片裁切與放大
+                    </label>
+                </div>
+
+                <ImageUploader 
+                    multiple={true}
+                    images={bulkImages} 
+                    image={form.image}
+                    aspect={2/3}
+                    enableCrop={enableCrop} // 🌟 把開關狀態傳進去
+                    onChange={(imgs) => {
+                        if (Array.isArray(imgs)) {
+                            setBulkImages(imgs);
+                            if (imgs.length === 1) setForm({...form, image: imgs[0]});
+                        } else {
+                            setForm({...form, image: imgs});
+                        }
+                    }} 
+                    label="點擊上傳 (可多選)"
+                    className="h-40"
+                />
+                {bulkImages.length > 1 && <p className="text-xs text-indigo-600 font-bold text-center">已選擇 {bulkImages.length} 張圖片，將建立 {bulkImages.length} 筆資料</p>}
+            </div>
+        ) : (
+            type !== 'channel' && type !== 'type' && (
+                <div className="space-y-2">
+                    {/* 🌟 如果是「編輯小卡」，也顯示這個開關 */}
+                    {type === 'card' && (
+                        <div className="flex items-center gap-2 mb-1">
+                            <input 
+                                type="checkbox" 
+                                id="enableCropEdit"
+                                checked={enableCrop} 
+                                onChange={e => setEnableCrop(e.target.checked)} 
+                                className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                            />
+                            <label htmlFor="enableCropEdit" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                                上傳後進行圖片裁切與放大
+                            </label>
+                        </div>
+                    )}
+                    <ImageUploader 
+                        aspect={type === 'card' ? 2/3 : 1} 
+                        image={form.image} 
+                        enableCrop={type === 'card' ? enableCrop : true} // 🌟 只有小卡受開關影響，其他預設還是要裁切
+                        onChange={img => setForm({...form, image: img})} 
+                    />
+                </div>
+            )
+        )}
+        {type === 'series' && (
+           <div className="space-y-3">
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">簡稱 (選填)</label>
+                 <input className="w-full border p-2 rounded-lg" placeholder="Ex. 迷一" value={form.shortName || ''} onChange={e => setForm({...form, shortName: e.target.value})} />
+               </div>
+               
+               {/* 🌟 新增系列的所屬分隊 */}
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">所屬分隊 (選填，無則留空)</label>
+                 <input className="w-full border p-2 rounded-lg" placeholder="Ex. 舞蹈小分隊..." value={form.subunit || ''} onChange={e => setForm({...form, subunit: e.target.value})} />
+               </div>
+
+               <FormCapsuleSelect 
+                label="系列類型"
+                options={extraOptions.seriesTypes || []}
+                value={form.type}
+                onChange={val => setForm({...form, type: val})}
+                allowCustom={true}
+                placeholder="輸入新類型..."
+              />
+              <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+           </div>
+        )}
+
+        {type === 'batch' && (
+           <div className="space-y-3">
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">批次編號 (選填)</label>
+                 <input className="w-full border p-2 rounded-lg" placeholder="Ex. 1.0, 2.0..." value={form.batchNumber || ''} onChange={e => setForm({...form, batchNumber: e.target.value})} />
+               </div>
+               <FormCapsuleSelect 
+                label="所屬系列"
+                options={extraOptions.series || []}
+                value={form.seriesId}
+                onChange={val => setForm({...form, seriesId: val})}
+                renderOption={s => s.name}
+              />
+              <FormCapsuleSelect 
+                label="子類 (Type)"
+                options={extraOptions.types || []}
+                value={form.type}
+                onChange={val => setForm({...form, type: val})}
+                allowCustom={true}
+                placeholder="輸入..."
+                renderOption={t => typeof t === 'object' ? t.name : t}
+              />
+              <FormCapsuleSelect 
+                label="通路 (Channel)"
+                options={extraOptions.channels || []}
+                value={form.channel}
+                onChange={val => setForm({...form, channel: val})}
+                allowCustom={true}
+                placeholder="輸入..."
+                renderOption={c => typeof c === 'object' ? c.name : c}
+              />
+              <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+           </div>
+        )}
+
+        {type === 'card' && (
+          <div className="space-y-4">
+             <FormCapsuleSelect 
+                label={!isEdit ? "選擇成員 (可多選)" : "成員"}
+                options={extraOptions.members || []}
+                value={!isEdit && form.memberIds.length > 0 ? form.memberIds : form.memberId}
+                onChange={val => !isEdit ? setForm({...form, memberIds: Array.isArray(val) ? val : [val], memberId: Array.isArray(val) ? val[0] : val}) : setForm({...form, memberId: val})}
+                multiple={!isEdit}
+                renderOption={m => (
+                  <>
+                    <img src={m.image} className="w-4 h-4 rounded-full" />
+                    {m.name}
+                  </>
+                )}
+             />
+
+             <FormCapsuleSelect 
+                label="系列"
+                options={extraOptions.series || []}
+                value={form.seriesId}
+                onChange={val => setForm({...form, seriesId: val, batchId: ''})} 
+                renderOption={s => s.name}
+             />
+
+             <FormCapsuleSelect 
+                label="子類 (Type)"
+                options={extraOptions.types || []}
+                value={form.type}
+                onChange={val => setForm({...form, type: val})}
+                allowCustom={true}
+                placeholder="輸入..."
+                renderOption={t => typeof t === 'object' ? t.name : t}
+             />
+
+             <FormCapsuleSelect 
+                label="通路 (Channel)"
+                options={extraOptions.channels || []}
+                value={form.channel}
+                onChange={val => setForm({...form, channel: val})}
+                allowCustom={true}
+                placeholder="輸入..."
+                renderOption={c => typeof c === 'object' ? c.name : c}
+             />
+
+             <FormCapsuleSelect 
+                label="批次"
+                options={extraOptions.batches?.filter(b => !form.seriesId || b.seriesId === form.seriesId) || []}
+                value={form.batchId}
+                onChange={val => {
+                    const selectedBatch = extraOptions.batches?.find(b => b.id === val);
+                    setForm(prev => ({
+                        ...prev, 
+                        batchId: val,
+                        // 🌟 修正：把 selectedBatch 放前面！優先強制帶入批次綁定的子類與通路
+                        type: selectedBatch?.type || prev.type || '',
+                        channel: selectedBatch?.channel || prev.channel || ''
+                    }));
+                }}
+                renderOption={b => b.name}
+             />
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function BulkOwnModal({ selectedCards, onClose, onSave, series, batches, channels, types }) {
+    const [form, setForm] = useState({
+        buyDate: new Date().toISOString().split('T')[0],
+        source: '',
+    });
+    
+    const [totalAmount, setTotalAmount] = useState('');
+    const [manualIds, setManualIds] = useState([]);
+    
+    const [cardDetails, setCardDetails] = useState(
+        (selectedCards || []).reduce((acc, card) => ({
+            ...acc,
+            [card.id]: { quantity: 1, buyPrice: '' }
+        }), {})
+    );
+
+    const recalculatePrices = (totalVal, currentManualIds, currentDetails) => {
+        if (totalVal === '') {
+            setCardDetails(prev => {
+                const next = { ...prev };
+                (selectedCards || []).forEach(c => {
+                    if (!currentManualIds.includes(c.id)) {
+                        next[c.id] = { ...next[c.id], buyPrice: '' };
+                    }
+                });
+                return next;
+            });
+            return;
+        }
+
+        const total = Number(totalVal) || 0;
+        let manualSum = 0;
+        let autoQty = 0;
+
+        (selectedCards || []).forEach(c => {
+            const qty = Number(currentDetails[c.id]?.quantity || 1);
+            if (currentManualIds.includes(c.id)) {
+                manualSum += (Number(currentDetails[c.id]?.buyPrice || 0) * qty);
+            } else {
+                autoQty += qty;
+            }
+        });
+
+        const remaining = Math.max(0, total - manualSum);
+        const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
+
+        setCardDetails(prev => {
+            const next = { ...prev };
+            let hasChanges = false;
+            (selectedCards || []).forEach(c => {
+                if (!currentManualIds.includes(c.id)) {
+                    if (next[c.id].buyPrice !== autoPrice) {
+                        next[c.id] = { ...next[c.id], buyPrice: autoPrice };
+                        hasChanges = true;
+                    }
+                }
+            });
+            return hasChanges ? next : prev;
+        });
+    };
+
+    const handleTotalAmountChange = (e) => {
+        const val = e.target.value;
+        setTotalAmount(val);
+        recalculatePrices(val, manualIds, cardDetails);
+    };
+
+    const handleDetailChange = (id, field, value) => {
+        let nextManualIds = [...manualIds];
+        
+        if (field === 'buyPrice') {
+            if (value === '' || Number(value) === 0) {
+                nextManualIds = nextManualIds.filter(x => x !== id);
+            } else if (!nextManualIds.includes(id)) {
+                nextManualIds.push(id);
+            }
+        }
+        
+        setManualIds(nextManualIds);
+
+        const nextDetails = {
+            ...cardDetails,
+            [id]: { ...cardDetails[id], [field]: value }
+        };
+        setCardDetails(nextDetails);
+
+        if (totalAmount !== '') {
+            recalculatePrices(totalAmount, nextManualIds, nextDetails);
+        }
+    };
+
+    const handleConfirm = () => {
+        const itemsToSave = (selectedCards || []).map(card => ({
+            cardId: card.id,
+            buyDate: form.buyDate,
+            source: form.source,
+            quantity: Number(cardDetails[card.id]?.quantity || 1),
+            buyPrice: Number(cardDetails[card.id]?.buyPrice || 0),
+            sellPrice: 0,
+            note: ''
+        }));
+        onSave(itemsToSave);
+    };
+
+    return (
+        <Modal title={`批量入庫 (${(selectedCards || []).length})`} onClose={onClose} className="max-w-2xl" footer={
+            <div className="flex gap-2 w-full">
+                <button onClick={onClose} className="flex-1 py-3 rounded-lg border font-bold text-gray-500">取消</button>
+                <button onClick={handleConfirm} className="flex-1 py-3 rounded-lg bg-black text-white font-bold">確認入庫</button>
+            </div>
+        }>
+            <div className="space-y-6">
+                <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4 border mb-2">
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">購買日期</label>
+                        <input type="date" value={form.buyDate} onChange={e => setForm({...form, buyDate: e.target.value})} className="w-full border p-2 rounded-lg bg-white" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">來源 (選填)</label>
+                        <input type="text" placeholder="Ex. 韓拍" value={form.source} onChange={e => setForm({...form, source: e.target.value})} className="w-full border p-2 rounded-lg bg-white" />
+                    </div>
+                    
+                    <div className="col-span-2 bg-red-50/50 p-4 rounded-xl flex flex-col justify-center gap-1 border border-red-100/50 hover:border-red-200 transition-colors relative">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold text-red-600 uppercase tracking-wider">批量總金額 (將自動均分單價)</label>
+                            {manualIds.length > 0 && (
+                                <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold shadow-sm">
+                                    已有 {manualIds.length} 張自訂單價
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-baseline mt-1">
+                            <span className="text-xl text-red-600 font-bold mr-1">$</span>
+                            <input 
+                                type="number" 
+                                placeholder="0" 
+                                step="50"
+                                min="0"
+                                value={totalAmount} 
+                                onChange={handleTotalAmountChange} 
+                                className="w-full bg-transparent text-3xl font-black text-red-600 outline-none placeholder-red-200"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-3 max-h-[45vh] overflow-y-auto px-1">
+                    {selectedCards.map(card => {
+                        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                        const seriesName = cardSeries?.shortName || cardSeries?.name;
+                        const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                        
+                        const effectiveType = card.type;
+                        const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                        const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                        
+                        const effectiveChannelId = card.channel;
+                        const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                        const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                        
+                        const batchNumber = cardBatch?.batchNumber;
+                        const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                        const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
+                        return (
+                            <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
+                                <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border">
+                                    <img src={card.image} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
+                                    {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <div className="flex flex-col items-end">
+                                        <label className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">數量</label>
+                                        <input 
+                                            type="number" min="1"
+                                            value={cardDetails[card.id]?.quantity}
+                                            onChange={e => handleDetailChange(card.id, 'quantity', e.target.value)}
+                                            className="w-12 text-right border-b border-gray-200 focus:border-black outline-none font-bold text-sm py-0.5"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                            {manualIds.includes(card.id) ? (
+                                                <span className="text-indigo-500">自訂單價</span>
+                                            ) : (
+                                                <span className="text-red-400">單價</span>
+                                            )}
+                                        </label>
+                                        <div className="flex items-baseline">
+                                            <span className={`text-xs font-bold mr-0.5 ${manualIds.includes(card.id) ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                            <input 
+                                                type="number" placeholder="0" step="50"
+                                                value={cardDetails[card.id]?.buyPrice}
+                                                onChange={e => handleDetailChange(card.id, 'buyPrice', e.target.value)}
+                                                className={`w-16 text-right border-none outline-none font-black text-lg bg-transparent p-0 ${manualIds.includes(card.id) ? 'text-indigo-600 placeholder-indigo-200' : 'text-red-600 placeholder-red-200'}`}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function CardMarkInput({ initialValue, onSave }) {
+    const [val, setVal] = useState(initialValue || '');
+    const isDirty = val !== (initialValue || '');
+
+    return (
+        <div className="flex items-center gap-0.5 bg-white/95 border border-indigo-400 rounded shadow-sm p-0.5 pointer-events-auto max-w-full" onClick={(e) => e.stopPropagation()}>
+            <input
+                type="text"
+                value={val}
+                onChange={(e) => setVal(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && isDirty && onSave(val)}
+                placeholder="標記..."
+                className="w-12 sm:w-16 text-[11px] text-indigo-900 font-bold px-1 outline-none text-right bg-transparent min-w-0"
+            />
+            <button
+                onClick={() => isDirty && onSave(val)}
+                disabled={!isDirty}
+                className={`p-0.5 rounded-sm transition-all flex-shrink-0 ${isDirty ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer shadow-sm' : 'bg-green-500 text-white cursor-default'}`}
+                title={isDirty ? "點擊儲存" : "已儲存"}
+            >
+                <Check className="w-3 h-3" />
+            </button>
+        </div>
+    );
+}
+
+function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails }) {
+  const [activeListId, setActiveListId] = useState(customLists[0]?.id || '');
+  const [showCardSelector, setShowCardSelector] = useState(false);
+  const [activeView, setActiveView] = useState(null);
+
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
+  const [editingListId, setEditingListId] = useState(null);
+  const [listTitleInput, setListTitleInput] = useState('');
+  const [listToDelete, setListToDelete] = useState(null);
+  
+  const clickTimer = useRef(null);
+
+  const [filterMember, setFilterMember] = useState('All');
+  const [filterType, setFilterType] = useState('All');
+  const [filterChannel, setFilterChannel] = useState('All');
+
+  const exportRef = useRef(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportedImage, setExportedImage] = useState(null);
+  
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [cardMarks, setCardMarks] = useState({});
+
+  useEffect(() => {
+      setFilterMember('All');
+      setFilterType('All');
+      setFilterChannel('All');
+      setIsEditMode(false);
+      setCardMarks({}); 
+  }, [activeView]);
+
+  const activeList = (customLists || []).find(l => l.id === activeListId);
+
+  const getDisplayCards = () => {
+      let baseCards = [];
+      if (!activeView) return [];
+      
+      if (activeView === 'owned') {
+          baseCards = (cards || []).filter(c => getOwnedQuantity(inventory, c.id) > 0);
+      } else if (activeView === 'wishlist') {
+          baseCards = (cards || []).filter(c => c.isWishlist);
+      } else if (activeView === 'selling') {
+          baseCards = (cards || []).filter(c => (sales || []).some(s => s.cardId === c.id && s.quantity > 0)).map(c => {
+              const saleRecord = (sales || []).find(s => s.cardId === c.id && s.quantity > 0);
+              return { ...c, note: `$${saleRecord?.price || 0}`, noteColor: saleRecord?.color || 'bg-black/70' };
+          });
+      } else if (typeof activeView === 'object' && activeView.items) {
+          baseCards = activeView.items.map(item => {
+              const card = (cards || []).find(c => c.id === item.cardId);
+              return card ? { ...card, note: item.note } : null;
+          }).filter(Boolean);
+      }
+
+      return baseCards.filter(c => {
+          const effectiveType = c.type;
+          const effectiveChannel = c.channel;
+
+          if (filterMember !== 'All' && c.memberId !== filterMember) return false;
+          if (filterType !== 'All' && effectiveType !== filterType) return false;
+          if (filterChannel !== 'All' && effectiveChannel !== filterChannel) return false;
+          return true;
+      }).sort((cardA, cardB) => {
+      const safeString = (val) => val ? String(val) : '';
+      const safeNum = (val, defaultVal) => {
+          const n = Number(val);
+          return isNaN(n) ? defaultVal : n;
+      };
+
+      // 1. 確保系列時間與分群 (舊到新)
+      const sA = (series || []).find(s => s.id === cardA.seriesId);
+      const sB = (series || []).find(s => s.id === cardB.seriesId);
+      const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
+      const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+      if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+
+      const seriesIdA = safeString(cardA.seriesId);
+      const seriesIdB = safeString(cardB.seriesId);
+      if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
+
+      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
+      const bA = (batches || []).find(b => b.id === cardA.batchId);
+      const bB = (batches || []).find(b => b.id === cardB.batchId);
+      
+      if (bA && bB && bA.id !== bB.id) {
+          // (1) 比較兩個批次所屬的「子類順序」
+          const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
+          const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
+          const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
+          const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
+          if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+          
+          // (2) 比較兩個批次的「日期」 (舊到新)
+          const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
+          const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
+          if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+          
+          // (3) 日期相同，比較批次「名稱」
+          const nameA = safeString(bA.name);
+          const nameB = safeString(bB.name);
+          const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+      } else if (bA && !bB) {
+          return -1; // 有批次的卡片往前排
+      } else if (!bA && bB) {
+          return 1;
+      }
+
+      // 3. 確保相同批次的小卡絕對群聚在一起
+      const batchIdA = safeString(cardA.batchId);
+      const batchIdB = safeString(cardB.batchId);
+      if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
+
+      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
+      if (!bA && !bB) {
+          const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
+          const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
+          const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
+          const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
+          if (cSortA !== cSortB) return cSortA - cSortB;
+      }
+
+      // 5. 相同批次/子類內，看「成員順序」
+      const mA = (members || []).find(m => m.id === cardA.memberId);
+      const mB = (members || []).find(m => m.id === cardB.memberId);
+      const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+      const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+      if (mSortA !== mSortB) return mSortA - mSortB;
+
+      // 防呆：最後用 ID
+      return safeString(cardA.id).localeCompare(safeString(cardB.id));
+  });
+  };
+
+  const displayCards = getDisplayCards() || [];
+  const availableMembers = useMemo(() => [...new Set(displayCards.map(c => c.memberId))], [displayCards]);
+  
+  const availableTypeIds = useMemo(() => {
+      return [...new Set(displayCards.map(c => c.type).filter(Boolean))];
+  }, [displayCards]);
+  
+  const availableTypes = useMemo(() => {
+      return availableTypeIds.map(id => {
+          const tObj = (types || []).find(t => t.id === id || t.name === id);
+          return tObj || { id, name: id, shortName: '' };
+      });
+  }, [availableTypeIds, types]);
+  
+  const availableChannelIds = useMemo(() => {
+      return [...new Set(displayCards.map(c => c.channel).filter(Boolean))];
+  }, [displayCards]);
+
+  const availableChannels = useMemo(() => {
+      return availableChannelIds.map(id => {
+          const ch = (channels || []).find(c => c.id === id || c.name === id);
+          return ch || { id, name: id, shortName: '' };
+      });
+  }, [availableChannelIds, channels]);
+
+  const getMemberName = (id) => (members || []).find(m => m.id === id)?.name || 'Unknown';
+
+  const handleSaveList = async () => {
+    if(listTitleInput.trim()) {
+        const payload = { title: listTitleInput.trim() };
+        if (editingListId) {
+            payload.id = editingListId;
+            setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
+        } else {
+            payload.id = Date.now().toString();
+            payload.items = [];
+            setCustomLists([...(customLists || []), payload]);
+        }
+        await supabase.from('custom_lists').upsert(toSnakeCase(payload));
+        setIsListModalOpen(false);
+        setEditingListId(null);
+        setListTitleInput('');
+    }
+  };
+
+  const handleListClick = (e, list) => {
+    e.stopPropagation();
+    if (clickTimer.current) {
+        clearTimeout(clickTimer.current);
+        clickTimer.current = null;
+        setEditingListId(list.id);
+        setListTitleInput(list.title);
+        setIsListModalOpen(true);
+    } else {
+        clickTimer.current = setTimeout(() => {
+            setActiveView(list);
+            clickTimer.current = null;
+        }, 250);
+    }
+  };
+
+  const handleDeleteList = async (e, id) => {
+    e.stopPropagation();
+    if(confirm("確定刪除？")) {
+        setCustomLists((customLists || []).filter(l => l.id !== id));
+        await supabase.from('custom_lists').delete().eq('id', id);
+    }
+  };
+
+  const handleExportPNG = async (exportTitle) => {
+      if (!exportRef.current) return;
+      
+      setIsEditMode(false);
+      setIsExporting(true);
+      try {
+          const element = exportRef.current;
+          const overlay = element.parentElement; 
+          
+          const origOverlayStyle = overlay.style.cssText;
+          const origElementStyle = element.style.cssText;
+          const origScrollTop = overlay.scrollTop;
+          
+          // 確保外層完全展開
+          overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
+          
+          // 🌟 關鍵修正：強制設定白底，並明確加上 60px 的底部留白，避免背景提早被切斷
+          element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
+          
+          window.scrollTo(0, 0);
+          
+          await new Promise(resolve => setTimeout(resolve, 800));
+
+          // 重新計算加入 padding 後的真實高度
+          const targetHeight = element.scrollHeight;
+          const targetWidth = element.scrollWidth;
+
+          const dataUrl = await htmlToImage.toPng(element, {
+              pixelRatio: 2, 
+              backgroundColor: '#ffffff', // 🌟 畫布背景強制填滿純白
+              cacheBust: true,
+              width: targetWidth,
+              height: targetHeight, 
+              style: {
+                  // 🌟 強制套用白底與高度給截圖畫布
+                  height: `${targetHeight}px`, 
+                  maxHeight: 'none',
+                  overflow: 'visible',
+                  backgroundColor: '#ffffff', 
+                  paddingBottom: '60px'
+              },
+              filter: (node) => {
+                  if (node?.classList?.contains('no-export') || node?.classList?.contains('no-print')) {
+                      return false;
+                  }
+                  return true;
+              }
+          });
+
+          // 恢復原狀
+          overlay.style.cssText = origOverlayStyle;
+          element.style.cssText = origElementStyle;
+          overlay.scrollTop = origScrollTop;
+
+          setExportedImage(dataUrl);
+
+      } catch (error) {
+          console.error('Export failed:', error);
+          alert(`匯出圖片失敗: ${error.message}`);
+      } finally {
+          setIsExporting(false);
+      }
+  };
+  
+  const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+     <div className="flex items-center gap-3 overflow-hidden no-export no-print">
+        <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+            {(options || []).map(opt => {
+                const id = typeof opt === 'object' ? opt.id : opt;
+                const name = mapName ? mapName(opt) : opt;
+                const isSelected = current === id;
+                return (
+                    <button 
+                        key={id}
+                        onClick={() => onChange(isSelected ? 'All' : id)}
+                        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    >
+                        {name}
+                    </button>
+                )
+            })}
+        </div>
+     </div>
+  );
+  
+  const CardGrid = ({ displayCards }) => (
+      <div 
+        className="grid gap-3 sm:gap-4"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      >
+          {displayCards.map((card, idx) => {
+              const cardSeries = (series || []).find(s => s.id === card.seriesId);
+              const seriesName = cardSeries?.shortName || cardSeries?.name;
+              const cardBatch = (batches || []).find(b => b.id === card.batchId);
+              
+              const effectiveType = card.type;
+              const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+              const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+              
+              const effectiveChannelId = card.channel;
+              const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+              const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+              
+              const batchNumber = cardBatch?.batchNumber;
+              const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+              const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
+              return (
+                  <div 
+                    key={idx} 
+                    onClick={() => !isEditMode && setViewingCard(card)}
+                    className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform"
+                  >
+                      <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0">
+                          <img src={card.image} className="w-full h-full object-cover rounded-lg pointer-events-none" />
+                          
+                          <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
+                              {isEditMode ? (
+                                  <CardMarkInput 
+                                      initialValue={cardMarks[card.id]}
+                                      onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})}
+                                  />
+                              ) : (
+                                  cardMarks[card.id] && (
+                                      <div 
+                                          className="inline-block bg-white/70 text-black text-[11px] font-bold px-2 pt-0 pb-[5px] rounded shadow-sm max-w-full break-words text-right pointer-events-none"
+                                          style={{ lineHeight: '1.2' }}
+                                      >
+                                          {cardMarks[card.id]}
+                                      </div>
+                                  )
+                              )}
+                          </div>
+
+                          {card.note && (
+                              <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
+                                  <div 
+                                      className={`inline-block text-white text-[11px] font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full break-words ${card.noteColor || 'bg-black/70'}`}
+                                      style={{ lineHeight: '1.2' }}
+                                  >
+                                      {card.note}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                      {showDetails && (
+                        <div className="text-center px-0.5 pb-1 h-full flex flex-col justify-start">
+                            <div 
+                                className="text-[10px] font-bold text-gray-800 leading-snug line-clamp-2 break-all"
+                                title={displayTitle || '未命名卡片'}
+                            >
+                                {displayTitle || '未命名卡片'}
+                            </div>
+                            {cardBatch?.name && <div className="text-[8px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                        </div>
+                      )}
+                  </div>
+              )
+          })}
+      </div>
+  );
+
+  if (activeView) {
+      const title = activeView === 'owned' ? '我的擁有' : 
+                    activeView === 'wishlist' ? '願望清單' : 
+                    activeView === 'selling' ? '販售中' : 
+                    activeView.title;
+
+      return (
+        <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto flex flex-col items-center py-4 sm:py-10 animate-fade-in px-2 sm:px-0">
+            <div className="bg-white p-4 sm:p-8 shadow-2xl min-h-[600px] w-full max-w-5xl relative rounded-xl sm:rounded-none" ref={exportRef}>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
+                    <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+                        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                            <button onClick={() => setActiveView(null)} className="no-export no-print p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+                                <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                            </button>
+                            <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
+                        </div>
+                        <div className="text-right sm:hidden flex-shrink-0 ml-2">
+                            <div className="text-[10px] font-bold text-gray-400">CardKeeper</div>
+                            <div className="text-[9px] text-gray-300">{new Date().toLocaleDateString()}</div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-4">
+                        <div className="flex items-center gap-2 no-export no-print">
+                             <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8">
+                               <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
+                               <select 
+                                  value={cols}
+                                  onChange={(e) => setCols(Number(e.target.value))}
+                                  className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
+                               >
+                                  {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                               </select>
+                            </div>
+                            <button
+                                onClick={() => setIsEditMode(!isEditMode)}
+                                className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                                title="在卡片上標記"
+                            >
+                                <PenTool className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setShowDetails(!showDetails)}
+                                className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                            >
+                                {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                            </button>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                            <div className="text-sm font-bold text-gray-400">CardKeeper</div>
+                            <div className="text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
+                    {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={getMemberName} />}
+                    {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
+                    {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
+                </div>
+
+                <CardGrid displayCards={displayCards} />
+                
+                {displayCards.length === 0 && (
+                    <div className="text-center py-20 text-gray-400">
+                        沒有符合條件的卡片
+                    </div>
+                )}
+            </div>
+
+            <div className="fixed bottom-8 inset-x-0 flex justify-center pointer-events-none no-print z-50">
+                <button 
+                    onClick={(e) => { e.preventDefault(); handleExportPNG(title); }} 
+                    disabled={isExporting} 
+                    className="bg-indigo-600 text-white px-10 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 hover:-translate-y-1 hover:shadow-[0_10px_40px_rgb(0,0,0,0.3)] flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait transition-all pointer-events-auto"
+                >
+                    <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出'}
+                </button>
+            </div>
+
+            {exportedImage && (
+                <Modal 
+                    title="圖片已產生" 
+                    onClose={() => setExportedImage(null)} 
+                    className="max-w-2xl" 
+                    footer={
+                        <div className="flex gap-2 w-full">
+                            <button onClick={() => setExportedImage(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-all">
+                                關閉預覽
+                            </button>
+                            <a 
+                                href={exportedImage} 
+                                download={`${title}_${new Date().toISOString().split('T')[0]}.png`}
+                                className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2"
+                            >
+                                <Download className="w-5 h-5" /> 點此下載圖片
+                            </a>
+                        </div>
+                    }
+                >
+                    <div className="p-4 flex flex-col items-center">
+                        <div className="bg-green-50 text-green-700 p-3 rounded-xl mb-4 w-full text-center text-sm font-bold border border-green-200">
+                            圖片產生成功！🎉<br/>
+                            <span className="text-xs font-normal text-green-600">請點擊下方「點此下載圖片」按鈕，或直接長按下方圖片儲存。</span>
+                        </div>
+                        <div className="border border-gray-200 rounded-xl overflow-hidden shadow-lg w-full max-w-md bg-white">
+                            <img 
+                                src={exportedImage} 
+                                alt="Export Preview" 
+                                className="w-full h-auto object-contain block pointer-events-auto" 
+                                style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }}
+                            />
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+      );
+  }
+
+  return (
+    <>
+      <div className="p-4 space-y-8 pb-24">
+          <section>
+            <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">系統分類</h3>
+            <div className="grid grid-cols-3 gap-4">
+                <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group">
+                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                        <Folder className="w-6 h-6 fill-current" />
+                    </div>
+                    <span className="font-bold text-gray-700 text-sm">擁有</span>
+                </div>
+                <div onClick={() => setActiveView('wishlist')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-pink-300 hover:shadow-md transition-all group">
+                    <div className="w-12 h-12 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 group-hover:scale-110 transition-transform">
+                        <Heart className="w-6 h-6 fill-current" />
+                    </div>
+                    <span className="font-bold text-gray-700 text-sm">想要</span>
+                </div>
+                <div onClick={() => setActiveView('selling')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md transition-all group">
+                    <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
+                        <ShoppingBag className="w-6 h-6" />
+                    </div>
+                    <span className="font-bold text-gray-700 text-sm">販售</span>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {(customLists || []).map(list => (
+                    <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
+                         <div className="flex items-center gap-3 min-w-0">
+                             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none">
+                                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
+                            </div>
+                            <div className="flex flex-col min-w-0 pointer-events-none">
+                                <span className="font-bold text-gray-800 text-sm sm:text-base truncate">{list.title}</span>
+                                <span className="text-[10px] sm:text-xs text-gray-400">{(list.items || []).length} 張卡片</span>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setListToDelete(list.id); }}
+                            className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                        >
+                            <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </button>
+                    </div>
+                ))}
+                
+                <div onClick={() => { setEditingListId(null); setListTitleInput(''); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group select-none">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:text-indigo-500 shadow-sm flex-shrink-0">
+                        <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                    <span className="font-bold text-gray-500 group-hover:text-indigo-600 text-sm sm:text-base">新增收藏冊</span>
+                </div>
+            </div>
+        </section>
+      </div>
+
+      {isListModalOpen && (
+          <Modal title={editingListId ? "編輯收藏冊" : "新增收藏冊"} onClose={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="max-w-sm" footer={
+              <div className="flex gap-2 w-full">
+                  <button onClick={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
+                  <button onClick={handleSaveList} className="flex-1 py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800">{editingListId ? "儲存修改" : "確認新增"}</button>
+              </div>
+          }>
+              <div className="p-4">
+                  <label className="text-xs font-bold text-gray-500 mb-1.5 block">收藏冊名稱</label>
+                  <input 
+                      autoFocus
+                      type="text" 
+                      placeholder="例如：售物清單、保留區..." 
+                      value={listTitleInput} 
+                      onChange={e => setListTitleInput(e.target.value)} 
+                      onKeyDown={e => e.key === 'Enter' && handleSaveList()}
+                      className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100" 
+                  />
+              </div>
+          </Modal>
+      )}
+
+      {listToDelete && (
+          <Modal title="刪除收藏冊" onClose={() => setListToDelete(null)} className="max-w-sm" footer={
+              <div className="flex gap-2 w-full">
+                  <button onClick={() => setListToDelete(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
+                  <button onClick={handleDeleteList} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600">確定刪除</button>
+              </div>
+          }>
+              <div className="p-6 text-center text-gray-600 text-sm">
+                  確定要刪除這個收藏冊嗎？<br/>內含的卡片紀錄將從此清單移除，但不會刪除您的實際庫存。
+              </div>
+          </Modal>
+      )}
+    </>
+  );
+}
+
+// --- 7. App Main Component ---
+export default function App() {
+  const [activeTab, setActiveTab] = useState('library');
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
+  const [activeModal, setActiveModal] = useState(null); 
+  
+  // 🌟 初始化為空陣列 (準備接資料)
+  const [groups, setGroups] = useState([]);
+  const [currentGroupId, setCurrentGroupId] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [series, setSeries] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [types, setTypes] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [cards, setCards] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [customLists, setCustomLists] = useState([]);
+  const [sales, setSales] = useState([]);
+  const [bulkRecords, setBulkRecords] = useState([]);
+  
+  const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
+
+  const [libraryCols, setLibraryCols] = useState(6);
+  const [collectionCols, setCollectionCols] = useState(6);
+  const [exportCols, setExportCols] = useState(6);
+  const [exportShowDetails, setExportShowDetails] = useState(true);
+
+  const [viewingCard, setViewingCard] = useState(null);
+  const [isExportMode, setIsExportMode] = useState(false);
+  const [modalState, setModalState] = useState({ type: null, data: null });
+  
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedCardIds, setSelectedCardIds] = useState([]);
+  const [batchCategorizeTarget, setBatchCategorizeTarget] = useState(null); 
+
+  // 🌟 從 Supabase 抓取所有資料
+  useEffect(() => {
+    async function fetchAllData() {
+        const fetchTable = async (t) => { 
+        const { data, error } = await supabase.from(t).select('*').limit(10000); 
+    
+        // 🌟 加上錯誤警告，抓出連線或權限問題
+        if (error) {
+         console.error(`🚨 [${t}] 讀取失敗:`, error.message);
+         alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+        } else {
+             console.log(`✅ [${t}] 成功讀取 ${data?.length || 0} 筆資料`);
+        }
+    
+        return (data || []).map(toCamelCase); 
+        };
+        const fetchedGroups = await fetchTable('groups');
+        setGroups(fetchedGroups);
+        if (fetchedGroups.length > 0 && !currentGroupId) setCurrentGroupId(fetchedGroups[0].id);
+
+        const fetchedMembers = await fetchTable('members');
+        // 🌟 確保一開始載入就排好序
+        setMembers(fetchedMembers.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)));
+        setSeries(await fetchTable('series'));
+        setBatches(await fetchTable('batches'));
+        setChannels(await fetchTable('channels'));
+        setTypes(await fetchTable('types'));
+        setCards(await fetchTable('ui_cards'));
+        setInventory(await fetchTable('ui_inventory'));
+        setBulkRecords(await fetchTable('bulk_records'));
+        setCustomLists(await fetchTable('custom_lists'));
+        setSales(await fetchTable('ui_sales'));
+    }
+    fetchAllData();
+  }, []);
+
+  useEffect(() => {
+      const handleResize = () => {
+          const isMobile = window.innerWidth < 768;
+          if (isMobile) {
+              setLibraryCols(prev => (prev === 6 ? 4 : prev));
+              setCollectionCols(prev => (prev === 6 ? 4 : prev));
+              setExportCols(prev => (prev === 6 ? 4 : prev));
+          }
+      };
+      window.addEventListener('resize', handleResize);
+      handleResize(); 
+      return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const currentGroup = (groups || []).find(g => g.id === currentGroupId);
+
+  // 🌟 強化版：子類 (Type) 依照你設定的 sortOrder 排序
+  // 🌟 1. 強化版：子類 (Type) 依照你設定的 sortOrder 排序
+  const combinedTypes = useMemo(() => {
+      const currentTypes = (types || []).filter(t => t.groupId === currentGroupId);
+      const dynamicTypeIds = new Set([
+          ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.type),
+          ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.type)
+      ].filter(Boolean));
+      
+      const combined = [...currentTypes];
+      dynamicTypeIds.forEach(id => {
+          if (!currentTypes.some(t => t.id === id || t.name === id)) {
+              combined.push({ id, name: id, shortName: '', sortOrder: 999 }); // 未知子類放最後
+          }
+      });
+      // 依照 sortOrder 數字大小排序
+      return combined.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+  }, [types, cards, batches, currentGroupId]);
+
+  // 🌟 2. 恢復不小心被刪掉的 uniqueTypes
+  const uniqueTypes = useMemo(() => 
+    [...new Set([
+        ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.type),
+        ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.type)
+    ].filter(Boolean))], 
+  [cards, batches, currentGroupId]);
+
+  // 🌟 3. 強化版：通路 (Channel) 依照「使用頻率 (卡片數量)」由多到少排序
+  const combinedChannels = useMemo(() => {
+      const currentChannels = (channels || []).filter(c => c.groupId === currentGroupId);
+      const dynamicChannelIds = new Set([
+          ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.channel),
+          ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.channel)
+      ].filter(Boolean));
+      
+      const combined = [...currentChannels];
+      dynamicChannelIds.forEach(id => {
+          if (!currentChannels.some(c => c.id === id || c.name === id)) {
+              combined.push({ id, name: id, shortName: '' });
+          }
+      });
+
+      // 計算各通路的使用頻率
+      const freqMap = {};
+      (cards || []).filter(c => c.groupId === currentGroupId).forEach(c => {
+          if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1;
+      });
+
+      // 依照使用頻率排序 (由大到小)
+      return combined.sort((a, b) => {
+          const freqA = freqMap[a.id] || freqMap[a.name] || 0;
+          const freqB = freqMap[b.id] || freqMap[b.name] || 0;
+          return freqB - freqA;
+      });
+  }, [channels, cards, batches, currentGroupId]);
+
+  // 🌟 4. 恢復不小心被刪掉的 uniqueChannels
+  const uniqueChannels = useMemo(() => 
+    [...new Set([
+        ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.channel),
+        ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.channel)
+    ].filter(Boolean))], 
+  [cards, batches, currentGroupId]);
+
+  const uniqueSeriesTypes = useMemo(() =>
+    [...new Set((series || []).filter(s => s.groupId === currentGroupId).map(s => s.type).filter(Boolean))],
+  [series, currentGroupId]);
+
+  const openModal = (type, data = {}) => setModalState({ type, data });
+  const closeModal = () => setModalState({ type: null, data: null });
+
+  // 🌟 新增：共用的圖片上傳函式
+  const uploadImageToSupabase = async (base64String) => {
+      // 如果沒有圖片，或是已經是 http 網址，就直接回傳
+      if (!base64String || base64String.startsWith('http')) return base64String;
+
+      try {
+          const res = await fetch(base64String);
+          const blob = await res.blob();
+          const fileName = `image_${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
+          
+          const { error: uploadError } = await supabase.storage
+              .from('card-images') // 統一使用同一個儲存桶
+              .upload(fileName, blob, { contentType: 'image/jpeg' });
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+              .from('card-images')
+              .getPublicUrl(fileName);
+
+          return publicUrl;
+      } catch (err) {
+          console.error("圖片上傳失敗:", err);
+          return null;
+      }
+  };
+
+// 🌟 自動統整所有庫存與盤收的「來源」
+  const uniqueSources = useMemo(() => {
+      const invSources = (inventory || []).map(i => i.source);
+      const bulkSources = (bulkRecords || []).map(r => r.source);
+      return [...new Set([...invSources, ...bulkSources].filter(Boolean))].sort();
+  }, [inventory, bulkRecords]);
+
+  // 🌟 全域修改來源名稱的函式 (連動更新資料庫)
+  const handleRenameSource = async (oldName, newName) => {
+      if (!newName || oldName === newName) return;
+      setInventory(prev => prev.map(i => i.source === oldName ? { ...i, source: newName } : i));
+      setBulkRecords(prev => prev.map(r => r.source === oldName ? { ...r, source: newName } : r));
+      await supabase.from('ui_inventory').update({ source: newName }).eq('source', oldName);
+      await supabase.from('bulk_records').update({ source: newName }).eq('source', oldName);
+  };
+
+  // 🌟 全域刪除來源名稱的函式
+  const handleDeleteSource = async (oldName) => {
+      if (!window.confirm(`確定要刪除來源「${oldName}」嗎？相關卡片的來源都會被清空！`)) return;
+      setInventory(prev => prev.map(i => i.source === oldName ? { ...i, source: '' } : i));
+      setBulkRecords(prev => prev.map(r => r.source === oldName ? { ...r, source: '' } : r));
+      await supabase.from('ui_inventory').update({ source: null }).eq('source', oldName);
+      await supabase.from('bulk_records').update({ source: null }).eq('source', oldName);
+  };
+
+  // 👇 你的 handleSaveData 應該會緊接著在這邊
+  // const handleSaveData = async (data, type, isEdit = false) => { ...
+
+  // 🌟 通用儲存功能
+  const handleSaveData = async (data, type, isEdit = false) => {
+      const tableMap = { group: 'groups', member: 'members', series: 'series', batch: 'batches', channel: 'channels', type: 'types', card: 'ui_cards' };
+      const table = tableMap[type];
+
+      const allowedKeys = {
+          group: ['id', 'name', 'image'],
+          member: ['id', 'groupId', 'name', 'image','sortOrder', 'subunit'],
+          series: ['id', 'groupId', 'name', 'type', 'date', 'shortName', 'image', 'subunit'],
+          batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
+          channel: ['id', 'groupId', 'name', 'shortName'],
+          type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist']
+      };
+
+      const cleanData = (obj) => {
+          const cleaned = {};
+          (allowedKeys[type] || []).forEach(key => {
+              if (obj[key] !== undefined) cleaned[key] = obj[key];
+          });
+          return cleaned;
+      };
+
+      // 🌟 1. 單筆資料的圖片上傳
+      if (data.image) {
+          data.image = await uploadImageToSupabase(data.image);
+      }
+
+      // 🌟 2. 處理批量新增小卡
+      if (type === 'card' && Array.isArray(data)) {
+          const processedData = await Promise.all(data.map(async (item) => {
+              let imageUrl = item.image;
+              if (imageUrl) imageUrl = await uploadImageToSupabase(imageUrl);
+              return { ...item, image: imageUrl };
+          }));
+
+          const newCards = processedData.map((item, idx) => ({ ...item, id: Date.now().toString() + idx }));
+          setCards(prev => [...prev, ...newCards]);
+          
+          const dbPayloads = newCards.map(c => toSnakeCase(cleanData(c)));
+          const { error } = await supabase.from(table).insert(dbPayloads);
+          
+          if (error) alert("批量儲存失敗: " + error.message);
+          return;
+      }
+
+      // 🌟 3. 處理單筆新增/編輯
+      const payload = { ...data, id: data.id || Date.now().toString() };
+      
+      const updateList = (list, setList) => {
+           setList(prev => {
+               const exists = prev.some(item => item.id === payload.id);
+               let newList;
+               if (exists) {
+                   newList = prev.map(item => item.id === payload.id ? payload : item);
+               } else {
+                   newList = [...prev, payload];
+               }
+               // 🌟 新增 type 判斷，讓子類也馬上套用新排序
+               if (type === 'member' || type === 'type') {
+                   newList.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+               }
+               return newList;
+           });
+      };
+      if (type === 'card') updateList(cards, setCards);
+      else if (type === 'group') { updateList(groups, setGroups); if (!isEdit) setCurrentGroupId(payload.id); }
+      else if (type === 'member') updateList(members, setMembers);
+      else if (type === 'series') updateList(series, setSeries);
+      else if (type === 'batch') updateList(batches, setBatches);
+      else if (type === 'channel') updateList(channels, setChannels);
+      else if (type === 'type') updateList(types, setTypes);
+
+      const dbPayload = toSnakeCase(cleanData(payload));
+      const { error } = await supabase.from(table).upsert(dbPayload);
+      
+      if (error) {
+          console.error("資料庫儲存失敗:", error.message, dbPayload);
+          alert(`儲存失敗: ${error.message}`);
+      }
+  };
+
+  // 🌟 通用刪除功能
+  const handleDeleteData = async (type, id) => {
+      const tableMap = { group: 'groups', member: 'members', series: 'series', batch: 'batches', channel: 'channels', type: 'types', card: 'ui_cards' };
+      
+      if (type === 'card') {
+          setCards(prev => prev.filter(c => c.id !== id));
+          setInventory(prev => prev.filter(i => i.cardId !== id));
+          setCustomLists(prev => prev.map(l => ({ ...l, items: l.items.filter(i => i.cardId !== id) })));
+          setBulkRecords(prev => prev.map(r => ({ ...r, items: (r.items || []).filter(i => i.cardId !== id) })));
+      } else if (type === 'series') {
+          setSeries(prev => prev.filter(s => s.id !== id));
+          setCards(prev => prev.map(c => c.seriesId === id ? { ...c, seriesId: null } : c));
+          setBatches(prev => prev.filter(b => b.seriesId !== id));
+      } else if (type === 'batch') {
+          setBatches(prev => prev.filter(b => b.id !== id));
+          setCards(prev => prev.map(c => c.batchId === id ? { ...c, batchId: null } : c));
+      } else if (type === 'group') {
+          if (currentGroupId === id) {
+              const remaining = groups.filter(g => g.id !== id);
+              setCurrentGroupId(remaining.length > 0 ? remaining[0].id : null);
+          }
+          setGroups(prev => prev.filter(g => g.id !== id));
+      } else if (type === 'member') {
+          setMembers(prev => prev.filter(m => m.id !== id));
+          setCards(prev => prev.map(c => c.memberId === id ? { ...c, memberId: null } : c));
+      } else if (type === 'channel') {
+          setChannels(prev => prev.filter(c => c.id !== id));
+          setCards(prev => prev.map(c => c.channel === id ? { ...c, channel: null } : c));
+          setBatches(prev => prev.map(b => b.channel === id ? { ...b, channel: null } : b));
+      } else if (type === 'type') {
+          setTypes(prev => prev.filter(t => t.id !== id));
+          setCards(prev => prev.map(c => c.type === id ? { ...c, type: null } : c));
+          setBatches(prev => prev.map(b => b.type === id ? { ...b, type: null } : b));
+      }
+
+      await supabase.from(tableMap[type]).delete().eq('id', id);
+  };
+
+  // 🌟 批量入庫
+  const handleBulkOwn = async (items) => {
+      const newRecords = items.map((item, idx) => ({
+          id: Date.now().toString() + idx,
+          ...item
+      }));
+      setInventory([...(inventory || []), ...newRecords]);
+      setSelectedCardIds([]);
+      setIsSelectionMode(false);
+      closeModal();
+      
+      await supabase.from('ui_inventory').insert(newRecords.map(toSnakeCase));
+      alert(`已成功入庫 ${newRecords.length} 張卡片`);
+  };
+
+  // 🌟 批量歸類
+  const handleBatchCategorize = async () => {
+      if (!batchCategorizeTarget) return;
+      const { type, value } = batchCategorizeTarget;
+      
+      const cardsToUpdate = [];
+      const updatedCards = (cards || []).map(c => {
+          const isSelected = selectedCardIds.includes(c.id);
+          const wasInBatch = c[type] === value;
+          
+          if (isSelected && !wasInBatch) {
+              const newCard = { ...c, [type]: value };
+              if (type === 'batchId' && value) {
+                  const targetBatch = batches.find(b => b.id === value);
+                  if (targetBatch) {
+                      if (targetBatch.seriesId) newCard.seriesId = targetBatch.seriesId;
+                      if (targetBatch.channel) newCard.channel = targetBatch.channel;
+                      if (targetBatch.type) newCard.type = targetBatch.type;
+                  }
+              }
+              cardsToUpdate.push(newCard);
+              return newCard;
+          } else if (!isSelected && wasInBatch) {
+              const newCard = { ...c, [type]: '' };
+              cardsToUpdate.push(newCard);
+              return newCard;
+          }
+          return c;
+      });
+      
+      setCards(updatedCards);
+      
+      for(const c of cardsToUpdate) {
+          const payload = { [type]: c[type] };
+          if (type === 'batchId' && c[type]) {
+              if (c.seriesId) payload.seriesId = c.seriesId;
+              if (c.channel) payload.channel = c.channel;
+              if (c.type) payload.type = c.type;
+          }
+          await supabase.from('ui_cards').update(toSnakeCase(payload)).eq('id', c.id);
+      }
+
+      setSelectedCardIds([]);
+      setBatchCategorizeTarget(null);
+      setIsSelectionMode(false);
+      alert("歸類更新完成！");
+  };
+  
+  // 🌟 儲存盤收紀錄
+  const handleSaveBulkRecord = async (data) => {
+      let savedRecordId;
+      const dataToSave = { ...data, groupId: data.groupId || currentGroupId };
+
+      if (dataToSave.image) {
+          dataToSave.image = await uploadImageToSupabase(dataToSave.image);
+      }
+
+      if (dataToSave.id) {
+          setBulkRecords(prev => prev.map(r => r.id === dataToSave.id ? { ...r, ...dataToSave } : r));
+          savedRecordId = dataToSave.id;
+          setEditingBulkRecord(prev => ({ ...prev, ...dataToSave }));
+      } else {
+          const newRecord = { ...dataToSave, id: Date.now().toString() };
+          setBulkRecords(prev => [...prev, newRecord]);
+          savedRecordId = newRecord.id;
+          setEditingBulkRecord(newRecord);
+      }
+
+      const newBulkInvItems = (dataToSave.items || []).map((item, idx) => {
+          const existing = (inventory || []).find(i => i.bulkRecordId === savedRecordId && i.cardId === item.cardId);
+          return {
+              id: existing?.id || `bulk_inv_${savedRecordId}_${idx}_${Date.now()}`,
+              cardId: item.cardId,
+              bulkRecordId: savedRecordId,
+              buyDate: dataToSave.buyDate,
+              buyPrice: item.buyPrice,
+              quantity: item.quantity,
+              source: dataToSave.source,
+              status: dataToSave.status,
+              sellPrice: existing?.sellPrice || 0,
+              sellDate: existing?.sellDate || '',
+              condition: existing?.condition || '無損',
+              note: existing?.note || `來自盤收: ${dataToSave.name}`
+          };
+      });
+
+      setInventory(prevInv => [...prevInv.filter(i => i.bulkRecordId !== savedRecordId), ...newBulkInvItems]);
+      
+      await supabase.from('bulk_records').upsert(toSnakeCase(dataToSave));
+      await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
+      if(newBulkInvItems.length > 0) {
+          await supabase.from('ui_inventory').insert(newBulkInvItems.map(toSnakeCase));
+      }
+  };
+
+  const handleDeleteBulkRecord = async (id) => {
+      setBulkRecords(prev => prev.filter(r => r.id !== id));
+      setInventory(prev => prev.filter(i => i.bulkRecordId !== id));
+      setEditingBulkRecord(null);
+      await supabase.from('bulk_records').delete().eq('id', id);
+  };
+
+  const renderContent = () => {
+    const groupCardIds = new Set((cards || []).filter(c => c.groupId === currentGroupId).map(c => c.id));
+    const groupInventory = (inventory || []).filter(inv => groupCardIds.has(inv.cardId));
+
+    if (groups.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
+                <Users className="w-16 h-16 text-gray-300 mb-4" />
+                <h2 className="text-xl font-bold text-gray-700 mb-2">歡迎使用小卡管家！</h2>
+                <p className="text-gray-500 mb-6">點擊下方按鈕，建立你的第一個團體開始管理吧。</p>
+                <button onClick={() => openModal('group')} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700">
+                    + 新增團體
+                </button>
+            </div>
+        );
+    }
+
+    switch(activeTab) {
+      case 'library': 
+        return <LibraryTab 
+          currentGroupId={currentGroupId}
+          members={members} setMembers={setMembers}
+          series={series} 
+          batches={batches}
+          channels={channels}
+          types={types}
+          cards={cards}
+          setViewingCard={setViewingCard}
+          inventory={inventory}
+          openModal={openModal}
+          uniqueTypes={uniqueTypes}
+          combinedTypes={combinedTypes}
+          combinedChannels={combinedChannels}
+          uniqueSeriesTypes={uniqueSeriesTypes}
+          
+          isSelectionMode={isSelectionMode}
+          setIsSelectionMode={setIsSelectionMode}
+          selectedCardIds={selectedCardIds}
+          setSelectedCardIds={setSelectedCardIds}
+          batchCategorizeTarget={batchCategorizeTarget}
+          setBatchCategorizeTarget={setBatchCategorizeTarget}
+          
+          allCards={cards}
+          setGroups={setGroups}
+          setSeries={setSeries}
+          setBatches={setBatches}
+          setCards={setCards}
+          cols={libraryCols}
+          setCols={setLibraryCols}
+        />;
+      case 'collection': 
+        return <CollectionTab 
+           cards={(cards || []).filter(c => c.groupId === currentGroupId)}
+           inventory={inventory}
+           setViewingCard={setViewingCard}
+           members={(members || []).filter(m => m.groupId === currentGroupId)}
+           series={(series || []).filter(s => s.groupId === currentGroupId)}
+           batches={(batches || []).filter(b => b.groupId === currentGroupId)}
+           channels={(channels || []).filter(c => c.groupId === currentGroupId)}
+           types={(types || []).filter(t => t.groupId === currentGroupId)}
+           sales={sales} 
+           cols={collectionCols}
+           setCols={setCollectionCols}
+        />;
+      case 'bulk':
+        return <BulkTab 
+            records={(bulkRecords || []).filter(r => r.groupId === currentGroupId)} 
+            allRecords={bulkRecords}
+            onAdd={() => setEditingBulkRecord('new')} 
+            onEdit={(record) => setEditingBulkRecord(record)} 
+        />;
+      case 'inventory': 
+        return <InventoryTab 
+          cards={cards} 
+          inventory={groupInventory} 
+          setViewingCard={setViewingCard}
+          series={series}
+          batches={batches}
+          channels={channels}
+          types={types}
+          bulkRecords={(bulkRecords || []).filter(r => r.groupId === currentGroupId)} 
+        />;
+      case 'export': 
+        return <ExportTab 
+          cards={cards} 
+          customLists={customLists} 
+          setCustomLists={setCustomLists} 
+          setViewingCard={setViewingCard}
+          isExportMode={isExportMode}
+          setIsExportMode={setIsExportMode}
+          sales={sales} 
+          inventory={inventory}
+          members={members}
+          series={series}
+          batches={batches}
+          channels={channels}
+          types={types}
+          cols={exportCols}
+          setCols={setExportCols}
+          showDetails={exportShowDetails}
+          setShowDetails={setExportShowDetails}
+        />;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20 md:pb-0">
+      <nav className="bg-white shadow-sm sticky top-0 z-40 px-4">
+        <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="bg-indigo-600 p-2 rounded-lg">
+              <Grid className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-xl text-indigo-900 hidden sm:block">小卡管家</span>
+          </div>
+
+          {groups.length > 0 && (
+            <div className="flex space-x-1 overflow-x-auto no-scrollbar mx-4">
+              {[
+                { id: 'library', icon: Layers, label: '圖鑑' },
+                { id: 'collection', icon:  CheckCircle, label: '收藏' },
+                { id: 'bulk', icon: Package, label: '盤收' },
+                { id: 'inventory', icon: List, label: '紀錄' },
+                { id: 'export', icon: Share2, label: '輸出' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                      setActiveTab(tab.id);
+                      setIsSelectionMode(false);
+                      setSelectedCardIds([]);
+                      setBatchCategorizeTarget(null);
+                  }}
+                  className={`px-3 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
+                    activeTab === tab.id 
+                      ? 'bg-black text-white shadow-md' 
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="relative">
+            <div 
+                className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-gray-100 transition-colors"
+                onClick={() => setShowGroupSelector(!showGroupSelector)}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if(currentGroup) {
+                        openModal('group', currentGroup);
+                        setShowGroupSelector(false);
+                    }
+                }}
+            >
+                {currentGroup ? (
+                    <>
+                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-indigo-600 shadow-md flex items-center justify-center bg-gray-100">
+                            {currentGroup.image ? <img src={currentGroup.image} alt={currentGroup.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-gray-400"/>}
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-gray-500" />
+                    </>
+                ) : (
+                    <div className="w-10 h-10 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+                        <Plus className="w-5 h-5 text-gray-400"/>
+                    </div>
+                )}
+            </div>
+
+            {showGroupSelector && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowGroupSelector(false)}></div>
+                    <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in">
+                        <div className="p-2 border-b bg-gray-50 text-xs font-bold text-gray-500">切換團體</div>
+                        <div className="max-h-60 overflow-y-auto">
+                            {(groups || []).map(g => (
+                                <div 
+                                    key={g.id}
+                                    onDoubleClick={() => { setShowGroupSelector(false); openModal('group', g); }} 
+                                    onClick={() => { setCurrentGroupId(g.id); setShowGroupSelector(false); }}
+                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'}`}
+                                >
+                                    <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-100 overflow-hidden border">
+                                        {g.image ? <img src={g.image} className="w-full h-full object-cover" /> : <Users className="w-4 h-4 m-2 text-gray-400"/>}
+                                    </div>
+                                    <span className="font-bold text-sm">{g.name}</span>
+                                    {currentGroupId === g.id && <Check className="w-4 h-4 ml-auto" />}
+                                </div>
+                            ))}
+                        </div>
+                        <div 
+                            onClick={() => { setShowGroupSelector(false); openModal('group'); }}
+                            className="p-3 border-t hover:bg-gray-50 cursor-pointer flex items-center gap-2 text-indigo-600 font-bold text-sm"
+                        >
+                            <Plus className="w-4 h-4" /> 新增團體
+                        </div>
+                    </div>
+                </>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-6xl mx-auto p-4">
+        {renderContent()}
+      </main>
+
+      {editingBulkRecord && (
+          <BulkRecordDetailView 
+              record={editingBulkRecord === 'new' ? null : editingBulkRecord}
+              onClose={() => setEditingBulkRecord(null)}
+              onSave={handleSaveBulkRecord}
+              onDelete={handleDeleteBulkRecord}
+              cards={(cards || []).filter(c => c.groupId === currentGroupId)}
+              members={(members || []).filter(m => m.groupId === currentGroupId)}
+              series={(series || []).filter(s => s.groupId === currentGroupId)}
+              batches={(batches || []).filter(b => b.groupId === currentGroupId)}
+              channels={(channels || []).filter(c => c.groupId === currentGroupId)}
+              types={(types || []).filter(t => t.groupId === currentGroupId)}
+              uniqueTypes={uniqueTypes}
+              uniqueChannels={uniqueChannels}
+              uniqueSeriesTypes={uniqueSeriesTypes}
+              onViewCard={setViewingCard}
+              inventory={inventory}
+              uniqueSources={uniqueSources}
+              onRenameSource={handleRenameSource}
+              onDeleteSource={handleDeleteSource}
+          />
+      )}
+
+      {modalState.type && modalState.type !== 'bulkOwn' && (
+        <AddDataModal 
+          title={modalState.data?.id ? `編輯${getModalTitle(modalState.type)}` : `新增${getModalTitle(modalState.type)}`}
+          type={modalState.type}
+          initialData={{ groupId: currentGroupId, ...modalState.data }}
+          extraOptions={{ 
+            members: (members || []).filter(m => m.groupId === currentGroupId),
+            series: (series || []).filter(s => s.groupId === currentGroupId),
+            batches: (batches || []).filter(b => b.groupId === currentGroupId),
+            channels: combinedChannels,
+            types: combinedTypes,
+            seriesTypes: uniqueSeriesTypes
+          }}
+          onClose={closeModal} 
+          onSave={(data) => handleSaveData(data, modalState.type, !!modalState.data?.id)} 
+          
+          /* 🌟 就是這行！告訴系統複製出來的資料要當作「全新的」存入資料庫 */
+          onDuplicate={(data) => handleSaveData(data, modalState.type, false)} 
+          
+          onDelete={handleDeleteData}
+        />
+      )}
+
+      {modalState.type === 'bulkOwn' && (
+          <BulkOwnModal 
+             selectedCards={(cards || []).filter(c => selectedCardIds.includes(c.id))}
+             onClose={closeModal}
+             onSave={handleBulkOwn}
+             series={series}
+             batches={batches}
+             channels={channels}
+             types={types}
+          />
+      )}
+
+      {viewingCard && (
+        <CardDetailModal 
+          card={viewingCard} 
+          onClose={() => setViewingCard(null)}
+          inventory={inventory}
+          setInventory={setInventory}
+          sales={sales} 
+          setSales={setSales} 
+          customLists={customLists}
+          setCustomLists={setCustomLists}
+          groups={groups}
+          members={members}
+          series={series}
+          batches={batches}
+          channels={channels}
+          types={types}
+          setCards={setCards}
+          cards={cards}
+          onEdit={(currentCard) => {
+              setViewingCard(null); 
+              openModal('card', currentCard || viewingCard);
+          }}
+          onOpenBulkRecord={(bulkId) => {
+              const record = (bulkRecords || []).find(r => r.id === bulkId);
+              if (record) setEditingBulkRecord(record);
+          }}
+          uniqueSources={uniqueSources}
+          onRenameSource={handleRenameSource}
+          onDeleteSource={handleDeleteSource}
+        />
+      )}
+
+      {isSelectionMode && (
+          <div className="fixed bottom-0 inset-x-0 bg-white border-t p-4 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-between animate-slide-up">
+              <div className="font-bold text-gray-700">
+                  {batchCategorizeTarget ? (
+                      <span className="text-indigo-600">管理「{batchCategorizeTarget.name}」的卡片</span>
+                  ) : (
+                      <span>已選 {selectedCardIds.length} 張</span>
+                  )}
+              </div>
+              <div className="flex gap-3">
+                  <button onClick={() => { setIsSelectionMode(false); setSelectedCardIds([]); setBatchCategorizeTarget(null); }} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 font-bold">取消</button>
+                  {batchCategorizeTarget ? (
+                      <button 
+                        onClick={handleBatchCategorize} 
+                        className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-50"
+                      >
+                          確認歸類
+                      </button>
+                  ) : (
+                      <div className="flex gap-2">
+                          <button 
+                            onClick={async () => {
+                                const updatedCards = (cards || []).map(c => selectedCardIds.includes(c.id) ? { ...c, isWishlist: !c.isWishlist } : c);
+                                setCards(updatedCards);
+                                for(const id of selectedCardIds) {
+                                    const target = updatedCards.find(uc => uc.id === id);
+                                    if(target) await supabase.from('ui_cards').update({ is_wishlist: target.isWishlist }).eq('id', id);
+                                }
+                                setIsSelectionMode(false);
+                                setSelectedCardIds([]);
+                                alert("已更新想要狀態");
+                            }}
+                            disabled={selectedCardIds.length === 0}
+                            className="p-2 rounded-lg bg-pink-100 text-pink-600 disabled:opacity-50"
+                          >
+                              <Heart className="w-5 h-5 fill-current" />
+                          </button>
+                          <button 
+                            onClick={() => setActiveModal('bulkList')} 
+                            disabled={selectedCardIds.length === 0}
+                            className="p-2 rounded-lg bg-gray-100 text-gray-600 disabled:opacity-50"
+                          >
+                              <FolderPlus className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => openModal('bulkOwn')} 
+                            disabled={selectedCardIds.length === 0}
+                            className="px-4 py-2 rounded-lg bg-black text-white font-bold disabled:opacity-50 flex items-center gap-2"
+                          >
+                              <ShoppingBag className="w-4 h-4" /> 擁有
+                          </button>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {activeModal === 'bulkList' && (
+          <Modal title="批量加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
+              <div className="space-y-2">
+                  {(customLists || []).map(list => (
+                      <button 
+                          key={list.id}
+                          onClick={async () => {
+                              const note = prompt("批量備註文字 (可留空)");
+                              const newItems = [...(list.items || []), ...selectedCardIds.map(id => ({ cardId: id, note: note || '' }))];
+                              setCustomLists((customLists || []).map(l => l.id === list.id ? { ...l, items: newItems } : l));
+                              await supabase.from('custom_lists').update({ items: newItems }).eq('id', list.id);
+                              alert("已加入收藏冊");
+                              setActiveModal(null);
+                              setIsSelectionMode(false);
+                              setSelectedCardIds([]);
+                          }}
+                          className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
+                      >
+                          <span className="font-bold text-gray-700">{list.title}</span>
+                          <Plus className="w-5 h-5 text-gray-300 group-hover:text-indigo-600" />
+                      </button>
+                  ))}
+              </div>
+          </Modal>
+      )}
+    </div>
+  );
+}
