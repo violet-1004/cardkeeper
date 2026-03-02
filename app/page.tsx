@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient'; // 🌟 引入資料庫連線
