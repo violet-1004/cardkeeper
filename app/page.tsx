@@ -47,7 +47,7 @@ const getCroppedImg = async (imageSrc, pixelCrop) => {
     pixelCrop.height
   );
 
-  return canvas.toDataURL('image/jpeg', 0.9);
+  return canvas.toDataURL('image/jpeg', 0.6);
 };
 
 const toCamelCase = (obj) => {
@@ -918,7 +918,7 @@ function CardDetailModal({ card: initialCard, onClose, inventory, setInventory, 
             <div className="flex-1 overflow-y-auto bg-gray-50">
                 <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4">
-                        <img src={card.image} className="w-full h-full object-cover" />
+                        <img src={card.image} loading="lazy" className="w-full h-full object-cover" />
                     </div>
                     <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
@@ -1615,7 +1615,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         className={`cursor-pointer group relative select-none ${isSelectionMode && isSelected ? 'ring-2 ring-indigo-500 rounded-lg p-1 -m-1' : ''}`}
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-2 shadow-sm border border-gray-100">
-                            <img src={card.image} className="w-full h-full object-cover pointer-events-none" />
+                            <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                             
                             {card.isWishlist && (
                                 <div className="absolute top-2 left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
@@ -1999,7 +1999,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`} 
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
-                            <img src={card.image} className="w-full h-full object-cover pointer-events-none" />
+                            <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                             
                             {card.isWishlist && (
                                 <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
@@ -2286,7 +2286,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                 <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
                                     {item._isBulkHeader ? (
                                         item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
-                                    ) : (card && <img src={card.image} className="w-full h-full object-cover" />)}
+                                    ) : (card && <img src={card.image} loading="lazy" className="w-full h-full object-cover" />)}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
@@ -2627,7 +2627,7 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
                         return (
                             <div key={card.id} onClick={() => toggle(card.id)} className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}>
                                 <div className="aspect-[2/3] bg-gray-100">
-                                    <img src={card.image} className="w-full h-full object-cover pointer-events-none" />
+                                    <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                                 </div>
                                 {isSelected && (
                                     <div className="absolute top-2 right-2 bg-indigo-600 text-white rounded-full p-1 shadow z-10">
@@ -2957,7 +2957,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onClick={() => onViewCard && onViewCard(card)}
                                         className="w-14 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-inner cursor-pointer hover:opacity-80 transition-opacity relative"
                                     >
-                                        <img src={card.image} className="w-full h-full object-cover" />
+                                        <img src={card.image} loading="lazy" className="w-full h-full object-cover" />
                                         {sellPrice > 0 && (
                                             <div className="absolute inset-x-0 bottom-0 bg-green-500/90 text-white text-[9px] font-bold text-center py-0.5">
                                                 已售
@@ -3523,7 +3523,7 @@ function BulkOwnModal({ selectedCards, onClose, onSave, series, batches, channel
                         return (
                             <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
                                 <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border">
-                                    <img src={card.image} className="w-full h-full object-cover" />
+                                    <img src={card.image} loading="lazy" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3911,7 +3911,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform"
                   >
                       <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0">
-                          <img src={card.image} className="w-full h-full object-cover rounded-lg pointer-events-none" />
+                          <img src={card.image} loading="lazy" className="w-full h-full object-cover rounded-lg pointer-events-none" />
                           
                           <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
                               {isEditMode ? (
