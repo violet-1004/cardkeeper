@@ -1664,7 +1664,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 }
 
 function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols }) {
-  const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊狀態
+  const [filterSubunit, setFilterSubunit] = useState('All'); 
   const [filterMember, setFilterMember] = useState('All');
   const [filterSeriesType, setFilterSeriesType] = useState('All'); 
   const [filterSeries, setFilterSeries] = useState('All');
@@ -1675,16 +1675,25 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const [showSeriesModal, setShowSeriesModal] = useState(false);
   const [showDetails, setShowDetails] = useState(true); 
 
-  // 🌟 關鍵修復：把 allOwnedCards 搬到所有計算的最前面！
   const allOwnedCards = useMemo(() => cards || [], [cards]);
 
-  // 🌟 1. 抓取目前擁有的卡片包含哪些分隊
   const availableSubunits = useMemo(() => {
       const ids = new Set(allOwnedCards.map(c => c.memberId));
       return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
   }, [allOwnedCards, members]);
 
-  // 🌟 2. 讓成員選項連動：如果選了分隊，就只顯示該分隊的成員
+  // 🌟 1. 自動預設選取第一個分隊
+  useEffect(() => {
+      if (availableSubunits.length > 0) {
+          if (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit)) {
+              setFilterSubunit(availableSubunits[0]);
+          }
+      } else {
+          setFilterSubunit('All');
+      }
+  }, [availableSubunits, filterSubunit]);
+
+  // 🌟 2. 成員依照 sortOrder 排序 (因為 members 本身已排序，過濾後順序不變)
   const availableMembers = useMemo(() => {
       let currentCards = allOwnedCards;
       if (filterSubunit !== 'All') {
@@ -1693,30 +1702,42 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
               return m && m.subunit === filterSubunit;
           });
       }
-      return [...new Set(currentCards.map(c => c.memberId))];
+      const ids = new Set(currentCards.map(c => c.memberId));
+      return (members || []).filter(m => ids.has(m.id)).map(m => m.id);
   }, [allOwnedCards, members, filterSubunit]);
   
   const availableTypeIds = useMemo(() => {
       return [...new Set(allOwnedCards.map(c => c.type).filter(Boolean))];
   }, [allOwnedCards]);
   
+  // 🌟 3. 子類依照 sortOrder 排序
   const availableTypes = useMemo(() => {
       return availableTypeIds.map(id => {
           const tObj = (types || []).find(t => t.id === id || t.name === id);
-          return tObj || { id, name: id, shortName: '' };
-      });
+          return tObj || { id, name: id, shortName: '', sortOrder: 999 };
+      }).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
   }, [availableTypeIds, types]);
   
   const availableChannelIds = useMemo(() => {
       return [...new Set(allOwnedCards.map(c => c.channel).filter(Boolean))];
   }, [allOwnedCards]);
 
+  // 🌟 4. 通路依照頻率多到少排序
   const availableChannels = useMemo(() => {
+      const freqMap = {};
+      allOwnedCards.forEach(c => {
+          if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1;
+      });
+
       return availableChannelIds.map(id => {
           const ch = (channels || []).find(c => c.id === id || c.name === id);
           return ch || { id, name: id, shortName: '' };
+      }).sort((a, b) => {
+          const freqA = freqMap[a.id] || freqMap[a.name] || 0;
+          const freqB = freqMap[b.id] || freqMap[b.name] || 0;
+          return freqB - freqA;
       });
-  }, [availableChannelIds, channels]);
+  }, [availableChannelIds, channels, allOwnedCards]);
   
   const availableSeriesTypes = useMemo(() => {
       const ids = new Set(allOwnedCards.map(c => c.seriesId));
@@ -1755,7 +1776,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
          const cardBatch = (batches || []).find(b => b.id === card.batchId);
          const effectiveType = card.type;
          const effectiveChannel = card.channel;
-         // 🌟 新增分隊過濾判斷
          if (filterSubunit !== 'All') {
              const mem = (members || []).find(m => m.id === card.memberId);
              if (!mem || mem.subunit !== filterSubunit) return false;
@@ -1790,7 +1810,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
           return isNaN(n) ? defaultVal : n;
       };
 
-      // 1. 確保系列時間與分群 (舊到新)
       const sA = (series || []).find(s => s.id === cardA.seriesId);
       const sB = (series || []).find(s => s.id === cardB.seriesId);
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
@@ -1801,40 +1820,34 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       const seriesIdB = safeString(cardB.seriesId);
       if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
 
-      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
       const bA = (batches || []).find(b => b.id === cardA.batchId);
       const bB = (batches || []).find(b => b.id === cardB.batchId);
       
       if (bA && bB && bA.id !== bB.id) {
-          // (1) 比較兩個批次所屬的「子類順序」
           const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
           const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
           const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
           const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
           if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
           
-          // (2) 比較兩個批次的「日期」 (舊到新)
           const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
           const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
           if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
           
-          // (3) 日期相同，比較批次「名稱」
           const nameA = safeString(bA.name);
           const nameB = safeString(bB.name);
           const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
           if (nameCompare !== 0) return nameCompare;
       } else if (bA && !bB) {
-          return -1; // 有批次的卡片往前排
+          return -1;
       } else if (!bA && bB) {
           return 1;
       }
 
-      // 3. 確保相同批次的小卡絕對群聚在一起
       const batchIdA = safeString(cardA.batchId);
       const batchIdB = safeString(cardB.batchId);
       if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
 
-      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
       if (!bA && !bB) {
           const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
           const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
@@ -1843,14 +1856,12 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
           if (cSortA !== cSortB) return cSortA - cSortB;
       }
 
-      // 5. 相同批次/子類內，看「成員順序」
       const mA = (members || []).find(m => m.id === cardA.memberId);
       const mB = (members || []).find(m => m.id === cardB.memberId);
       const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
       const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
       if (mSortA !== mSortB) return mSortA - mSortB;
 
-      // 防呆：最後用 ID
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
   });
   
@@ -1861,7 +1872,8 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   }).length;
   const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
-  const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+  // 🌟 5. 新增 disableToggleOff 屬性來防止取消選取
+  const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
      <div className="flex items-center gap-3 overflow-hidden">
         <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
@@ -1874,7 +1886,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         key={id}
                         text={name}
                         isSelected={isSelected}
-                        onClick={() => onChange(isSelected ? 'All' : id)}
+                        onClick={() => {
+                            if (disableToggleOff && isSelected) return; // 已選取且不可取消時，無動作
+                            onChange(isSelected ? 'All' : id);
+                        }}
                         onLongPress={() => {}} 
                         onDoubleClick={() => {}}
                     />
@@ -1937,13 +1952,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            {/* 🌟 收藏櫃的頂部分隊篩選 */}
             {availableSubunits.length > 0 && (
                 <RenderFilterSection 
                     label="分隊" 
                     options={availableSubunits} 
                     current={filterSubunit} 
                     onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} 
+                    disableToggleOff={true} /* 🌟 傳入屬性禁止取消選取 */
                 />
             )}
             <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={getMemberName} />
@@ -2011,13 +2026,8 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`} 
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
-                            <Image 
-                                src={card.image} 
-                                alt="卡片圖片" 
-                                fill 
-                                className="object-cover pointer-events-none" 
-                                sizes="(max-width: 768px) 33vw, 15vw"
-                            />
+                            <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
+                            
                             {card.isWishlist && (
                                 <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
                                     <Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
@@ -2418,7 +2428,7 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
     const [localSelected, setLocalSelected] = useState(selectedIds);
     const toggle = (id) => setLocalSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
-    const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊狀態
+    const [filterSubunit, setFilterSubunit] = useState('All');
     const [filterMember, setFilterMember] = useState('All');
     const [filterSeriesType, setFilterSeriesType] = useState('All');
     const [filterSeries, setFilterSeries] = useState('All');
@@ -2427,13 +2437,23 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
     const [filterChannel, setFilterChannel] = useState('All');
     const [showSeriesModal, setShowSeriesModal] = useState(false);
 
-    // 🌟 1. 抓取目前可選的卡片包含哪些分隊
     const availableSubunits = useMemo(() => {
         const ids = new Set((cards || []).map(c => c.memberId));
         return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
     }, [cards, members]);
 
-    // 🌟 2. 讓成員選項連動分隊
+    // 🌟 1. 自動預設選取第一個分隊
+    useEffect(() => {
+        if (availableSubunits.length > 0) {
+            if (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit)) {
+                setFilterSubunit(availableSubunits[0]);
+            }
+        } else {
+            setFilterSubunit('All');
+        }
+    }, [availableSubunits, filterSubunit]);
+
+    // 🌟 2. 成員依照 sortOrder 排序
     const availableMembers = useMemo(() => {
         let currentCards = cards || [];
         if (filterSubunit !== 'All') {
@@ -2442,28 +2462,42 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
                 return m && m.subunit === filterSubunit;
             });
         }
-        return [...new Set(currentCards.map(c => c.memberId))];
+        const ids = new Set(currentCards.map(c => c.memberId));
+        return (members || []).filter(m => ids.has(m.id)).map(m => m.id);
     }, [cards, members, filterSubunit]);
 
     const availableTypeIds = useMemo(() => {
         return [...new Set((cards || []).map(c => c.type).filter(Boolean))];
     }, [cards]);
+    
+    // 🌟 3. 子類依照 sortOrder 排序
     const availableTypes = useMemo(() => {
         return availableTypeIds.map(id => {
             const tObj = (types || []).find(t => t.id === id || t.name === id);
-            return tObj || { id, name: id, shortName: '' };
-        });
+            return tObj || { id, name: id, shortName: '', sortOrder: 999 };
+        }).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
     }, [availableTypeIds, types]);
+    
     const availableChannelIds = useMemo(() => {
         return [...new Set((cards || []).map(c => c.channel).filter(Boolean))];
     }, [cards]);
 
+    // 🌟 4. 通路依照頻率多到少排序
     const availableChannels = useMemo(() => {
+        const freqMap = {};
+        (cards || []).forEach(c => {
+            if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1;
+        });
+
         return availableChannelIds.map(id => {
             const ch = (channels || []).find(c => c.id === id || c.name === id);
             return ch || { id, name: id, shortName: '' };
+        }).sort((a, b) => {
+            const freqA = freqMap[a.id] || freqMap[a.name] || 0;
+            const freqB = freqMap[b.id] || freqMap[b.name] || 0;
+            return freqB - freqA;
         });
-    }, [availableChannelIds, channels]);
+    }, [availableChannelIds, channels, cards]);
     
     const availableSeriesTypes = useMemo(() => {
         const ids = new Set((cards || []).map(c => c.seriesId));
@@ -2523,7 +2557,6 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
           return isNaN(n) ? defaultVal : n;
       };
 
-      // 1. 確保系列時間與分群 (舊到新)
       const sA = (series || []).find(s => s.id === cardA.seriesId);
       const sB = (series || []).find(s => s.id === cardB.seriesId);
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
@@ -2534,40 +2567,34 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
       const seriesIdB = safeString(cardB.seriesId);
       if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
 
-      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
       const bA = (batches || []).find(b => b.id === cardA.batchId);
       const bB = (batches || []).find(b => b.id === cardB.batchId);
       
       if (bA && bB && bA.id !== bB.id) {
-          // (1) 比較兩個批次所屬的「子類順序」
           const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
           const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
           const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
           const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
           if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
           
-          // (2) 比較兩個批次的「日期」 (舊到新)
           const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
           const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
           if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
           
-          // (3) 日期相同，比較批次「名稱」
           const nameA = safeString(bA.name);
           const nameB = safeString(bB.name);
           const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
           if (nameCompare !== 0) return nameCompare;
       } else if (bA && !bB) {
-          return -1; // 有批次的卡片往前排
+          return -1; 
       } else if (!bA && bB) {
           return 1;
       }
 
-      // 3. 確保相同批次的小卡絕對群聚在一起
       const batchIdA = safeString(cardA.batchId);
       const batchIdB = safeString(cardB.batchId);
       if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
 
-      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
       if (!bA && !bB) {
           const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
           const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
@@ -2576,18 +2603,18 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
           if (cSortA !== cSortB) return cSortA - cSortB;
       }
 
-      // 5. 相同批次/子類內，看「成員順序」
       const mA = (members || []).find(m => m.id === cardA.memberId);
       const mB = (members || []).find(m => m.id === cardB.memberId);
       const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
       const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
       if (mSortA !== mSortB) return mSortA - mSortB;
 
-      // 防呆：最後用 ID
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
   });
     }, [cards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, series, batches, types, members, filterSubunit]);
-    const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+    
+    // 🌟 5. 新增 disableToggleOff 屬性來防止取消選取
+    const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
         <div className="flex items-center gap-3 overflow-hidden">
            <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
@@ -2598,7 +2625,10 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
                    return (
                        <button 
                            key={id}
-                           onClick={() => onChange(isSelected ? 'All' : id)}
+                           onClick={() => {
+                               if (disableToggleOff && isSelected) return; // 已選取且不可取消時，無動作
+                               onChange(isSelected ? 'All' : id);
+                           }}
                            className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                        >
                            {name}
@@ -2617,13 +2647,13 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
             </div>
 
             <div className="bg-white p-4 border-b border-gray-100 shadow-sm space-y-4 flex-shrink-0">
-                {/* 🌟 盤收選擇卡的頂部分隊篩選 */}
                 {availableSubunits.length > 0 && (
                     <RenderFilterSection 
                         label="分隊" 
                         options={availableSubunits} 
                         current={filterSubunit} 
                         onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} 
+                        disableToggleOff={true} /* 🌟 傳入屬性禁止取消選取 */
                     />
                 )}
                 {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={getMemberName} />}
@@ -2652,13 +2682,7 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
                         return (
                             <div key={card.id} onClick={() => toggle(card.id)} className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}>
                                 <div className="aspect-[2/3] bg-gray-100">
-                                    <Image 
-                                    src={card.image} 
-                                    alt="卡片圖片" 
-                                    fill 
-                                    className="object-cover pointer-events-none" 
-                                    sizes="(max-width: 768px) 33vw, 15vw"
-                                    />
+                                    <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                                 </div>
                                 {isSelected && (
                                     <div className="absolute top-2 right-2 bg-indigo-600 text-white rounded-full p-1 shadow z-10">
