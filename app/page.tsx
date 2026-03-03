@@ -2341,15 +2341,16 @@ function BulkTab({ records, allRecords, onAdd, onEdit }) {
     const [filterSource, setFilterSource] = useState('All');
 
     const availableStatuses = ['未發貨', '囤貨', '到貨'];
-    const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r.source).filter(Boolean))], [allRecords, records]);
+    const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r?.source).filter(Boolean))], [allRecords, records]);
 
     const filteredRecords = useMemo(() => {
         const filtered = (records || []).filter(r => {
+            if (!r) return false;
             if (filterStatus !== 'All' && r.status !== filterStatus) return false;
             if (filterSource !== 'All' && r.source !== filterSource) return false;
             return true;
         });
-        return [...filtered].sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
+        return [...filtered].sort((a, b) => new Date(b?.buyDate || 0) - new Date(a?.buyDate || 0));
     }, [records, filterStatus, filterSource]);
 
     const getStatusStyle = (status) => {
@@ -2361,7 +2362,16 @@ function BulkTab({ records, allRecords, onAdd, onEdit }) {
         }
     };
 
-    const RenderFilterSection = ({ label, options, current, onChange }) => (
+    // 🌟 防呆工具 1：確保即使資料庫傳字串來，也能安全算出卡片數量
+    const getSafeItemsLength = (items) => {
+        if (Array.isArray(items)) return items.length;
+        if (typeof items === 'string') {
+            try { return JSON.parse(items).length || 0; } catch(e) { return 0; }
+        }
+        return 0;
+    };
+
+    const renderFilterSection = (label, options, current, onChange) => (
         <div className="flex items-center gap-3 overflow-hidden">
            <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
@@ -2380,19 +2390,19 @@ function BulkTab({ records, allRecords, onAdd, onEdit }) {
                 <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增包裹</button>
             </div>
             <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
-                <RenderFilterSection label="狀態" options={availableStatuses} current={filterStatus} onChange={setFilterStatus} />
-                {availableSources.length > 0 && <RenderFilterSection label="來源" options={availableSources} current={filterSource} onChange={setFilterSource} />}
+                {renderFilterSection("狀態", availableStatuses, filterStatus, setFilterStatus)}
+                {availableSources.length > 0 && renderFilterSection("來源", availableSources, filterSource, setFilterSource)}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {filteredRecords.map(record => (
-                    <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
+                    <div key={record.id || Math.random()} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
                         <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
-                            {record.image ? <img src={record.image} className="w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
+                            {record.image ? <img src={record.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
                         </div>
                         <div className="px-1 flex flex-col flex-1 justify-between">
                             <div>
-                                <div className="font-bold text-sm text-gray-800 leading-tight line-clamp-2 mb-1">{record.name}</div>
-                                <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 truncate mb-1.5"><span className="text-red-500">${Number(record.totalAmount).toLocaleString()}</span><span>· {(record.items || []).length} 張卡片</span></div>
+                                <div className="font-bold text-sm text-gray-800 leading-tight line-clamp-2 mb-1">{record.name || '未命名'}</div>
+                                <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 truncate mb-1.5"><span className="text-red-500">${(Number(record.totalAmount) || 0).toLocaleString()}</span><span>· {getSafeItemsLength(record.items)} 張卡片</span></div>
                             </div>
                             <div className="flex gap-1.5 flex-wrap mt-auto pt-1">
                                 {record.status && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${getStatusStyle(record.status)}`}>{record.status}</span>}
@@ -2713,11 +2723,22 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     });
 
     const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
+    
+    // 🌟 防呆工具 2：確保打開包裹內容時，卡片資料一定是陣列，避免 filter 當機
+    const safeItems = useMemo(() => {
+        if (!record?.items) return [];
+        if (Array.isArray(record.items)) return record.items;
+        if (typeof record.items === 'string') {
+            try { return JSON.parse(record.items) || []; } catch(e) { return []; }
+        }
+        return [];
+    }, [record?.items]);
+
     const [manualIds, setManualIds] = useState(
-        (record?.items || []).filter(i => i.isManual).map(i => i.cardId)
+        safeItems.filter(i => i.isManual).map(i => i.cardId)
     );
     const [cardDetails, setCardDetails] = useState(
-        (record?.items || []).reduce((acc, item) => ({
+        safeItems.reduce((acc, item) => ({
             ...acc,
             [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice }
         }), {})
@@ -2871,7 +2892,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
                     <div className="w-28 h-28 flex-shrink-0">
-                        <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
+                        <ImageUploader 
+                            image={form.image} 
+                            aspect={1}
+                            onChange={img => handleFormChange('image', img)} 
+                            className="w-full h-full rounded-xl"
+                        />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
                         <input 
@@ -2910,8 +2936,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                 allowCustom={true}
                                 placeholder="自訂來源..."
                                 onOptionEdit={onRenameSource}
-                                onDelete={onDeleteSource} /* 🌟 綁定刪除 */
-                                onOptionDelete={onDeleteSource} /* 🌟 確保新舊屬性名都有接到 */
+                                onDelete={onDeleteSource}
+                                onOptionDelete={onDeleteSource} 
                             />
                         </div>
                     </div>
@@ -2989,7 +3015,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onClick={() => onViewCard && onViewCard(card)}
                                         className="w-14 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-inner cursor-pointer hover:opacity-80 transition-opacity relative"
                                     >
-                                        <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
+                                        <img src={card.image} loading="lazy" className="w-full h-full object-cover" />
                                         {sellPrice > 0 && (
                                             <div className="absolute inset-x-0 bottom-0 bg-green-500/90 text-white text-[9px] font-bold text-center py-0.5">
                                                 已售
