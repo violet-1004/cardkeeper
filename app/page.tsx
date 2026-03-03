@@ -919,13 +919,7 @@ function CardDetailModal({ card: initialCard, onClose, inventory, setInventory, 
             <div className="flex-1 overflow-y-auto bg-gray-50">
                 <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4">
-                    <Image 
-                        src={card.image} 
-                        alt="卡片圖片" 
-                        fill 
-                        className="object-cover pointer-events-none" 
-                        sizes="(max-width: 768px) 33vw, 15vw"
-                    />
+                    <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                     </div>
                     <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
@@ -1622,13 +1616,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         className={`cursor-pointer group relative select-none ${isSelectionMode && isSelected ? 'ring-2 ring-indigo-500 rounded-lg p-1 -m-1' : ''}`}
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-2 shadow-sm border border-gray-100">
-                            <Image 
-                                src={card.image} 
-                                alt="卡片圖片" 
-                                fill 
-                                className="object-cover pointer-events-none" 
-                                sizes="(max-width: 768px) 33vw, 15vw"
-                            />
+                            <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                             {card.isWishlist && (
                                 <div className="absolute top-2 left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
                                     <Heart className="w-3 h-3 fill-current" />
@@ -2103,13 +2091,13 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     };
 
     const handleNext = () => {
-        if (dateFilterMode === 'month') {
-            if (month === 12) { setMonth(1); setYear(y => y + 1); }
-            else setMonth(m => m - 1);
-        } else if (dateFilterMode === 'year') {
-            setYear(y => y + 1);
-        }
-    };
+    if (dateFilterMode === 'month') {
+        if (month === 12) { setMonth(1); setYear(y => y + 1); }
+        else setMonth(m => m + 1); // ✅ 改成 + 1
+    } else if (dateFilterMode === 'year') {
+        setYear(y => y + 1);
+    }
+};
 
     const handleJumpToCurrent = () => {
         const today = new Date();
@@ -2314,13 +2302,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     {item._isBulkHeader ? (
                                         item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
                                     ) : (card && 
-                                        <Image 
-                                        src={card.image} 
-                                        alt="卡片圖片" 
-                                        fill 
-                                        className="object-cover pointer-events-none" 
-                                        sizes="(max-width: 768px) 33vw, 15vw"
-                                        />
+                                        <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                                     )}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
@@ -2889,12 +2871,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
                     <div className="w-28 h-28 flex-shrink-0">
-                        <ImageUploader 
-                            image={form.image} 
-                            aspect={1} /* 🌟 盤收封面也是正方形 */
-                            onChange={img => handleFormChange('image', img)} 
-                            className="w-full h-full rounded-xl"
-                        />
+                        <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
                         <input 
@@ -3012,13 +2989,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onClick={() => onViewCard && onViewCard(card)}
                                         className="w-14 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-inner cursor-pointer hover:opacity-80 transition-opacity relative"
                                     >
-                                        <Image 
-                                        src={card.image} 
-                                        alt="卡片圖片" 
-                                        fill 
-                                        className="object-cover pointer-events-none" 
-                                        sizes="(max-width: 768px) 33vw, 15vw"
-                                        />
+                                        <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                                         {sellPrice > 0 && (
                                             <div className="absolute inset-x-0 bottom-0 bg-green-500/90 text-white text-[9px] font-bold text-center py-0.5">
                                                 已售
@@ -3584,13 +3555,7 @@ function BulkOwnModal({ selectedCards, onClose, onSave, series, batches, channel
                         return (
                             <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
                                 <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border">
-                                <Image 
-                                src={card.image} 
-                                alt="卡片圖片" 
-                                fill 
-                                className="object-cover pointer-events-none" 
-                                sizes="(max-width: 768px) 33vw, 15vw"
-                                />
+                                <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3978,13 +3943,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform"
                   >
                       <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0">
-                          <Image 
-                                src={card.image} 
-                                alt="卡片圖片" 
-                                fill 
-                                className="object-cover pointer-events-none" 
-                                sizes="(max-width: 768px) 33vw, 15vw"
-                            />
+                          <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
                           <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
                               {isEditMode ? (
                                   <CardMarkInput 
