@@ -3645,579 +3645,492 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-
 function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails }) {
-  const [activeListId, setActiveListId] = useState(customLists[0]?.id || '');
-  const [showCardSelector, setShowCardSelector] = useState(false);
-  
-  // 🌟 唯一且正確的 activeView：預設為 null，這樣才會先顯示資料夾選單！
-  const [activeView, setActiveView] = useState(null);
+    // ==========================================
+    // 1. 狀態宣告 (確保順序與唯一性)
+    // ==========================================
+    const [activeListId, setActiveListId] = useState(customLists?.[0]?.id || '');
+    const [showCardSelector, setShowCardSelector] = useState(false);
+    
+    // 🌟 核心視圖狀態：預設 null，讓畫面一開始顯示資料夾選單
+    const [activeView, setActiveView] = useState(null);
 
-  const [isListModalOpen, setIsListModalOpen] = useState(false);
-  const [editingListId, setEditingListId] = useState(null);
-  const [listTitleInput, setListTitleInput] = useState('');
-  const [listToDelete, setListToDelete] = useState(null);
-  
-  const clickTimer = useRef(null);
+    const [isListModalOpen, setIsListModalOpen] = useState(false);
+    const [editingListId, setEditingListId] = useState(null);
+    const [listTitleInput, setListTitleInput] = useState('');
+    const [listToDelete, setListToDelete] = useState(null);
+    const clickTimer = useRef(null);
 
-  // 🌟 其他篩選狀態 (重複的 activeView 已從這裡刪除)
-  const [filterSubunit, setFilterSubunit] = useState('All'); // 補上遺失的分隊狀態
-  const [filterMember, setFilterMember] = useState('All');
-  const [filterType, setFilterType] = useState('All');
-  const [filterChannel, setFilterChannel] = useState('All');
+    // 🌟 篩選過濾器狀態
+    const [filterSubunit, setFilterSubunit] = useState('All');
+    const [filterMember, setFilterMember] = useState('All');
+    const [filterType, setFilterType] = useState('All');
+    const [filterChannel, setFilterChannel] = useState('All');
 
-  const exportRef = useRef(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportedImage, setExportedImage] = useState(null);
-  
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [cardMarks, setCardMarks] = useState({});
+    const exportRef = useRef(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportedImage, setExportedImage] = useState(null);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [cardMarks, setCardMarks] = useState({});
 
-  // 🚀 效能升級：建立輸出頁面的快速字典
-  const inventoryMap = useMemo(() => {
-      const map = {};
-      (inventory || []).forEach(inv => {
-          if (!inv.sellPrice || inv.sellPrice <= 0) {
-              map[inv.cardId] = (map[inv.cardId] || 0) + Number(inv.quantity || 1);
-          }
-      });
-      return map;
-  }, [inventory]);
+    // ==========================================
+    // 2. 效能升級字典與資料池
+    // ==========================================
+    const inventoryMap = useMemo(() => {
+        const map = {};
+        (inventory || []).forEach(inv => {
+            if (!inv.sellPrice || inv.sellPrice <= 0) {
+                map[inv.cardId] = (map[inv.cardId] || 0) + Number(inv.quantity || 1);
+            }
+        });
+        return map;
+    }, [inventory]);
 
-  const salesMap = useMemo(() => {
-      const map = {};
-      (sales || []).forEach(s => {
-          if (s.quantity > 0) map[s.cardId] = s; // 這裡存入整筆紀錄
-      });
-      return map;
-  }, [sales]);
+    const salesMap = useMemo(() => {
+        const map = {};
+        (sales || []).forEach(s => {
+            if (s.quantity > 0) map[s.cardId] = s;
+        });
+        return map;
+    }, [sales]);
 
-  useEffect(() => {
-      setFilterMember('All');
-      setFilterType('All');
-      setFilterChannel('All');
-      setIsEditMode(false);
-      setCardMarks({}); 
-  }, [activeView]);
-
-  const activeList = (customLists || []).find(l => l.id === activeListId);
-
-  const getDisplayCards = () => {
-      return subunitFilteredCards.filter(c => {
-          if (filterMember !== 'All' && c.memberId !== filterMember) return false;
-          if (filterType !== 'All' && c.type !== filterType) return false;
-          if (filterChannel !== 'All' && c.channel !== filterChannel) return false;
-          return true;
-      }).map(c => {
-          // 針對販售中視圖加上標記
-          if (activeView === 'selling') {
-              const saleRecord = salesMap[c.id];
-              return { ...c, note: `$${saleRecord?.price || 0}`, noteColor: saleRecord?.color || 'bg-black/70' };
-          }
-          // 針對自訂清單加上原始備註
-          if (typeof activeView === 'object' && activeView.items) {
-              const item = activeView.items.find(i => i.cardId === c.id);
-              return { ...c, note: item?.note };
-          }
-          return c;
-      }).sort((cardA, cardB) => {
-          // 🌟 這裡套用你最新的「五階層終極排序邏輯」
-          const safeString = (val) => val ? String(val) : '';
-          const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
-
-          const sA = (series || []).find(s => s.id === cardA.seriesId);
-          const sB = (series || []).find(s => s.id === cardB.seriesId);
-          const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
-          const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
-          if (dateA_series !== dateB_series) return dateA_series - dateB_series;
-
-          const bA = (batches || []).find(b => b.id === cardA.batchId);
-          const bB = (batches || []).find(b => b.id === cardB.batchId);
-          if (bA && bB && bA.id !== bB.id) {
-              const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
-              const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
-              const sortA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
-              const sortB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
-              if (sortA !== sortB) return sortA - sortB;
-              const dB_A = bA.date ? new Date(bA.date).getTime() : 253402214400000;
-              const dB_B = bB.date ? new Date(bB.date).getTime() : 253402214400000;
-              if (dB_A !== dB_B) return dB_A - dB_B;
-              return safeString(bA.name).localeCompare(safeString(bB.name), 'zh-TW', { numeric: true });
-          } else if (bA && !bB) return -1;
-          else if (!bA && bB) return 1;
-
-          const mA = (members || []).find(m => m.id === cardA.memberId);
-          const mB = (members || []).find(m => m.id === cardB.memberId);
-          const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
-          const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
-          if (mSortA !== mSortB) return mSortA - mSortB;
-          return safeString(cardA.id).localeCompare(safeString(cardB.id));
-      });
-  };
-
-  const displayCards = getDisplayCards() || [];
-  const availableMembers = useMemo(() => [...new Set(displayCards.map(c => c.memberId))], [displayCards]);
-  
-  const availableTypeIds = useMemo(() => {
-      return [...new Set(displayCards.map(c => c.type).filter(Boolean))];
-  }, [displayCards]);
-  
-  const availableTypes = useMemo(() => {
-      return availableTypeIds.map(id => {
-          const tObj = (types || []).find(t => t.id === id || t.name === id);
-          return tObj || { id, name: id, shortName: '' };
-      });
-  }, [availableTypeIds, types]);
-  
-  const availableChannelIds = useMemo(() => {
-      return [...new Set(displayCards.map(c => c.channel).filter(Boolean))];
-  }, [displayCards]);
-
-  const availableChannels = useMemo(() => {
-      return availableChannelIds.map(id => {
-          const ch = (channels || []).find(c => c.id === id || c.name === id);
-          return ch || { id, name: id, shortName: '' };
-      });
-  }, [availableChannelIds, channels]);
-
-  const getMemberName = (id) => (members || []).find(m => m.id === id)?.name || 'Unknown';
-
-  const handleSaveList = async () => {
-    if(listTitleInput.trim()) {
-        const payload = { title: listTitleInput.trim() };
-        if (editingListId) {
-            payload.id = editingListId;
-            setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
-        } else {
-            payload.id = Date.now().toString();
-            payload.items = [];
-            setCustomLists([...(customLists || []), payload]);
+    const poolCards = useMemo(() => {
+        if (!activeView) return [];
+        if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
+        if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
+        if (activeView === 'selling') return (cards || []).filter(c => salesMap[c.id]);
+        if (typeof activeView === 'object' && activeView.items) {
+            return activeView.items.map(item => (cards || []).find(c => c.id === item.cardId)).filter(Boolean);
         }
-        await supabase.from('custom_lists').upsert(toSnakeCase(payload));
-        setIsListModalOpen(false);
-        setEditingListId(null);
-        setListTitleInput('');
-    }
-  };
+        return [];
+    }, [activeView, cards, inventoryMap, salesMap]);
 
-  const handleListClick = (e, list) => {
-    e.stopPropagation();
-    if (clickTimer.current) {
-        clearTimeout(clickTimer.current);
-        clickTimer.current = null;
-        setEditingListId(list.id);
-        setListTitleInput(list.title);
-        setIsListModalOpen(true);
-    } else {
-        clickTimer.current = setTimeout(() => {
-            setActiveView(list);
+    // ==========================================
+    // 3. 連動過濾器邏輯
+    // ==========================================
+    const availableSubunits = useMemo(() => {
+        const ids = new Set(poolCards.map(c => c.memberId));
+        return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+    }, [poolCards, members]);
+
+    useEffect(() => {
+        if (availableSubunits.length > 0 && (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit))) {
+            setFilterSubunit(availableSubunits[0]);
+        }
+    }, [availableSubunits, filterSubunit]);
+
+    const subunitFilteredCards = useMemo(() => {
+        if (filterSubunit === 'All') return poolCards;
+        return poolCards.filter(c => {
+            const m = (members || []).find(mem => mem.id === c.memberId);
+            return m && m.subunit === filterSubunit;
+        });
+    }, [poolCards, filterSubunit, members]);
+
+    const availableMembers = useMemo(() => {
+        const ids = new Set(subunitFilteredCards.map(c => c.memberId));
+        return (members || []).filter(m => ids.has(m.id));
+    }, [subunitFilteredCards, members]);
+
+    const availableTypes = useMemo(() => {
+        const ids = new Set(subunitFilteredCards.map(c => c.type).filter(Boolean));
+        const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
+        return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+    }, [subunitFilteredCards, types]);
+
+    const availableChannels = useMemo(() => {
+        const ids = new Set(subunitFilteredCards.map(c => c.channel).filter(Boolean));
+        const currentChannels = (channels || []).filter(c => ids.has(c.id) || ids.has(c.name));
+        const freqMap = {};
+        subunitFilteredCards.forEach(c => { if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1; });
+        return currentChannels.sort((a, b) => (freqMap[b.id] || 0) - (freqMap[a.id] || 0));
+    }, [subunitFilteredCards, channels]);
+
+    useEffect(() => {
+        setFilterSubunit('All');
+        setFilterMember('All');
+        setFilterType('All');
+        setFilterChannel('All');
+        setIsEditMode(false);
+        setCardMarks({}); 
+    }, [activeView]);
+
+    // ==========================================
+    // 4. 取得顯示卡片與終極排序
+    // ==========================================
+    const getDisplayCards = () => {
+        return subunitFilteredCards.filter(c => {
+            if (filterMember !== 'All' && c.memberId !== filterMember) return false;
+            if (filterType !== 'All' && c.type !== filterType) return false;
+            if (filterChannel !== 'All' && c.channel !== filterChannel) return false;
+            return true;
+        }).map(c => {
+            if (activeView === 'selling') {
+                const saleRecord = salesMap[c.id];
+                return { ...c, note: `$${saleRecord?.price || 0}`, noteColor: saleRecord?.color || 'bg-black/70' };
+            }
+            if (typeof activeView === 'object' && activeView.items) {
+                const item = activeView.items.find(i => i.cardId === c.id);
+                return { ...c, note: item?.note };
+            }
+            return c;
+        }).sort((cardA, cardB) => {
+            const safeString = (val) => val ? String(val) : '';
+            const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
+
+            const sA = (series || []).find(s => s.id === cardA.seriesId);
+            const sB = (series || []).find(s => s.id === cardB.seriesId);
+            const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
+            const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+            if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+
+            const bA = (batches || []).find(b => b.id === cardA.batchId);
+            const bB = (batches || []).find(b => b.id === cardB.batchId);
+            if (bA && bB && bA.id !== bB.id) {
+                const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
+                const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
+                const sortA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
+                const sortB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
+                if (sortA !== sortB) return sortA - sortB;
+                const dB_A = bA.date ? new Date(bA.date).getTime() : 253402214400000;
+                const dB_B = bB.date ? new Date(bB.date).getTime() : 253402214400000;
+                if (dB_A !== dB_B) return dB_A - dB_B;
+                return safeString(bA.name).localeCompare(safeString(bB.name), 'zh-TW', { numeric: true });
+            } else if (bA && !bB) return -1;
+            else if (!bA && bB) return 1;
+
+            const mA = (members || []).find(m => m.id === cardA.memberId);
+            const mB = (members || []).find(m => m.id === cardB.memberId);
+            const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+            const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+            if (mSortA !== mSortB) return mSortA - mSortB;
+            return safeString(cardA.id).localeCompare(safeString(cardB.id));
+        });
+    };
+
+    const displayCards = getDisplayCards() || [];
+
+    // ==========================================
+    // 5. 事件與功能函式
+    // ==========================================
+    const handleSaveList = async () => {
+        if(listTitleInput.trim()) {
+            const payload = { title: listTitleInput.trim() };
+            if (editingListId) {
+                payload.id = editingListId;
+                setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
+            } else {
+                payload.id = Date.now().toString();
+                payload.items = [];
+                setCustomLists([...(customLists || []), payload]);
+            }
+            await supabase.from('custom_lists').upsert(toSnakeCase(payload));
+            setIsListModalOpen(false);
+            setEditingListId(null);
+            setListTitleInput('');
+        }
+    };
+
+    const handleListClick = (e, list) => {
+        e.stopPropagation();
+        if (clickTimer.current) {
+            clearTimeout(clickTimer.current);
             clickTimer.current = null;
-        }, 250);
-    }
-  };
+            setEditingListId(list.id);
+            setListTitleInput(list.title);
+            setIsListModalOpen(true);
+        } else {
+            clickTimer.current = setTimeout(() => {
+                setActiveView(list);
+                clickTimer.current = null;
+            }, 250);
+        }
+    };
 
-  const handleDeleteList = async (e, id) => {
-    e.stopPropagation();
-    if(confirm("確定刪除？")) {
-        setCustomLists((customLists || []).filter(l => l.id !== id));
-        await supabase.from('custom_lists').delete().eq('id', id);
-    }
-  };
+    const handleDeleteList = async (e, id) => {
+        e.stopPropagation();
+        if(confirm("確定刪除？")) {
+            setCustomLists((customLists || []).filter(l => l.id !== id));
+            await supabase.from('custom_lists').delete().eq('id', id);
+        }
+    };
 
-  const handleExportPNG = async (exportTitle) => {
-      if (!exportRef.current) return;
-      
-      setIsEditMode(false);
-      setIsExporting(true);
-      try {
-          const element = exportRef.current;
-          const overlay = element.parentElement; 
-          
-          const origOverlayStyle = overlay.style.cssText;
-          const origElementStyle = element.style.cssText;
-          const origScrollTop = overlay.scrollTop;
-          
-          // 確保外層完全展開
-          overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
-          
-          // 🌟 關鍵修正：強制設定白底，並明確加上 60px 的底部留白，避免背景提早被切斷
-          element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
-          
-          window.scrollTo(0, 0);
-          
-          await new Promise(resolve => setTimeout(resolve, 800));
+    const handleExportPNG = async (exportTitle) => {
+        if (!exportRef.current) return;
+        setIsEditMode(false);
+        setIsExporting(true);
+        try {
+            const element = exportRef.current;
+            const overlay = element.parentElement; 
+            const origOverlayStyle = overlay.style.cssText;
+            const origElementStyle = element.style.cssText;
+            const origScrollTop = overlay.scrollTop;
+            
+            overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
+            element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
+            window.scrollTo(0, 0);
+            await new Promise(resolve => setTimeout(resolve, 800));
 
-          // 重新計算加入 padding 後的真實高度
-          const targetHeight = element.scrollHeight;
-          const targetWidth = element.scrollWidth;
+            const targetHeight = element.scrollHeight;
+            const targetWidth = element.scrollWidth;
 
-          const dataUrl = await htmlToImage.toPng(element, {
-              pixelRatio: 2, 
-              backgroundColor: '#ffffff', // 🌟 畫布背景強制填滿純白
-              cacheBust: true,
-              width: targetWidth,
-              height: targetHeight, 
-              style: {
-                  // 🌟 強制套用白底與高度給截圖畫布
-                  height: `${targetHeight}px`, 
-                  maxHeight: 'none',
-                  overflow: 'visible',
-                  backgroundColor: '#ffffff', 
-                  paddingBottom: '60px'
-              },
-              filter: (node) => {
-                  if (node?.classList?.contains('no-export') || node?.classList?.contains('no-print')) {
-                      return false;
-                  }
-                  return true;
-              }
-          });
+            const dataUrl = await htmlToImage.toPng(element, {
+                pixelRatio: 2, 
+                backgroundColor: '#ffffff',
+                cacheBust: true,
+                width: targetWidth,
+                height: targetHeight, 
+                style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
+                filter: (node) => !(node?.classList?.contains('no-export') || node?.classList?.contains('no-print'))
+            });
 
-          // 恢復原狀
-          overlay.style.cssText = origOverlayStyle;
-          element.style.cssText = origElementStyle;
-          overlay.scrollTop = origScrollTop;
+            overlay.style.cssText = origOverlayStyle;
+            element.style.cssText = origElementStyle;
+            overlay.scrollTop = origScrollTop;
+            setExportedImage(dataUrl);
+        } catch (error) {
+            console.error('Export failed:', error);
+            alert(`匯出圖片失敗: ${error.message}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+    
+    // ==========================================
+    // 6. 內部渲染元件
+    // ==========================================
+    const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+       <div className="flex items-center gap-3 overflow-hidden no-export no-print">
+          <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+              {(options || []).map(opt => {
+                  const id = typeof opt === 'object' ? opt.id : opt;
+                  const name = mapName ? mapName(opt) : opt;
+                  const isSelected = current === id;
+                  return (
+                      <button 
+                          key={id}
+                          onClick={() => onChange(isSelected ? 'All' : id)}
+                          className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                      >
+                          {name}
+                      </button>
+                  )
+              })}
+          </div>
+       </div>
+    );
+    
+    const CardGrid = ({ displayCards }) => (
+        <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+            {displayCards.map((card, idx) => {
+                const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                const seriesName = cardSeries?.shortName || cardSeries?.name;
+                const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                const effectiveType = card.type;
+                const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                const effectiveChannelId = card.channel;
+                const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                const batchNumber = cardBatch?.batchNumber;
+                const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
-          setExportedImage(dataUrl);
-
-      } catch (error) {
-          console.error('Export failed:', error);
-          alert(`匯出圖片失敗: ${error.message}`);
-      } finally {
-          setIsExporting(false);
-      }
-  };
-  
-  const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
-     <div className="flex items-center gap-3 overflow-hidden no-export no-print">
-        <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
-            {(options || []).map(opt => {
-                const id = typeof opt === 'object' ? opt.id : opt;
-                const name = mapName ? mapName(opt) : opt;
-                const isSelected = current === id;
                 return (
-                    <button 
-                        key={id}
-                        onClick={() => onChange(isSelected ? 'All' : id)}
-                        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                    >
-                        {name}
-                    </button>
+                    <div key={idx} onClick={() => !isEditMode && setViewingCard(card)} className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform">
+                        <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0 overflow-hidden">
+                            <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" />
+                            <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
+                                {isEditMode ? (
+                                    <CardMarkInput initialValue={cardMarks[card.id]} onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})} />
+                                ) : (
+                                    cardMarks[card.id] && (
+                                        <div className="inline-block bg-white/70 text-black text-[11px] font-bold px-2 pt-0 pb-[5px] rounded shadow-sm max-w-full break-words text-right pointer-events-none" style={{ lineHeight: '1.2' }}>{cardMarks[card.id]}</div>
+                                    )
+                                )}
+                            </div>
+                            {card.note && (
+                                <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
+                                    <div className={`inline-block text-white text-[11px] font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full break-words ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2' }}>{card.note}</div>
+                                </div>
+                            )}
+                        </div>
+                        {showDetails && (
+                          <div className="text-center px-0.5 pb-1 h-full flex flex-col justify-start">
+                              <div className="text-[10px] font-bold text-gray-800 leading-snug line-clamp-2 break-all" title={displayTitle || '未命名卡片'}>{displayTitle || '未命名卡片'}</div>
+                              {cardBatch?.name && <div className="text-[8px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                          </div>
+                        )}
+                    </div>
                 )
             })}
         </div>
-     </div>
-  );
-  
-  const CardGrid = ({ displayCards }) => (
-      <div 
-        className="grid gap-3 sm:gap-4"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-      >
-          {displayCards.map((card, idx) => {
-              const cardSeries = (series || []).find(s => s.id === card.seriesId);
-              const seriesName = cardSeries?.shortName || cardSeries?.name;
-              const cardBatch = (batches || []).find(b => b.id === card.batchId);
-              
-              const effectiveType = card.type;
-              const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
-              const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-              
-              const effectiveChannelId = card.channel;
-              const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
-              const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-              
-              const batchNumber = cardBatch?.batchNumber;
-              const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
-              const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+    );
 
-              return (
-                  <div 
-                    key={idx} 
-                    onClick={() => !isEditMode && setViewingCard(card)}
-                    className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform"
-                  >
-                      <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0">
-                          <Image 
-                                src={card.image} 
-                                alt="卡片圖片" 
-                                fill 
-                                className="object-cover pointer-events-none" 
-                                sizes="(max-width: 768px) 33vw, 15vw"
-                            />
-                          <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
-                              {isEditMode ? (
-                                  <CardMarkInput 
-                                      initialValue={cardMarks[card.id]}
-                                      onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})}
-                                  />
-                              ) : (
-                                  cardMarks[card.id] && (
-                                      <div 
-                                          className="inline-block bg-white/70 text-black text-[11px] font-bold px-2 pt-0 pb-[5px] rounded shadow-sm max-w-full break-words text-right pointer-events-none"
-                                          style={{ lineHeight: '1.2' }}
-                                      >
-                                          {cardMarks[card.id]}
-                                      </div>
-                                  )
-                              )}
+    // ==========================================
+    // 7. 畫面回傳
+    // ==========================================
+    if (activeView) {
+        const title = activeView === 'owned' ? '我的擁有' : 
+                      activeView === 'wishlist' ? '願望清單' : 
+                      activeView === 'selling' ? '販售中' : 
+                      activeView.title;
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto flex flex-col items-center py-4 sm:py-10 animate-fade-in px-2 sm:px-0">
+              <div className="bg-white p-4 sm:p-8 shadow-2xl min-h-[600px] w-full max-w-5xl relative rounded-xl sm:rounded-none" ref={exportRef}>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
+                      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+                          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                              <button onClick={() => setActiveView(null)} className="no-export no-print p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+                                  <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                              </button>
+                              <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
                           </div>
-
-                          {card.note && (
-                              <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
-                                  <div 
-                                      className={`inline-block text-white text-[11px] font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full break-words ${card.noteColor || 'bg-black/70'}`}
-                                      style={{ lineHeight: '1.2' }}
-                                  >
-                                      {card.note}
-                                  </div>
-                              </div>
-                          )}
+                          <div className="text-right sm:hidden flex-shrink-0 ml-2">
+                              <div className="text-[10px] font-bold text-gray-400">CardKeeper</div>
+                              <div className="text-[9px] text-gray-300">{new Date().toLocaleDateString()}</div>
+                          </div>
                       </div>
-                      {showDetails && (
-                        <div className="text-center px-0.5 pb-1 h-full flex flex-col justify-start">
-                            <div 
-                                className="text-[10px] font-bold text-gray-800 leading-snug line-clamp-2 break-all"
-                                title={displayTitle || '未命名卡片'}
-                            >
-                                {displayTitle || '未命名卡片'}
-                            </div>
-                            {cardBatch?.name && <div className="text-[8px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
-                        </div>
-                      )}
+                      
+                      <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-4">
+                          <div className="flex items-center gap-2 no-export no-print">
+                               <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8">
+                                 <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
+                                 <select 
+                                    value={cols}
+                                    onChange={(e) => setCols(Number(e.target.value))}
+                                    className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
+                                 >
+                                    {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                 </select>
+                              </div>
+                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
+                                  <PenTool className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setShowDetails(!showDetails)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
+                                  {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                              </button>
+                          </div>
+                          <div className="text-right hidden sm:block">
+                              <div className="text-sm font-bold text-gray-400">CardKeeper</div>
+                              <div className="text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                          </div>
+                      </div>
                   </div>
-              )
-          })}
-      </div>
-  );
 
-  if (activeView) {
-      const title = activeView === 'owned' ? '我的擁有' : 
-                    activeView === 'wishlist' ? '願望清單' : 
-                    activeView === 'selling' ? '販售中' : 
-                    activeView.title;
+                  <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
+                      {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} />}
+                      {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
+                      {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
+                      {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
+                  </div>
 
-      return (
-        <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto flex flex-col items-center py-4 sm:py-10 animate-fade-in px-2 sm:px-0">
-            <div className="bg-white p-4 sm:p-8 shadow-2xl min-h-[600px] w-full max-w-5xl relative rounded-xl sm:rounded-none" ref={exportRef}>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
-                    <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-                        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                            <button onClick={() => setActiveView(null)} className="no-export no-print p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
-                                <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-                            </button>
-                            <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
-                        </div>
-                        <div className="text-right sm:hidden flex-shrink-0 ml-2">
-                            <div className="text-[10px] font-bold text-gray-400">CardKeeper</div>
-                            <div className="text-[9px] text-gray-300">{new Date().toLocaleDateString()}</div>
-                        </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-4">
-                        <div className="flex items-center gap-2 no-export no-print">
-                             <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8">
-                               <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
-                               <select 
-                                  value={cols}
-                                  onChange={(e) => setCols(Number(e.target.value))}
-                                  className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
-                               >
-                                  {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                               </select>
-                            </div>
-                            <button
-                                onClick={() => setIsEditMode(!isEditMode)}
-                                className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-                                title="在卡片上標記"
-                            >
-                                <PenTool className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => setShowDetails(!showDetails)}
-                                className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
-                            >
-                                {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                            </button>
-                        </div>
-                        <div className="text-right hidden sm:block">
-                            <div className="text-sm font-bold text-gray-400">CardKeeper</div>
-                            <div className="text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
-                        </div>
-                    </div>
-                </div>
+                  <CardGrid displayCards={displayCards} />
+                  {displayCards.length === 0 && <div className="text-center py-20 text-gray-400">沒有符合條件的卡片</div>}
+              </div>
 
-                {/* 🌟 輸出頁面的篩選區：分隊預設第一個且不可取消 */}
-                <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
-                    {availableSubunits.length > 0 && (
-                        <RenderFilterSection 
-                            label="分隊" 
-                            options={availableSubunits} 
-                            current={filterSubunit} 
-                            onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} 
-                        />
-                    )}
-                    {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
-                    {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
-                    {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
-                </div>
+              <div className="fixed bottom-8 inset-x-0 flex justify-center pointer-events-none no-print z-50">
+                  <button onClick={(e) => { e.preventDefault(); handleExportPNG(title); }} disabled={isExporting} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 hover:-translate-y-1 hover:shadow-[0_10px_40px_rgb(0,0,0,0.3)] flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait transition-all pointer-events-auto">
+                      <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出'}
+                  </button>
+              </div>
 
-                <CardGrid displayCards={displayCards} />
-                
-                {displayCards.length === 0 && (
-                    <div className="text-center py-20 text-gray-400">
-                        沒有符合條件的卡片
-                    </div>
-                )}
-            </div>
+              {exportedImage && (
+                  <Modal title="圖片已產生" onClose={() => setExportedImage(null)} className="max-w-2xl" footer={
+                          <div className="flex gap-2 w-full">
+                              <button onClick={() => setExportedImage(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-all">關閉預覽</button>
+                              <a href={exportedImage} download={`${title}_${new Date().toISOString().split('T')[0]}.png`} className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2">
+                                  <Download className="w-5 h-5" /> 點此下載圖片
+                              </a>
+                          </div>
+                      }>
+                      <div className="p-4 flex flex-col items-center">
+                          <div className="bg-green-50 text-green-700 p-3 rounded-xl mb-4 w-full text-center text-sm font-bold border border-green-200">
+                              圖片產生成功！🎉<br/><span className="text-xs font-normal text-green-600">請點擊下方「點此下載圖片」按鈕，或直接長按下方圖片儲存。</span>
+                          </div>
+                          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-lg w-full max-w-md bg-white">
+                              <img src={exportedImage} alt="Export Preview" className="w-full h-auto object-contain block pointer-events-auto" style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }} />
+                          </div>
+                      </div>
+                  </Modal>
+              )}
+          </div>
+        );
+    }
 
-            <div className="fixed bottom-8 inset-x-0 flex justify-center pointer-events-none no-print z-50">
-                <button 
-                    onClick={(e) => { e.preventDefault(); handleExportPNG(title); }} 
-                    disabled={isExporting} 
-                    className="bg-indigo-600 text-white px-10 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 hover:-translate-y-1 hover:shadow-[0_10px_40px_rgb(0,0,0,0.3)] flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait transition-all pointer-events-auto"
-                >
-                    <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出'}
-                </button>
-            </div>
+    return (
+      <>
+        <div className="p-4 space-y-8 pb-24">
+            <section>
+              <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">系統分類</h3>
+              <div className="grid grid-cols-3 gap-4">
+                  <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group">
+                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform"><Folder className="w-6 h-6 fill-current" /></div>
+                      <span className="font-bold text-gray-700 text-sm">擁有</span>
+                  </div>
+                  <div onClick={() => setActiveView('wishlist')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-pink-300 hover:shadow-md transition-all group">
+                      <div className="w-12 h-12 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 group-hover:scale-110 transition-transform"><Heart className="w-6 h-6 fill-current" /></div>
+                      <span className="font-bold text-gray-700 text-sm">想要</span>
+                  </div>
+                  <div onClick={() => setActiveView('selling')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md transition-all group">
+                      <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform"><ShoppingBag className="w-6 h-6" /></div>
+                      <span className="font-bold text-gray-700 text-sm">販售</span>
+                  </div>
+              </div>
+          </section>
 
-            {exportedImage && (
-                <Modal 
-                    title="圖片已產生" 
-                    onClose={() => setExportedImage(null)} 
-                    className="max-w-2xl" 
-                    footer={
-                        <div className="flex gap-2 w-full">
-                            <button onClick={() => setExportedImage(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-all">
-                                關閉預覽
-                            </button>
-                            <a 
-                                href={exportedImage} 
-                                download={`${title}_${new Date().toISOString().split('T')[0]}.png`}
-                                className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2"
-                            >
-                                <Download className="w-5 h-5" /> 點此下載圖片
-                            </a>
-                        </div>
-                    }
-                >
-                    <div className="p-4 flex flex-col items-center">
-                        <div className="bg-green-50 text-green-700 p-3 rounded-xl mb-4 w-full text-center text-sm font-bold border border-green-200">
-                            圖片產生成功！🎉<br/>
-                            <span className="text-xs font-normal text-green-600">請點擊下方「點此下載圖片」按鈕，或直接長按下方圖片儲存。</span>
-                        </div>
-                        <div className="border border-gray-200 rounded-xl overflow-hidden shadow-lg w-full max-w-md bg-white">
-                            <img 
-                                src={exportedImage} 
-                                alt="Export Preview" 
-                                className="w-full h-auto object-contain block pointer-events-auto" 
-                                style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }}
-                            />
-                        </div>
-                    </div>
-                </Modal>
-            )}
-        </div>
-      );
-  }
-
-  return (
-    <>
-      <div className="p-4 space-y-8 pb-24">
           <section>
-            <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">系統分類</h3>
-            <div className="grid grid-cols-3 gap-4">
-                <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                        <Folder className="w-6 h-6 fill-current" />
-                    </div>
-                    <span className="font-bold text-gray-700 text-sm">擁有</span>
-                </div>
-                <div onClick={() => setActiveView('wishlist')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-pink-300 hover:shadow-md transition-all group">
-                    <div className="w-12 h-12 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 group-hover:scale-110 transition-transform">
-                        <Heart className="w-6 h-6 fill-current" />
-                    </div>
-                    <span className="font-bold text-gray-700 text-sm">想要</span>
-                </div>
-                <div onClick={() => setActiveView('selling')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md transition-all group">
-                    <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
-                        <ShoppingBag className="w-6 h-6" />
-                    </div>
-                    <span className="font-bold text-gray-700 text-sm">販售</span>
-                </div>
-            </div>
-        </section>
+              <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {(customLists || []).map(list => (
+                      <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
+                           <div className="flex items-center gap-3 min-w-0">
+                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                              <div className="flex flex-col min-w-0 pointer-events-none">
+                                  <span className="font-bold text-gray-800 text-sm sm:text-base truncate">{list.title}</span>
+                                  <span className="text-[10px] sm:text-xs text-gray-400">{(list.items || []).length} 張卡片</span>
+                              </div>
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); setListToDelete(list.id); }} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                      </div>
+                  ))}
+                  
+                  <div onClick={() => { setEditingListId(null); setListTitleInput(''); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group select-none">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:text-indigo-500 shadow-sm flex-shrink-0"><Plus className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                      <span className="font-bold text-gray-500 group-hover:text-indigo-600 text-sm sm:text-base">新增收藏冊</span>
+                  </div>
+              </div>
+          </section>
+        </div>
 
-        <section>
-            <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {(customLists || []).map(list => (
-                    <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
-                         <div className="flex items-center gap-3 min-w-0">
-                             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none">
-                                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
-                            </div>
-                            <div className="flex flex-col min-w-0 pointer-events-none">
-                                <span className="font-bold text-gray-800 text-sm sm:text-base truncate">{list.title}</span>
-                                <span className="text-[10px] sm:text-xs text-gray-400">{(list.items || []).length} 張卡片</span>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); setListToDelete(list.id); }}
-                            className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                        >
-                            <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                        </button>
-                    </div>
-                ))}
-                
-                <div onClick={() => { setEditingListId(null); setListTitleInput(''); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group select-none">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:text-indigo-500 shadow-sm flex-shrink-0">
-                        <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </div>
-                    <span className="font-bold text-gray-500 group-hover:text-indigo-600 text-sm sm:text-base">新增收藏冊</span>
+        {isListModalOpen && (
+            <Modal title={editingListId ? "編輯收藏冊" : "新增收藏冊"} onClose={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="max-w-sm" footer={
+                <div className="flex gap-2 w-full">
+                    <button onClick={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
+                    <button onClick={handleSaveList} className="flex-1 py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800">{editingListId ? "儲存修改" : "確認新增"}</button>
                 </div>
-            </div>
-        </section>
-      </div>
+            }>
+                <div className="p-4">
+                    <label className="text-xs font-bold text-gray-500 mb-1.5 block">收藏冊名稱</label>
+                    <input autoFocus type="text" placeholder="例如：售物清單、保留區..." value={listTitleInput} onChange={e => setListTitleInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveList()} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100" />
+                </div>
+            </Modal>
+        )}
 
-      {isListModalOpen && (
-          <Modal title={editingListId ? "編輯收藏冊" : "新增收藏冊"} onClose={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="max-w-sm" footer={
-              <div className="flex gap-2 w-full">
-                  <button onClick={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
-                  <button onClick={handleSaveList} className="flex-1 py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800">{editingListId ? "儲存修改" : "確認新增"}</button>
-              </div>
-          }>
-              <div className="p-4">
-                  <label className="text-xs font-bold text-gray-500 mb-1.5 block">收藏冊名稱</label>
-                  <input 
-                      autoFocus
-                      type="text" 
-                      placeholder="例如：售物清單、保留區..." 
-                      value={listTitleInput} 
-                      onChange={e => setListTitleInput(e.target.value)} 
-                      onKeyDown={e => e.key === 'Enter' && handleSaveList()}
-                      className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100" 
-                  />
-              </div>
-          </Modal>
-      )}
-
-      {listToDelete && (
-          <Modal title="刪除收藏冊" onClose={() => setListToDelete(null)} className="max-w-sm" footer={
-              <div className="flex gap-2 w-full">
-                  <button onClick={() => setListToDelete(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
-                  <button onClick={handleDeleteList} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600">確定刪除</button>
-              </div>
-          }>
-              <div className="p-6 text-center text-gray-600 text-sm">
-                  確定要刪除這個收藏冊嗎？<br/>內含的卡片紀錄將從此清單移除，但不會刪除您的實際庫存。
-              </div>
-          </Modal>
-      )}
-    </>
-  );
+        {listToDelete && (
+            <Modal title="刪除收藏冊" onClose={() => setListToDelete(null)} className="max-w-sm" footer={
+                <div className="flex gap-2 w-full">
+                    <button onClick={() => setListToDelete(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
+                    <button onClick={handleDeleteList} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600">確定刪除</button>
+                </div>
+            }>
+                <div className="p-6 text-center text-gray-600 text-sm">確定要刪除這個收藏冊嗎？<br/>內含的卡片紀錄將從此清單移除，但不會刪除您的實際庫存。</div>
+            </Modal>
+        )}
+      </>
+    );
 }
 
 // --- 7. App Main Component ---
