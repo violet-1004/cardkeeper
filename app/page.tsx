@@ -3649,6 +3649,8 @@ function CardMarkInput({ initialValue, onSave }) {
 function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails }) {
   const [activeListId, setActiveListId] = useState(customLists[0]?.id || '');
   const [showCardSelector, setShowCardSelector] = useState(false);
+  
+  // 🌟 唯一且正確的 activeView：預設為 null，這樣才會先顯示資料夾選單！
   const [activeView, setActiveView] = useState(null);
 
   const [isListModalOpen, setIsListModalOpen] = useState(false);
@@ -3658,7 +3660,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
   
   const clickTimer = useRef(null);
 
-  const [activeView, setActiveView] = useState('owned');
+  // 🌟 其他篩選狀態 (重複的 activeView 已從這裡刪除)
+  const [filterSubunit, setFilterSubunit] = useState('All'); // 補上遺失的分隊狀態
   const [filterMember, setFilterMember] = useState('All');
   const [filterType, setFilterType] = useState('All');
   const [filterChannel, setFilterChannel] = useState('All');
