@@ -2863,12 +2863,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
                             return (
                                 <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
-                                    <div 
-                                        className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
-                                        onMouseDown={() => startPress(card.id, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-                                        onTouchStart={() => startPress(card.id, displayTitle)} onTouchEnd={cancelPress}
-                                        onContextMenu={(e) => { e.preventDefault(); cancelPress(); setCardToRemove({ id: card.id, title: displayTitle }); }}
-                                    >
+                                    {/* 🌟 拿掉誤貼的長按事件，恢復乾淨的左側排版 */}
+                                    <div className="flex items-center gap-4 flex-1 min-w-0">
                                         <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
                                             <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" />
                                         </div>
