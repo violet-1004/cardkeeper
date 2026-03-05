@@ -3658,6 +3658,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
   
   const clickTimer = useRef(null);
 
+  const [activeView, setActiveView] = useState('owned');
   const [filterMember, setFilterMember] = useState('All');
   const [filterType, setFilterType] = useState('All');
   const [filterChannel, setFilterChannel] = useState('All');
