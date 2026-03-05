@@ -1983,7 +1983,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 }
 
 
-function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types, onEditBulkRecord }) {
+function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types, onEditBulkRecord, onDeleteInventory, onDeleteBulkRecord }) {
     const [dateFilterMode, setDateFilterMode] = useState('month');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -1991,30 +1991,12 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     const [month, setMonth] = useState(new Date().getMonth() + 1);
     const [filterType, setFilterType] = useState('all'); 
     
+    // 🌟 新增：長按刪除的狀態
+    const [itemToDelete, setItemToDelete] = useState(null);
+    
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
 
-    const pressTimer = useRef(null);
-    const hasLongPressed = useRef(false);
-
-    const startPress = (item) => {
-        hasLongPressed.current = false;
-        pressTimer.current = setTimeout(() => {
-            hasLongPressed.current = true;
-            if (item._isBulkHeader) {
-                if (confirm(`確定要刪除盤收紀錄「${item.name}」嗎？\n這將同時刪除內含的所有卡片庫存！`)) {
-                    if (onDeleteBulkRecord) onDeleteBulkRecord(item.originalRecord.id);
-                }
-            } else {
-                if (confirm(`確定要刪除這筆紀錄嗎？金額: $${item._displayPrice}`)) {
-                    if (onDeleteInventory) onDeleteInventory(item.id);
-                }
-            }
-        }, 600); // 600毫秒觸發長按
-    };
-    const cancelPress = () => clearTimeout(pressTimer.current);
-
-    // 🚀 效能升級：建立五大極速字典 (Hash Maps)
     const cardMap = useMemo(() => {
         const map = {};
         (cards || []).forEach(c => map[c.id] = c);
@@ -2035,63 +2017,51 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
     const typeMap = useMemo(() => {
         const map = {};
-        (types || []).forEach(t => {
-            map[t.id] = t;
-            map[t.name] = t; // 兼容 ID 與 Name 查詢
-        });
+        (types || []).forEach(t => { map[t.id] = t; map[t.name] = t; });
         return map;
     }, [types]);
 
     const channelMap = useMemo(() => {
         const map = {};
-        (channels || []).forEach(c => {
-            map[c.id] = c;
-            map[c.name] = c; // 兼容 ID 與 Name 查詢
-        });
+        (channels || []).forEach(c => { map[c.id] = c; map[c.name] = c; });
         return map;
     }, [channels]);
 
-    // --- 事件處理與邏輯維持原樣 ---
-    const handleTouchStart = (e) => {
-        touchStartX.current = e.targetTouches[0].clientX;
-    };
+    // --- 長按刪除計時器 ---
+    const pressTimer = useRef(null);
+    const hasLongPressed = useRef(false);
 
+    const startPress = (item) => {
+        hasLongPressed.current = false;
+        pressTimer.current = setTimeout(() => {
+            hasLongPressed.current = true;
+            setItemToDelete(item); // 🌟 呼叫精美的 Modal，不再用容易卡住的 confirm
+        }, 500); // 縮短為 0.5 秒，手感更好
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
+
+    const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
     const handleTouchEnd = (e) => {
         touchEndX.current = e.changedTouches[0].clientX;
-        handleSwipe();
-    };
-
-    const handleSwipe = () => {
-        if (dateFilterMode === 'range') return;
-        const diff = touchStartX.current - touchEndX.current;
-        if (Math.abs(diff) > 50) {
-            if (diff > 0) handleNext();
-            else handlePrev();
+        if (dateFilterMode !== 'range') {
+            const diff = touchStartX.current - touchEndX.current;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) handleNext();
+                else handlePrev();
+            }
         }
     };
 
     const handlePrev = () => {
         if (dateFilterMode === 'month') {
-            if (month === 1) { setMonth(12); setYear(y => y - 1); }
-            else setMonth(m => m - 1);
-        } else if (dateFilterMode === 'year') {
-            setYear(y => y - 1);
-        }
+            if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1);
+        } else if (dateFilterMode === 'year') { setYear(y => y - 1); }
     };
 
     const handleNext = () => {
         if (dateFilterMode === 'month') {
-            if (month === 12) { setMonth(1); setYear(y => y + 1); }
-            else setMonth(m => m - 1); // 注意：這裡維持你的原邏輯 (可能你想寫成 + 1，如果想往前遞進請改成 + 1)
-        } else if (dateFilterMode === 'year') {
-            setYear(y => y + 1);
-        }
-    };
-
-    const handleJumpToCurrent = () => {
-        const today = new Date();
-        setYear(today.getFullYear());
-        setMonth(today.getMonth() + 1);
+            if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1);
+        } else if (dateFilterMode === 'year') { setYear(y => y + 1); }
     };
 
     const availableYears = useMemo(() => {
@@ -2102,17 +2072,13 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
     const { displayItems, totalIncome, totalExpense } = useMemo(() => {
         const items = [];
-        let income = 0;
-        let expense = 0;
+        let income = 0; let expense = 0;
         
         const isDateInRange = (dateStr) => {
             if (!dateStr) return false;
-            if (dateFilterMode === 'month') {
-                const targetPrefix = `${year}-${String(month).padStart(2, '0')}`;
-                return dateStr.startsWith(targetPrefix);
-            } else if (dateFilterMode === 'year') {
-                return dateStr.startsWith(`${year}`);
-            } else if (dateFilterMode === 'range') {
+            if (dateFilterMode === 'month') return dateStr.startsWith(`${year}-${String(month).padStart(2, '0')}`);
+            if (dateFilterMode === 'year') return dateStr.startsWith(`${year}`);
+            if (dateFilterMode === 'range') {
                 if (!startDate && !endDate) return true;
                 const targetDate = new Date(dateStr).getTime();
                 const start = startDate ? new Date(startDate).getTime() : 0;
@@ -2141,15 +2107,9 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
             if (record.buyDate && isDateInRange(record.buyDate)) {
                 if (filterType === 'all' || filterType === 'expense') {
                     items.push({
-                        id: `bulk_total_${record.id}`,
-                        _virtualId: `bulk_total_${record.id}`,
-                        _type: 'expense',
-                        _isBulkHeader: true,
-                        name: record.name,
-                        _displayPrice: record.totalAmount,
-                        _displayDate: record.buyDate,
-                        image: record.image,
-                        originalRecord: record // 🌟 補上這行，把整包原始盤收紀錄存起來
+                        id: `bulk_total_${record.id}`, _virtualId: `bulk_total_${record.id}`, _type: 'expense',
+                        _isBulkHeader: true, name: record.name, _displayPrice: record.totalAmount, _displayDate: record.buyDate,
+                        image: record.image, originalRecord: record
                     });
                 }
                 expense += (Number(record.totalAmount) || 0);
@@ -2158,150 +2118,90 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
         const filteredItems = items.filter(item => !(item.bulkRecordId && item._type === 'expense'));
         filteredItems.sort((a, b) => new Date(b._displayDate) - new Date(a._displayDate));
-
         return { displayItems: filteredItems, totalIncome: income, totalExpense: expense };
     }, [inventory, year, month, filterType, bulkRecords, dateFilterMode, startDate, endDate]);
 
     return (
-        <div 
-            className="bg-gray-50 min-h-screen pb-20"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-        >
+        <div className="bg-gray-50 min-h-screen pb-20" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
              <div className="bg-white border-b sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
                  <div className="flex justify-center items-center relative">
                      <div className="relative">
-                         <select 
-                             value={dateFilterMode}
-                             onChange={(e) => setDateFilterMode(e.target.value)}
-                             className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm"
-                         >
-                             <option value="month">篩選年月</option>
-                             <option value="year">只篩選年</option>
-                             <option value="range">自訂日期範圍</option>
+                         <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm">
+                             <option value="month">篩選年月</option><option value="year">只篩選年</option><option value="range">自訂日期範圍</option>
                          </select>
                          <ChevronDown className="w-3 h-3 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                      </div>
                      {dateFilterMode !== 'range' && (
-                         <button onClick={handleJumpToCurrent} className="absolute right-0 p-1.5 bg-gray-100 hover:bg-gray-200 text-indigo-600 rounded-lg transition-colors" title="回到目前">
-                             <Calendar className="w-4 h-4" />
-                         </button>
+                         <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth() + 1); }} className="absolute right-0 p-1.5 bg-gray-100 hover:bg-gray-200 text-indigo-600 rounded-lg transition-colors"><Calendar className="w-4 h-4" /></button>
                      )}
                  </div>
 
                  {dateFilterMode === 'range' ? (
                      <div className="flex items-center gap-2">
-                         <input 
-                             type="date" 
-                             value={startDate} 
-                             onChange={e => setStartDate(e.target.value)} 
-                             className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" 
-                         />
+                         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
                          <span className="text-gray-400 font-bold">-</span>
-                         <input 
-                             type="date" 
-                             value={endDate} 
-                             onChange={e => setEndDate(e.target.value)} 
-                             className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" 
-                         />
+                         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
                      </div>
                  ) : (
                      <div className="flex justify-between items-center">
-                         <button onClick={handlePrev} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 active:bg-gray-100 rounded-full transition-colors">
-                            <ChevronLeft className="w-6 h-6" />
-                         </button>
-                         
+                         <button onClick={handlePrev} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full"><ChevronLeft className="w-6 h-6" /></button>
                          <div className="flex gap-2 items-center">
                              <div className="relative">
-                                 <select 
-                                    value={year} 
-                                    onChange={(e) => setYear(Number(e.target.value))}
-                                    className="appearance-none bg-gray-100 border border-transparent hover:border-gray-300 text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer text-sm"
-                                 >
+                                 <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="appearance-none bg-gray-100 border border-transparent text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg text-sm">
                                      {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
                                  </select>
                                  <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                              </div>
-                             
                              {dateFilterMode === 'month' && (
                                  <div className="relative">
-                                     <select 
-                                        value={month} 
-                                        onChange={(e) => setMonth(Number(e.target.value))}
-                                        className="appearance-none bg-gray-100 border border-transparent hover:border-gray-300 text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer text-sm"
-                                     >
-                                         {Array.from({length: 12}, (_, i) => i + 1).map(m => (
-                                             <option key={m} value={m}>{m}月</option>
-                                         ))}
+                                     <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="appearance-none bg-gray-100 border border-transparent text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg text-sm">
+                                         {Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}月</option>)}
                                      </select>
                                      <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                                  </div>
                              )}
                          </div>
-
-                         <button onClick={handleNext} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 active:bg-gray-100 rounded-full transition-colors">
-                            <ChevronRight className="w-6 h-6" />
-                         </button>
+                         <button onClick={handleNext} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full"><ChevronRight className="w-6 h-6" /></button>
                      </div>
                  )}
              </div>
 
              <div className="grid grid-cols-2 gap-4 p-4">
                  <button onClick={() => setFilterType(filterType === 'income' ? 'all' : 'income')} className={`bg-white p-4 rounded-2xl shadow-sm border transition-all ${filterType === 'income' ? 'border-green-500 ring-1 ring-green-500' : 'border-transparent'}`}>
-                     <div className="text-xs text-gray-400 font-bold mb-1">收入</div>
-                     <div className="text-2xl font-black text-green-600">${totalIncome.toLocaleString()}</div>
+                     <div className="text-xs text-gray-400 font-bold mb-1">收入</div><div className="text-2xl font-black text-green-600">${totalIncome.toLocaleString()}</div>
                  </button>
                  <button onClick={() => setFilterType(filterType === 'expense' ? 'all' : 'expense')} className={`bg-white p-4 rounded-2xl shadow-sm border transition-all ${filterType === 'expense' ? 'border-red-500 ring-1 ring-red-500' : 'border-transparent'}`}>
-                     <div className="text-xs text-gray-400 font-bold mb-1">支出</div>
-                     <div className="text-2xl font-black text-gray-800">${totalExpense.toLocaleString()}</div>
+                     <div className="text-xs text-gray-400 font-bold mb-1">支出</div><div className="text-2xl font-black text-gray-800">${totalExpense.toLocaleString()}</div>
                  </button>
              </div>
 
              <div className="px-4 space-y-3">
                 {displayItems.map(item => {
-                    // 🌟 秒查字典，取代原本的 .find()！
                     const card = cardMap[item.cardId];
                     const isIncome = item._type === 'income';
                     const dateObj = new Date(item._displayDate);
                     
                     const cardSeries = card ? seriesMap[card.seriesId] : null;
-                    const seriesName = cardSeries?.shortName || cardSeries?.name;
                     const cardBatch = card ? batchMap[card.batchId] : null;
+                    const typeObj = card?.type ? typeMap[card.type] : null;
+                    const channelObj = card?.channel ? channelMap[card.channel] : null;
                     
-                    const effectiveType = card?.type;
-                    const typeObj = effectiveType ? typeMap[effectiveType] : null;
-                    const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-                    
-                    const effectiveChannelId = card?.channel;
-                    const channelObj = effectiveChannelId ? channelMap[effectiveChannelId] : null;
-                    const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-                    
-                    const batchNumber = cardBatch?.batchNumber;
-                    const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
-                    const displayTitle = card ? [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ') : '';
+                    const displayTitle = card ? [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ') : '';
                     const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片');
 
                     return (
                         <div key={item._virtualId} 
-                            onMouseDown={() => startPress(item)}
-                            onMouseUp={cancelPress}
-                            onMouseLeave={cancelPress}
-                            onTouchStart={() => startPress(item)}
-                            onTouchEnd={cancelPress}
+                            // 🌟 觸控防禦網：全面綁定長按與防止右鍵選單
+                            onMouseDown={() => startPress(item)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                            onTouchStart={() => startPress(item)} onTouchEnd={cancelPress}
+                            onContextMenu={(e) => { e.preventDefault(); cancelPress(); hasLongPressed.current = true; setItemToDelete(item); }}
                             onClick={(e) => {
-                                if (hasLongPressed.current) {
-                                    e.preventDefault(); // 如果是長按，就不觸發點擊打開
-                                    return;
-                                }
-                                if (item._isBulkHeader && item.originalRecord) {
-                                    if (onEditBulkRecord) onEditBulkRecord(item.originalRecord);
-                                } else if (card) {
-                                    setViewingCard(card);
-                                }
+                                if (hasLongPressed.current) return e.preventDefault();
+                                if (item._isBulkHeader && item.originalRecord && onEditBulkRecord) onEditBulkRecord(item.originalRecord);
+                                else if (card) setViewingCard(card);
                             }} 
                             className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-indigo-300 border border-transparent select-none"
                         >
-
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
                                     <span className="text-[8px] text-gray-400 font-bold leading-none">{dateObj.getFullYear()}</span>
@@ -2311,24 +2211,12 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                 <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
                                     {item._isBulkHeader ? (
                                         item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
-                                    ) : (card && 
-                                        <Image 
-                                        src={card.image} 
-                                        alt="卡片圖片" 
-                                        fill 
-                                        className="object-cover pointer-events-none" 
-                                        sizes="(max-width: 768px) 33vw, 15vw"
-                                        />
-                                    )}
+                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="15vw" /> )}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
-                                    <div className="font-bold text-gray-800 text-xs truncate">
-                                        {finalName}
-                                    </div>
-                                    {!item._isBulkHeader && cardBatch?.name && (
-                                        <div className="text-[10px] text-gray-500 truncate mb-0.5">{cardBatch.name}</div>
-                                    )}
+                                    <div className="font-bold text-gray-800 text-xs truncate">{finalName}</div>
+                                    {!item._isBulkHeader && cardBatch?.name && <div className="text-[10px] text-gray-500 truncate mb-0.5">{cardBatch.name}</div>}
                                     <div className="text-[10px] text-gray-400 flex items-center gap-1">
                                         {isIncome && <span className="text-[9px] bg-green-100 text-green-600 px-1 rounded-sm font-bold">售出</span>}
                                         <span className="truncate">{item.note || (item._isBulkHeader ? '批量購入支出' : (isIncome ? '出售' : '購買'))}</span>
@@ -2341,13 +2229,27 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                         </div>
                     )
                 })}
-
-                {displayItems.length === 0 && (
-                    <div className="text-center py-10 text-gray-300 text-sm">
-                        此範圍尚無{filterType === 'all' ? '交易' : filterType === 'income' ? '收入' : '支出'}紀錄
-                    </div>
-                )}
              </div>
+
+             {/* 🌟 精美的刪除確認視窗 */}
+             {itemToDelete && (
+                <Modal title="確認刪除" onClose={() => setItemToDelete(null)} className="max-w-sm" footer={
+                    <div className="flex gap-2 w-full">
+                        <button onClick={() => setItemToDelete(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                        <button onClick={() => {
+                            if (itemToDelete._isBulkHeader && onDeleteBulkRecord) onDeleteBulkRecord(itemToDelete.originalRecord.id);
+                            else if (onDeleteInventory) onDeleteInventory(itemToDelete.id);
+                            setItemToDelete(null);
+                        }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定刪除</button>
+                    </div>
+                }>
+                    <div className="p-6 text-center text-gray-600 text-sm">
+                        {itemToDelete._isBulkHeader 
+                            ? `確定要刪除包裹「${itemToDelete.name}」嗎？\n⚠️這將同時刪除內含的所有卡片庫存！` 
+                            : `確定要刪除這筆紀錄嗎？\n金額: $${itemToDelete._displayPrice}`}
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }
@@ -2727,114 +2629,59 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
 
 function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory }) {
     const isEdit = !!record;
-    
     const [form, setForm] = useState({
-        name: record?.name || '',
-        image: record?.image || null,
-        status: record?.status || '未發貨',
-        buyDate: record?.buyDate || new Date().toISOString().split('T')[0],
-        source: record?.source || '',
+        name: record?.name || '', image: record?.image || null, status: record?.status || '未發貨',
+        buyDate: record?.buyDate || new Date().toISOString().split('T')[0], source: record?.source || '',
     });
 
     const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
-    const [manualIds, setManualIds] = useState(
-        (record?.items || []).filter(i => i.isManual).map(i => i.cardId)
-    );
-    const [cardDetails, setCardDetails] = useState(
-        (record?.items || []).reduce((acc, item) => ({
-            ...acc,
-            [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice }
-        }), {})
-    );
+    const [manualIds, setManualIds] = useState((record?.items || []).filter(i => i.isManual).map(i => i.cardId));
+    const [cardDetails, setCardDetails] = useState((record?.items || []).reduce((acc, item) => ({ ...acc, [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice } }), {}));
     
     const [showCardSelector, setShowCardSelector] = useState(false);
     const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
 
-    // 🌟 長按移除卡片計時器
-    const pressTimer = useRef(null);
-    const startPress = (cardId, title) => {
-        pressTimer.current = setTimeout(() => {
-            if (confirm(`確定要從這筆盤收中移除「${title || '這張卡片'}」嗎？`)) {
-                let nextManualIds = manualIds.filter(id => id !== cardId);
-                let nextDetails = { ...cardDetails };
-                delete nextDetails[cardId];
-                
-                nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
-                setCardDetails(nextDetails);
-                setManualIds(nextManualIds);
-                syncToParent(form, totalAmount, nextManualIds, nextDetails);
-            }
-        }, 600);
-    };
-    const cancelPress = () => clearTimeout(pressTimer.current);
-  
+    // 🌟 新增：長按移除卡片的狀態
+    const [cardToRemove, setCardToRemove] = useState(null);
 
     const totalSoldPrice = useMemo(() => {
         if (!record?.id || !inventory) return 0;
-        return selectedCards.reduce((sum, card) => {
-            const invItem = inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id);
-            return sum + (Number(invItem?.sellPrice) || 0);
-        }, 0);
+        return selectedCards.reduce((sum, card) => sum + (Number(inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id)?.sellPrice) || 0), 0);
     }, [record?.id, selectedCards, inventory]);
 
     const recordIdRef = useRef(record?.id);
-    useEffect(() => {
-        recordIdRef.current = record?.id;
-    }, [record?.id]);
+    useEffect(() => { recordIdRef.current = record?.id; }, [record?.id]);
 
     const syncToParent = (updatedForm, updatedTotal, updatedManualIds, updatedDetails) => {
         if (!updatedForm.name.trim() && !recordIdRef.current) return;
-
         const finalItems = Object.keys(updatedDetails).map(cardId => ({
-            cardId,
-            quantity: Number(updatedDetails[cardId].quantity) || 1,
-            buyPrice: Number(updatedDetails[cardId].buyPrice) || 0,
-            isManual: updatedManualIds.includes(cardId)
+            cardId, quantity: Number(updatedDetails[cardId].quantity) || 1,
+            buyPrice: Number(updatedDetails[cardId].buyPrice) || 0, isManual: updatedManualIds.includes(cardId)
         }));
-
-        onSave({
-            ...updatedForm,
-            id: recordIdRef.current,
-            totalAmount: Number(updatedTotal) || 0,
-            items: finalItems
-        });
+        onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: finalItems });
     };
 
     const recalculatePrices = (totalVal, currentManualIds, currentDetails) => {
         if (totalVal === '' || totalVal === undefined) {
             const next = { ...currentDetails };
-            Object.keys(next).forEach(cardId => {
-                if (!currentManualIds.includes(cardId)) {
-                    next[cardId] = { ...next[cardId], buyPrice: '' };
-                }
-            });
+            Object.keys(next).forEach(cardId => { if (!currentManualIds.includes(cardId)) next[cardId] = { ...next[cardId], buyPrice: '' }; });
             return next;
         }
-
         const total = Number(totalVal) || 0;
-        let manualSum = 0;
-        let autoQty = 0;
-
+        let manualSum = 0; let autoQty = 0;
         Object.keys(currentDetails).forEach(cardId => {
             const qty = Number(currentDetails[cardId]?.quantity || 1);
-            if (currentManualIds.includes(cardId)) {
-                manualSum += (Number(currentDetails[cardId]?.buyPrice || 0) * qty);
-            } else {
-                autoQty += qty;
-            }
+            if (currentManualIds.includes(cardId)) manualSum += (Number(currentDetails[cardId]?.buyPrice || 0) * qty);
+            else autoQty += qty;
         });
-
         const remaining = Math.max(0, total - manualSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
-
         const next = { ...currentDetails };
         let hasChanges = false;
         Object.keys(next).forEach(cardId => {
-            if (!currentManualIds.includes(cardId)) {
-                if (next[cardId].buyPrice !== autoPrice) {
-                    next[cardId] = { ...next[cardId], buyPrice: autoPrice };
-                    hasChanges = true;
-                }
+            if (!currentManualIds.includes(cardId) && next[cardId].buyPrice !== autoPrice) {
+                next[cardId] = { ...next[cardId], buyPrice: autoPrice };
+                hasChanges = true;
             }
         });
         return hasChanges ? next : currentDetails;
@@ -2842,56 +2689,42 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     const handleFormChange = (key, value) => {
         const nextForm = { ...form, [key]: value };
-        setForm(nextForm);
-        syncToParent(nextForm, totalAmount, manualIds, cardDetails);
+        setForm(nextForm); syncToParent(nextForm, totalAmount, manualIds, cardDetails);
     };
 
     const handleTotalAmountChange = (e) => {
-        const val = e.target.value;
-        setTotalAmount(val);
+        const val = e.target.value; setTotalAmount(val);
         const nextDetails = recalculatePrices(val, manualIds, cardDetails);
-        setCardDetails(nextDetails);
-        syncToParent(form, val, manualIds, nextDetails);
+        setCardDetails(nextDetails); syncToParent(form, val, manualIds, nextDetails);
     };
 
     const handleDetailChange = (id, field, value) => {
         let nextManualIds = [...manualIds];
-        
         if (field === 'buyPrice') {
-            if (value === '' || Number(value) === 0) {
-                nextManualIds = nextManualIds.filter(x => x !== id);
-            } else if (!nextManualIds.includes(id)) {
-                nextManualIds.push(id);
-            }
+            if (value === '' || Number(value) === 0) nextManualIds = nextManualIds.filter(x => x !== id);
+            else if (!nextManualIds.includes(id)) nextManualIds.push(id);
         }
-        
         setManualIds(nextManualIds);
-
-        let nextDetails = {
-            ...cardDetails,
-            [id]: { ...cardDetails[id], [field]: value }
-        };
-        
+        let nextDetails = { ...cardDetails, [id]: { ...cardDetails[id], [field]: value } };
         nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
-        setCardDetails(nextDetails);
-        syncToParent(form, totalAmount, nextManualIds, nextDetails);
+        setCardDetails(nextDetails); syncToParent(form, totalAmount, nextManualIds, nextDetails);
     };
 
     const handleConfirmSelectCards = (newSelectedIds) => {
         const nextDetails = {};
         let nextManualIds = manualIds.filter(id => newSelectedIds.includes(id));
-
-        newSelectedIds.forEach(id => {
-            nextDetails[id] = cardDetails[id] || { quantity: 1, buyPrice: '' };
-        });
-
+        newSelectedIds.forEach(id => { nextDetails[id] = cardDetails[id] || { quantity: 1, buyPrice: '' }; });
         const finalDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
-        
-        setCardDetails(finalDetails);
-        setManualIds(nextManualIds);
-        syncToParent(form, totalAmount, nextManualIds, finalDetails);
+        setCardDetails(finalDetails); setManualIds(nextManualIds); syncToParent(form, totalAmount, nextManualIds, finalDetails);
         setShowCardSelector(false);
     };
+
+    // --- 長按刪除計時器 ---
+    const pressTimer = useRef(null);
+    const startPress = (cardId, title) => {
+        pressTimer.current = setTimeout(() => { setCardToRemove({ id: cardId, title }); }, 500);
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
 
     return (
         <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
@@ -2900,104 +2733,49 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
                 <div className="flex gap-1 items-center">
                     {isEdit && (
-                        <button 
-                            onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }}
-                            className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"
-                        >
-                            <Trash2 className="w-5 h-5" />
-                        </button>
+                        <button onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }} className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>
                     )}
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
-                
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
                     <div className="w-28 h-28 flex-shrink-0">
-                        <ImageUploader 
-                            image={form.image} 
-                            aspect={1} /* 🌟 盤收封面也是正方形 */
-                            onChange={img => handleFormChange('image', img)} 
-                            className="w-full h-full rounded-xl"
-                        />
+                        <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <input 
-                            type="text" 
-                            placeholder="輸入盤收名稱 (例: Savage 未拆專)"
-                            value={form.name} 
-                            onChange={e => handleFormChange('name', e.target.value)} 
-                            className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300"
-                        />
+                        <input type="text" placeholder="輸入盤收名稱" value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300" />
                         <div className="grid grid-cols-2 gap-2 mt-2">
                              <div className="relative">
-                                <select 
-                                    value={form.status} 
-                                    onChange={e => handleFormChange('status', e.target.value)} 
-                                    className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200"
-                                >
-                                    <option value="未發貨">未發貨</option>
-                                    <option value="囤貨">囤貨</option>
-                                    <option value="到貨">到貨</option>
+                                <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200">
+                                    <option value="未發貨">未發貨</option><option value="囤貨">囤貨</option><option value="到貨">到貨</option>
                                 </select>
                                 <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
-                            <input 
-                                type="date" 
-                                value={form.buyDate} 
-                                onChange={e => handleFormChange('buyDate', e.target.value)} 
-                                className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" 
-                            />
+                            <input type="date" value={form.buyDate} onChange={e => handleFormChange('buyDate', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
                         </div>
                         <div className="mt-3">
-                            <FormCapsuleSelect 
-                                label="來源"
-                                options={uniqueSources || []}
-                                value={form.source}
-                                onChange={val => handleFormChange('source', val)}
-                                allowCustom={true}
-                                placeholder="自訂來源..."
-                                onOptionEdit={onRenameSource}
-                                onDelete={onDeleteSource} /* 🌟 綁定刪除 */
-                                onOptionDelete={onDeleteSource} /* 🌟 確保新舊屬性名都有接到 */
-                            />
+                            <FormCapsuleSelect label="來源" options={uniqueSources || []} value={form.source} onChange={val => handleFormChange('source', val)} allowCustom={true} placeholder="自訂來源..." onOptionEdit={onRenameSource} onDelete={onDeleteSource} onOptionDelete={onDeleteSource} />
                         </div>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className="bg-green-50/50 p-4 rounded-2xl flex flex-col justify-between border border-green-100/50 relative shadow-sm min-h-[100px]">
-                        <label className="text-xs font-bold text-green-600 uppercase tracking-widest flex items-center gap-2">
-                            總售價
-                        </label>
+                        <label className="text-xs font-bold text-green-600 uppercase tracking-widest flex items-center gap-2">總售價</label>
                         <div className="flex items-baseline mt-2">
                             <span className="text-xl text-green-600 font-bold mr-1">$</span>
                             <span className="text-3xl sm:text-4xl font-black text-green-600 truncate">{totalSoldPrice.toLocaleString()}</span>
                         </div>
                     </div>
-
                     <div className="bg-red-50/50 p-4 rounded-2xl flex flex-col justify-between border border-red-100/50 hover:border-red-200 transition-colors relative shadow-sm min-h-[100px]">
                         <div className="flex justify-between items-start">
-                            <label className="text-[10px] sm:text-xs font-bold text-red-600 uppercase tracking-widest">
-                                批量總金額
-                            </label>
-                            {manualIds.length > 0 && (
-                                <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold shadow-sm whitespace-nowrap">
-                                    {manualIds.length} 自訂
-                                </span>
-                            )}
+                            <label className="text-[10px] sm:text-xs font-bold text-red-600 uppercase tracking-widest">批量總金額</label>
+                            {manualIds.length > 0 && <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold shadow-sm whitespace-nowrap">{manualIds.length} 自訂</span>}
                         </div>
                         <div className="flex items-baseline mt-2">
                             <span className="text-xl text-red-600 font-bold mr-1">$</span>
-                            <input 
-                                type="number" 
-                                placeholder="0" 
-                                step="50"
-                                min="0"
-                                value={totalAmount} 
-                                onChange={handleTotalAmountChange} 
-                                className="w-full bg-transparent text-3xl sm:text-4xl font-black text-red-600 outline-none placeholder-red-200"
-                            />
+                            <input type="number" placeholder="0" step="50" min="0" value={totalAmount} onChange={handleTotalAmountChange} className="w-full bg-transparent text-3xl sm:text-4xl font-black text-red-600 outline-none placeholder-red-200" />
                         </div>
                     </div>
                 </div>
@@ -3010,118 +2788,80 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         </button>
                     </div>
                     
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-[45vh] overflow-y-auto px-1">
                         {selectedCards.map(card => {
-                            const invItem = inventory?.find(i => i.bulkRecordId === record?.id && i.cardId === card.id);
-                            const sellPrice = invItem?.sellPrice || 0;
-
                             const cardSeries = (series || []).find(s => s.id === card.seriesId);
-                            const seriesName = cardSeries?.shortName || cardSeries?.name;
                             const cardBatch = (batches || []).find(b => b.id === card.batchId);
-                            
-                            const effectiveType = card.type;
-                            const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
-                            const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-                            
-                            const effectiveChannelId = card.channel;
-                            const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
-                            const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-                            
-                            const batchNumber = cardBatch?.batchNumber;
-                            const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
-                            const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+                            const typeObj = (types || []).find(t => t.id === card.type || t.name === card.type);
+                            const channelObj = (channels || []).find(c => c.id === card.channel || c.name === card.channel);
+                            const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
 
                             return (
-                                <div key={card.id} className={`flex items-center gap-2 sm:gap-4 bg-white p-3 rounded-xl border shadow-sm transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/20 border-indigo-200' : 'border-gray-100'}`}>
+                                <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
+                                    {/* 🌟 觸控防禦網，左半邊皆為長按熱區 */}
                                     <div 
-                                        onClick={() => onViewCard && onViewCard(card)}
-                                        className="w-14 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-inner cursor-pointer hover:opacity-80 transition-opacity relative"
+                                        className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
+                                        onMouseDown={() => startPress(card.id, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                                        onTouchStart={() => startPress(card.id, displayTitle)} onTouchEnd={cancelPress}
+                                        onContextMenu={(e) => { e.preventDefault(); cancelPress(); setCardToRemove({ id: card.id, title: displayTitle }); }}
                                     >
-                                        <Image 
-                                        src={card.image} 
-                                        alt="卡片圖片" 
-                                        fill 
-                                        className="object-cover pointer-events-none" 
-                                        sizes="(max-width: 768px) 33vw, 15vw"
-                                        />
-                                        {sellPrice > 0 && (
-                                            <div className="absolute inset-x-0 bottom-0 bg-green-500/90 text-white text-[9px] font-bold text-center py-0.5">
-                                                已售
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div 
-                                        onClick={() => onViewCard && onViewCard(card)}
-                                        className="flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity flex flex-col justify-center"
-                                    >
-                                        <div className="text-sm font-bold text-gray-800 truncate mb-0.5">{displayTitle || '未命名卡片'}</div>
-                                        {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate mb-1">{cardBatch.name}</div>}
-                                        {sellPrice > 0 && (
-                                            <div className="inline-flex">
-                                                <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
-                                                    售出 ${sellPrice}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
+                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
+                                            {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
+                                            <div className="text-[9px] text-gray-400 mt-1 flex items-center gap-1"><Trash2 className="w-3 h-3" />長按可移除</div>
+                                        </div>
                                     </div>
                                     
-                                    <div className="flex items-center gap-2 sm:gap-4">
+                                    <div className="flex items-center gap-3 flex-shrink-0">
                                         <div className="flex flex-col items-end">
-                                            <label className="text-[10px] text-gray-400 font-bold uppercase mb-1">數量</label>
-                                            <input 
-                                                type="number" min="1"
-                                                value={cardDetails[card.id]?.quantity}
-                                                onChange={e => handleDetailChange(card.id, 'quantity', e.target.value)}
-                                                className="w-10 sm:w-12 text-right border-b-2 border-gray-200 focus:border-black outline-none font-bold text-base py-0.5 bg-transparent"
-                                            />
+                                            <label className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">數量</label>
+                                            <input type="number" min="1" value={cardDetails[card.id]?.quantity} onChange={e => handleDetailChange(card.id, 'quantity', e.target.value)} className="w-12 text-right border-b border-gray-200 focus:border-black outline-none font-bold text-sm py-0.5" />
                                         </div>
                                         <div className="flex flex-col items-end">
-                                            <label className="text-[10px] font-bold uppercase mb-1 flex items-center gap-1">
-                                                {manualIds.includes(card.id) ? (
-                                                    <span className="text-indigo-500">自訂單價</span>
-                                                ) : (
-                                                    <span className="text-red-400">單價</span>
-                                                )}
+                                            <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                                {manualIds.includes(card.id) ? <span className="text-indigo-500">自訂單價</span> : <span className="text-red-400">單價</span>}
                                             </label>
                                             <div className="flex items-baseline">
-                                                <span className={`text-sm font-bold mr-0.5 ${manualIds.includes(card.id) ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
-                                                <input 
-                                                    type="number" placeholder="0" step="50"
-                                                    value={cardDetails[card.id]?.buyPrice}
-                                                    onChange={e => handleDetailChange(card.id, 'buyPrice', e.target.value)}
-                                                    className={`w-14 sm:w-16 text-right border-none outline-none font-black text-lg sm:text-xl bg-transparent p-0 ${manualIds.includes(card.id) ? 'text-indigo-600 placeholder-indigo-200' : 'text-red-600 placeholder-red-200'}`}
-                                                />
+                                                <span className={`text-xs font-bold mr-0.5 ${manualIds.includes(card.id) ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                <input type="number" placeholder="0" step="50" value={cardDetails[card.id]?.buyPrice} onChange={e => handleDetailChange(card.id, 'buyPrice', e.target.value)} className={`w-16 text-right border-none outline-none font-black text-lg bg-transparent p-0 ${manualIds.includes(card.id) ? 'text-indigo-600 placeholder-indigo-200' : 'text-red-600 placeholder-red-200'}`} />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             );
                         })}
-                        
-                        {selectedCards.length === 0 && (
-                            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">
-                                點擊右上角「+ 新增卡片」加入這筆盤收的內容
-                            </div>
-                        )}
+                        {selectedCards.length === 0 && <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">點擊右上角「+ 新增卡片」加入這筆盤收的內容</div>}
                     </div>
                 </div>
             </div>
 
+            {/* 🌟 精美的移除卡片確認視窗 */}
+            {cardToRemove && (
+                <Modal title="移除卡片" onClose={() => setCardToRemove(null)} className="max-w-sm" footer={
+                    <div className="flex gap-2 w-full">
+                        <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                        <button onClick={() => {
+                            const cardId = cardToRemove.id;
+                            let nextManualIds = manualIds.filter(id => id !== cardId);
+                            let nextDetails = { ...cardDetails };
+                            delete nextDetails[cardId];
+                            nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
+                            setCardDetails(nextDetails); setManualIds(nextManualIds); syncToParent(form, totalAmount, nextManualIds, nextDetails);
+                            setCardToRemove(null);
+                        }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                    </div>
+                }>
+                    <div className="p-6 text-center text-gray-600 text-sm">
+                        確定要從這筆盤收中移除「{cardToRemove.title}」嗎？<br/>這不會刪除卡片圖鑑本身。
+                    </div>
+                </Modal>
+            )}
+
             {showCardSelector && (
-                <MiniCardSelector 
-                    cards={cards} 
-                    selectedIds={Object.keys(cardDetails)}
-                    onConfirm={handleConfirmSelectCards}
-                    onClose={() => setShowCardSelector(false)}
-                    members={members}
-                    series={series}
-                    batches={batches}
-                    channels={channels}
-                    types={types}
-                    uniqueTypes={uniqueTypes}
-                    uniqueChannels={uniqueChannels}
-                    uniqueSeriesTypes={uniqueSeriesTypes}
-                />
+                <MiniCardSelector cards={cards} selectedIds={Object.keys(cardDetails)} onConfirm={handleConfirmSelectCards} onClose={() => setShowCardSelector(false)} members={members} series={series} batches={batches} channels={channels} types={types} uniqueTypes={uniqueTypes} uniqueChannels={uniqueChannels} uniqueSeriesTypes={uniqueSeriesTypes} />
             )}
         </div>
     );
