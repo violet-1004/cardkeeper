@@ -919,8 +919,9 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
             <div className="flex-1 overflow-y-auto bg-gray-50">
                 <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
-    <img src={card.image} className="absolute inset-0 w-full h-full object-cover" />
-                </div>
+                        {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
+                        <Image src={card.image} alt="卡片詳情" fill priority unoptimized className="object-cover" />
+                    </div>
                     <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
                     {cardBatch?.name && <div className="text-sm text-gray-400">{cardBatch.name}</div>}
@@ -1588,7 +1589,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         className={`cursor-pointer group relative select-none ${isSelectionMode && isSelected ? 'ring-2 ring-indigo-500 rounded-lg p-1 -m-1' : ''}`}
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-2 shadow-sm border border-gray-100">
-                            <img src={card.image} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                            {/* 🌟 圖鑑列表：強制壓縮畫質至 30%，並加入 lazy 懶加載 */}
+                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" />
                             {card.isWishlist && (
                                 <div className="absolute top-2 left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
                                     <Heart className="w-3 h-3 fill-current" />
@@ -1954,9 +1956,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                 return (
                     <div key={card.id} onClick={() => setViewingCard(card)} className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`}>
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
-                            <img src={card.image} loading="lazy" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                            {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
+                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" />
                             {card.isWishlist && <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
-                            {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
+                        {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
                         </div>
                         {showDetails && (
                             <div className="px-0.5 sm:px-1">
@@ -2643,9 +2646,9 @@ function MiniCardSelector({ cards, selectedIds, onConfirm, onClose, members, ser
                         const isSelected = localSelected.includes(card.id);
                         return (
                             <div key={card.id} onClick={() => toggle(card.id)} className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}>
-                                // ✅ 替換為：
                                 <div className="aspect-[2/3] bg-gray-100 relative">
-                                    <img src={card.image} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                                    {/* 🌟 選擇器：極度壓縮至 20%，因為圖更小，追求絕對速度 */}
+                                    <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" />
                                 </div>
                                 {isSelected && (
                                     <div className="absolute top-2 right-2 bg-indigo-600 text-white rounded-full p-1 shadow z-10">
