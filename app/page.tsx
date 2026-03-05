@@ -1160,14 +1160,9 @@ function CardDetailModal({ card: initialCard, onClose, inventory, setInventory, 
     );
 }
 
-// --- 6. 分頁組件 ---
-// (因篇幅關係，Tab組件內的內部邏輯已接通傳入的 props，未作大幅刪改)
-// [... 這裡省略 Tab 組件如 LibraryTab, CollectionTab 等等 ...]
-// (為了確保你能直接貼上，我保留所有你的 Tab 程式碼如下！)
-
 function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedCardIds, setSelectedCardIds, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
   const [filterMemberId, setFilterMemberId] = useState('All');
-  const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊篩選狀態
+  const [filterSubunit, setFilterSubunit] = useState('All'); 
   const [filterSeriesId, setFilterSeriesId] = useState('All');
   const [filterSeriesType, setFilterSeriesType] = useState('All'); 
   const [filterBatchId, setFilterBatchId] = useState('All');
@@ -1183,21 +1178,18 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
     setFilterType('All');
     setFilterChannel('All');
     setFilterSeriesType('All');
-    // 注意：把 setFilterSubunit('All') 移除了，交給下方的特效自動判斷
   }, [currentGroupId]);
 
-  // 🌟 新增：自動監聽並預設為「第一個分隊」
   useEffect(() => {
       const groupMembers = (members || []).filter(m => m.groupId === currentGroupId);
       const subs = [...new Set(groupMembers.map(m => m.subunit).filter(Boolean))];
       
       if (subs.length > 0) {
-          // 如果目前沒有選中分隊 (或是選中的分隊被刪除了)，自動切換到第一個
           if (filterSubunit === 'All' || !subs.includes(filterSubunit)) {
               setFilterSubunit(subs[0]);
           }
       } else {
-          setFilterSubunit('All'); // 如果這個團體沒有任何分隊，才保持 All
+          setFilterSubunit('All'); 
       }
   }, [currentGroupId, members, filterSubunit]);
 
@@ -1241,23 +1233,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   };
 
   const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
-  // 🌟 自動抓取該團體所有有設定的分隊，並過濾成員大頭貼
   const uniqueSubunits = useMemo(() => [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))], [currentMembers]);
   const displayMembers = currentMembers.filter(m => filterSubunit === 'All' || m.subunit === filterSubunit);
 
-  // 1. 系列依時間排序 (越舊越前面)
-  // 1. 系列依時間排序 (越舊越前面)，並受分隊過濾影響
   const currentSeries = (series || []).filter(s => {
       if (s.groupId !== currentGroupId) return false;
-      // 🌟 新增這行：如果有選分隊，只顯示該分隊的系列
       if (filterSubunit !== 'All' && s.subunit !== filterSubunit) return false;
       if (filterSeriesType !== 'All' && s.type !== filterSeriesType) return false;
       return true;
   }).sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
   
-  // 2. 批次依時間排序 (越舊越前面)
-  // 🌟 2. 批次排序：優先依子類順序 -> 相同子類依字母(或數字)排序
-  // 🌟 2. 批次排序：優先依子類順序 -> 相同子類依日期(舊到新) -> 日期相同依名稱
   const currentBatches = (batches || []).filter(b => {
       if (b.groupId !== currentGroupId) return false;
       if (filterSeriesId !== 'All' && b.seriesId !== filterSeriesId) return false;
@@ -1265,7 +1250,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (filterChannel !== 'All' && b.channel !== filterChannel) return false;
       return true;
   }).sort((a, b) => {
-      // (1) 先比對子類的 sortOrder
       const typeA = (types || []).find(t => t.id === a.type || t.name === a.type);
       const typeB = (types || []).find(t => t.id === b.type || t.name === b.type);
       const sortOrderA = typeA ? (Number(typeA.sortOrder) || 0) : 999;
@@ -1275,32 +1259,23 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           return sortOrderA - sortOrderB;
       }
       
-      // 🌟 (2) 如果子類相同，依照「批次日期」排序 (舊到新)
       const dateA = a.date ? new Date(a.date).getTime() : 253402214400000;
       const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
       if (dateA !== dateB) return dateA - dateB;
       
-      // (3) 如果連日期都一樣(或都沒填)，就依照批次名稱字母順序
       const nameA = a.name || '';
       const nameB = b.name || '';
       return nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
   });
   
-  // 3. 卡片先篩選，再依系列時間與批次時間雙重排序
-  // 3. 卡片先篩選，再依系列時間與批次時間雙重排序
-  // 🌟 圖鑑卡片：超安全排序版
-  // 3. 卡片先篩選，再依系列時間與批次時間雙重排序
   const filteredCards = (cards || []).filter(card => {
     if (card.groupId !== currentGroupId) return false;
-    // 🌟 修正：永遠套用目前的篩選條件，讓批量歸類時「只顯示原目前頁面的卡片」
     
-    // 👇 補上這四行：如果你選了分隊，卡片區就只會出現該分隊成員的卡！
     if (filterSubunit !== 'All' && filterMemberId === 'All') {
         const mem = currentMembers.find(m => m.id === card.memberId);
         if (!mem || mem.subunit !== filterSubunit) return false;
     }
     
-    // 🌟 修正：永遠套用目前的篩選條件，讓批量歸類時「只顯示原目前頁面的卡片」
     if (filterMemberId !== 'All' && card.memberId !== filterMemberId) return false;
     if (filterSeriesId !== 'All' && card.seriesId !== filterSeriesId) return false;
     if (filterSeriesType !== 'All' && filterSeriesId === 'All') {
@@ -1319,7 +1294,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           return isNaN(n) ? defaultVal : n;
       };
 
-      // 1. 確保系列時間與分群 (舊到新)
       const sA = (series || []).find(s => s.id === cardA.seriesId);
       const sB = (series || []).find(s => s.id === cardB.seriesId);
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
@@ -1330,40 +1304,34 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       const seriesIdB = safeString(cardB.seriesId);
       if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
 
-      // 🌟 2. 批次絕對優先排序 (讓小卡完全跟隨批次順序)
       const bA = (batches || []).find(b => b.id === cardA.batchId);
       const bB = (batches || []).find(b => b.id === cardB.batchId);
       
       if (bA && bB && bA.id !== bB.id) {
-          // (1) 比較兩個批次所屬的「子類順序」
           const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
           const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
           const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
           const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
           if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
           
-          // (2) 比較兩個批次的「日期」 (舊到新)
           const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
           const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
           if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
           
-          // (3) 日期相同，比較批次「名稱」
           const nameA = safeString(bA.name);
           const nameB = safeString(bB.name);
           const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
           if (nameCompare !== 0) return nameCompare;
       } else if (bA && !bB) {
-          return -1; // 有批次的卡片往前排
+          return -1; 
       } else if (!bA && bB) {
           return 1;
       }
 
-      // 3. 確保相同批次的小卡絕對群聚在一起
       const batchIdA = safeString(cardA.batchId);
       const batchIdB = safeString(cardB.batchId);
       if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
 
-      // 4. 對於「沒有批次」的散卡，使用卡片本身的「子類順序」來排
       if (!bA && !bB) {
           const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
           const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
@@ -1372,18 +1340,15 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           if (cSortA !== cSortB) return cSortA - cSortB;
       }
 
-      // 5. 相同批次/子類內，看「成員順序」
       const mA = (members || []).find(m => m.id === cardA.memberId);
       const mB = (members || []).find(m => m.id === cardB.memberId);
       const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
       const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
       if (mSortA !== mSortB) return mSortA - mSortB;
 
-      // 防呆：最後用 ID
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
   });
 
-  // 🚀 效能升級：建立庫存字典，查詢速度提升 100 倍！
   const inventoryMap = useMemo(() => {
       const map = {};
       (inventory || []).forEach(inv => {
@@ -1395,6 +1360,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   }, [inventory]);
 
   const getCardQuantity = (cardId) => inventoryMap[cardId] || 0;
+  
   const toggleSelection = (id) => {
       setSelectedCardIds(prev => prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]);
   };
@@ -1422,14 +1388,12 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       )}
 
       <section>
-        {/* 🌟 分隊切換按鈕列 (純切換模式，點擊不會變回全體) */}
         {uniqueSubunits.length > 0 && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 mb-3">
                 {uniqueSubunits.map(sub => (
                     <button
                         key={sub}
                         onClick={() => { 
-                            // 🌟 如果點擊的已經是目前的分隊，就不做任何動作
                             if (filterSubunit !== sub) {
                                 setFilterSubunit(sub); 
                                 setFilterMemberId('All'); 
@@ -1444,7 +1408,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             </div>
         )}
         
-        {/* 🌟 成員大頭貼列表 (依據分隊動態過濾) */}
         <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar px-1">
            {displayMembers.map(m => (
              <MemberItem 
@@ -1499,7 +1462,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                     isSelected={filterSeriesId === s.id}
                     onClick={() => {
                       setFilterSeriesId(filterSeriesId === s.id ? 'All' : s.id);
-                      setFilterBatchId('All'); // 切換系列時，順便把已選的批次清除
+                      setFilterBatchId('All'); 
                     }}
                     onLongPress={(s) => handleLongPress('seriesId', s.id, s.name)}
                     onDoubleClick={() => handleOptionDoubleClick('series', s)}
@@ -1568,7 +1531,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                        />
                    ))}
                </div>
-              {/* 🌟 只有當選取了特定系列 (filterSeriesId !== 'All') 時，才顯示批次這整行 */}
                {filterSeriesId !== 'All' && (
                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                        <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('batch', { seriesId: filterSeriesId, type: filterType !== 'All' ? filterType : '', channel: filterChannel !== 'All' ? filterChannel : '' })}>
@@ -1595,7 +1557,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         </div>
 
         <div 
-            className="grid gap-x-4 gap-y-6 transition-all duration-300 ease-in-out"
+            className="grid gap-x-4 gap-y-6 transition-all duration-300 ease-in-out mt-4"
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
         >
             {filteredCards.map(card => {
