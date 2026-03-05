@@ -433,7 +433,8 @@ const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick })
       onDoubleClick={onDoubleClick}
       className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
     >
-        <img src={series.image} className="w-full h-full object-cover brightness-75 group-hover:brightness-100 transition-all pointer-events-none" alt={series.name} />
+        {/* 🌟 限制最大生成寬度為 120px，強制伺服器輸出極小 KB 數的縮圖 */}
+        {series.image && <Image src={series.image} alt={series.name} fill sizes="120px" className="object-cover brightness-75 group-hover:brightness-100 transition-all pointer-events-none" />}
         <div className="absolute inset-0 flex flex-col justify-end p-2 bg-gradient-to-t from-black/70 to-transparent">
             <span className="text-white font-bold text-sm truncate w-full">{series.name}</span>
             {series.shortName && <span className="text-white/70 text-[10px]">{series.shortName}</span>}
@@ -451,8 +452,9 @@ const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) =
       onDoubleClick={onDoubleClick}
       className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
     >
-        <img src={batch.image} className="w-full h-full object-cover opacity-90 hover:opacity-100 pointer-events-none" />
-        <div className="absolute inset-0 flex items-end p-1 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+        {/* 🌟 限制最大生成寬度為 100px */}
+        {batch.image && <Image src={batch.image} alt={batch.name || 'batch'} fill sizes="100px" className="object-cover opacity-90 hover:opacity-100 pointer-events-none" />}
+       <div className="absolute inset-0 flex items-end p-1 bg-gradient-to-t from-black/60 via-transparent to-transparent">
             <span className="text-xs font-bold text-white line-clamp-2 w-full leading-tight">{batch.name}</span>
         </div>
     </div>
@@ -2210,8 +2212,9 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                 </div>
                                 <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
                                     {item._isBulkHeader ? (
-                                        item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
-                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="15vw" /> )}
+                                        // 🌟 紀錄清單的包裹頭像超級小，強制壓成 50px 尺寸，檔案會小於 1KB
+                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" /> )}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
@@ -2321,7 +2324,8 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
                 {filteredRecords.map(record => (
                     <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
                         <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
-                            {record.image ? <img src={record.image} className="w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
+                            {/* 🌟 限制包裹清單的縮圖檔案大小 */}
+                            {record.image ? <Image src={record.image} alt={record.name || 'bulk'} fill sizes="150px" className="object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
                         </div>
                         <div className="px-1 flex flex-col flex-1 justify-between">
                             <div>
