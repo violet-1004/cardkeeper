@@ -1662,8 +1662,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 }
 
 function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols }) {
-  // 🌟 1. 收藏櫃專屬狀態 (全數復活！)
-  const [viewMode, setViewMode] = useState('all'); // 全部、想要、販售
+  const [viewMode, setViewMode] = useState('all');
   const [showDetails, setShowDetails] = useState(true);
 
   const [filterSubunit, setFilterSubunit] = useState('All');
@@ -1676,9 +1675,9 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const [filterSeries, setFilterSeries] = useState('All');
   const [filterBatch, setFilterBatch] = useState('All');
 
-  // 🌟 2. 基礎卡池與效能字典
   const allOwnedCards = useMemo(() => cards || [], [cards]);
 
+  // 🚀 效能升級：七大極速字典，徹底消滅幾千萬次迴圈卡頓！
   const inventoryMap = useMemo(() => {
       const map = {};
       (inventory || []).forEach(inv => {
@@ -1695,6 +1694,37 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       return map;
   }, [sales]);
 
+  const seriesMap = useMemo(() => {
+      const map = {};
+      (series || []).forEach(s => map[s.id] = s);
+      return map;
+  }, [series]);
+
+  const batchMap = useMemo(() => {
+      const map = {};
+      (batches || []).forEach(b => map[b.id] = b);
+      return map;
+  }, [batches]);
+
+  const memberMap = useMemo(() => {
+      const map = {};
+      (members || []).forEach(m => map[m.id] = m);
+      return map;
+  }, [members]);
+
+  const typeMap = useMemo(() => {
+      const map = {};
+      (types || []).forEach(t => { map[t.id] = t; map[t.name] = t; });
+      return map;
+  }, [types]);
+
+  const channelMap = useMemo(() => {
+      const map = {};
+      (channels || []).forEach(c => { map[c.id] = c; map[c.name] = c; });
+      return map;
+  }, [channels]);
+
+  // 🌟 連動過濾器邏輯
   const availableSubunits = useMemo(() => {
       const ids = new Set(allOwnedCards.map(c => c.memberId));
       return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
@@ -1709,10 +1739,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const subunitFilteredCards = useMemo(() => {
       if (filterSubunit === 'All') return allOwnedCards;
       return allOwnedCards.filter(c => {
-          const m = (members || []).find(mem => mem.id === c.memberId);
+          const m = memberMap[c.memberId];
           return m && m.subunit === filterSubunit;
       });
-  }, [allOwnedCards, filterSubunit, members]);
+  }, [allOwnedCards, filterSubunit, memberMap]);
 
   const availableMembers = useMemo(() => {
       const ids = new Set(subunitFilteredCards.map(c => c.memberId));
@@ -1757,19 +1787,19 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const getSeriesSummary = () => {
       const parts = [];
       if (filterSeriesType !== 'All') parts.push(filterSeriesType);
-      if (filterSeries !== 'All') parts.push((series || []).find(s => s.id === filterSeries)?.name);
-      if (filterBatch !== 'All') parts.push((batches || []).find(b => b.id === filterBatch)?.name);
+      if (filterSeries !== 'All') parts.push(seriesMap[filterSeries]?.name);
+      if (filterBatch !== 'All') parts.push(batchMap[filterBatch]?.name);
       
       return parts.length > 0 ? parts.join(' · ') : '全部系列';
   };
 
   const cardsInScope = useMemo(() => {
     return allOwnedCards.filter(card => {
-         const cardBatch = (batches || []).find(b => b.id === card.batchId);
          const effectiveType = card.type;
          const effectiveChannel = card.channel;
+         
          if (filterSubunit !== 'All') {
-             const mem = (members || []).find(m => m.id === card.memberId);
+             const mem = memberMap[card.memberId];
              if (!mem || mem.subunit !== filterSubunit) return false;
          }
 
@@ -1778,7 +1808,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
          if (filterChannel !== 'All' && effectiveChannel !== filterChannel) return false;
          
          if (filterSeriesType !== 'All') {
-            const s = (series || []).find(ser => ser.id === card.seriesId);
+            const s = seriesMap[card.seriesId];
             if (!s || s.type !== filterSeriesType) return false;
          }
          if (filterSeries !== 'All' && card.seriesId !== filterSeries) return false;
@@ -1786,7 +1816,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
          
          return true;
     });
-  }, [allOwnedCards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, series, batches, members, filterSubunit]);
+  }, [allOwnedCards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, seriesMap, batchMap, memberMap, filterSubunit]);
 
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
@@ -1794,13 +1824,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
-      const safeNum = (val, defaultVal) => {
-          const n = Number(val);
-          return isNaN(n) ? defaultVal : n;
-      };
+      const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
-      const sA = (series || []).find(s => s.id === cardA.seriesId);
-      const sB = (series || []).find(s => s.id === cardB.seriesId);
+      const sA = seriesMap[cardA.seriesId];
+      const sB = seriesMap[cardB.seriesId];
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
       const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
       if (dateA_series !== dateB_series) return dateA_series - dateB_series;
@@ -1809,12 +1836,12 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       const seriesIdB = safeString(cardB.seriesId);
       if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
 
-      const bA = (batches || []).find(b => b.id === cardA.batchId);
-      const bB = (batches || []).find(b => b.id === cardB.batchId);
+      const bA = batchMap[cardA.batchId];
+      const bB = batchMap[cardB.batchId];
       
       if (bA && bB && bA.id !== bB.id) {
-          const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
-          const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
+          const typeA = typeMap[bA.type];
+          const typeB = typeMap[bB.type];
           const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
           const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
           if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
@@ -1827,26 +1854,23 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
           const nameB = safeString(bB.name);
           const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
           if (nameCompare !== 0) return nameCompare;
-      } else if (bA && !bB) {
-          return -1;
-      } else if (!bA && bB) {
-          return 1;
-      }
+      } else if (bA && !bB) return -1;
+      else if (!bA && bB) return 1;
 
       const batchIdA = safeString(cardA.batchId);
       const batchIdB = safeString(cardB.batchId);
       if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
 
       if (!bA && !bB) {
-          const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
-          const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
+          const cTypeA = typeMap[cardA.type];
+          const cTypeB = typeMap[cardB.type];
           const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
           const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
           if (cSortA !== cSortB) return cSortA - cSortB;
       }
 
-      const mA = (members || []).find(m => m.id === cardA.memberId);
-      const mB = (members || []).find(m => m.id === cardB.memberId);
+      const mA = memberMap[cardA.memberId];
+      const mB = memberMap[cardB.memberId];
       const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
       const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
       if (mSortA !== mSortB) return mSortA - mSortB;
@@ -1914,88 +1938,51 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                     </button>
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
-                    <button 
-                        onClick={() => setViewMode('all')}
-                        className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}
-                    >
-                        全部
-                    </button>
-                    <button 
-                        onClick={() => setViewMode('wishlist')}
-                        className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'wishlist' ? 'bg-white text-pink-500 shadow-sm' : 'text-gray-400'}`}
-                    >
-                        想要
-                    </button>
-                    <button 
-                        onClick={() => setViewMode('selling')}
-                        className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'selling' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}
-                    >
-                        販售
-                    </button>
+                    <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
+                    <button onClick={() => setViewMode('wishlist')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'wishlist' ? 'bg-white text-pink-500 shadow-sm' : 'text-gray-400'}`}>想要</button>
+                    <button onClick={() => setViewMode('selling')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'selling' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>販售</button>
                 </div>
             </div>
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            {availableSubunits.length > 0 && (
-                <RenderFilterSection 
-                    label="分隊" 
-                    options={availableSubunits} 
-                    current={filterSubunit} 
-                    onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} 
-                />
-            )}
+            {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} />}
             {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
             {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
             {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
-            <div 
-                onClick={() => setShowSeriesModal(true)}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group"
-            >
+            <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
                     <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                    <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>
-                        {getSeriesSummary()}
-                    </span>
+                    <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
             </div>
         </div>
 
         <SeriesFilterModal 
-            visible={showSeriesModal}
-            onClose={() => setShowSeriesModal(false)}
-            seriesTypes={availableSeriesTypes}
-            selectedSeriesType={filterSeriesType}
-            setSeriesType={setFilterSeriesType}
-            series={availableSeriesList}
-            selectedSeries={filterSeries}
-            setSeries={setFilterSeries}
-            batches={availableBatchesList}
-            selectedBatch={filterBatch}
-            setBatch={setFilterBatch}
+            visible={showSeriesModal} onClose={() => setShowSeriesModal(false)}
+            seriesTypes={availableSeriesTypes} selectedSeriesType={filterSeriesType} setSeriesType={setFilterSeriesType}
+            series={availableSeriesList} selectedSeries={filterSeries} setSeries={setFilterSeries}
+            batches={availableBatchesList} selectedBatch={filterBatch} setBatch={setFilterBatch}
         />
 
-        <div 
-            className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2"
-            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-        >
+        <div className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
             {filteredCards.map(card => {
                 const qty = inventoryMap[card.id] || 0;
                 const isOwned = qty > 0;
                 
-                const memberName = (members || []).find(m => m.id === card.memberId)?.name;
-                const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                const memberName = memberMap[card.memberId]?.name;
+                const cardSeries = seriesMap[card.seriesId];
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
-                const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                const cardBatch = batchMap[card.batchId];
                 
                 const effectiveType = card.type;
-                const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                const typeObj = typeMap[effectiveType];
                 const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                 
                 const effectiveChannelId = card.channel;
-                const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                const channelObj = channelMap[effectiveChannelId];
                 const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                 
                 const batchNumber = cardBatch?.batchNumber;
@@ -2003,33 +1990,16 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                 return (
-                    <div 
-                        key={card.id} 
-                        onClick={() => setViewingCard(card)} 
-                        className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`} 
-                    >
+                    <div key={card.id} onClick={() => setViewingCard(card)} className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`}>
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             <img src={card.image} loading="lazy" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-                            
-                            {card.isWishlist && (
-                                <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
-                                    <Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
-                                </div>
-                            )}
-
-                            {qty > 0 && (
-                                <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">
-                                    {qty}
-                                </div>
-                            )}
+                            {card.isWishlist && <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                            {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
                         </div>
-                        
                         {showDetails && (
                             <div className="px-0.5 sm:px-1">
                                 <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
-                                <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">
-                                    {displayTitle || '未命名卡片'}
-                                </div>
+                                <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
                                 {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                             </div>
                         )}
