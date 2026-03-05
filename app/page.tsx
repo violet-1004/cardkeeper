@@ -2038,9 +2038,10 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         hasLongPressed.current = false;
         pressTimer.current = setTimeout(() => {
             hasLongPressed.current = true;
-            setItemToDelete(item); // 🌟 呼叫精美的 Modal，不再用容易卡住的 confirm
-        }, 500); // 縮短為 0.5 秒，手感更好
+            setItemToDelete(item); 
+        }, 500); 
     };
+    // 🌟 就是這行！請確保它乖乖待在 startPress 的下方
     const cancelPress = () => clearTimeout(pressTimer.current);
 
     const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
@@ -2786,12 +2787,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const startPress = (cardId, title) => {
         pressTimer.current = setTimeout(() => { setCardToRemove({ id: cardId, title }); }, 500);
     };
+    // 🌟 絕對不能漏掉這行！
     const cancelPress = () => clearTimeout(pressTimer.current);
 
     const miscPressTimer = useRef(null);
     const startMiscPress = (miscId, name) => {
         miscPressTimer.current = setTimeout(() => { setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
     };
+    // 🌟 還有這行也要確保存在！
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
     return (
