@@ -1994,7 +1994,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     const [month, setMonth] = useState(new Date().getMonth() + 1);
     const [filterType, setFilterType] = useState('all'); 
     
-    // 🌟 新增：長按刪除的狀態
     const [itemToDelete, setItemToDelete] = useState(null);
     
     const touchStartX = useRef(0);
@@ -2030,7 +2029,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         return map;
     }, [channels]);
 
-    // --- 長按刪除計時器 ---
+    // 🌟 絕對安全的長按變數宣告區
     const pressTimer = useRef(null);
     const hasLongPressed = useRef(false);
 
@@ -2041,7 +2040,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
             setItemToDelete(item); 
         }, 500); 
     };
-    // 🌟 就是這行！請確保它乖乖待在 startPress 的下方
     const cancelPress = () => clearTimeout(pressTimer.current);
 
     const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
@@ -2119,11 +2117,9 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                 expense += (Number(record.totalAmount) || 0);
             }
             
-            // 🌟 處理雜物售出 (把 單價 x 數量 算成總收入)
             (record.items || []).forEach((item, idx) => {
                 const qty = Number(item.quantity) || 1;
                 const totalSellPrice = (Number(item.sellPrice) || 0) * qty;
-                
                 if (item.isMisc && totalSellPrice > 0 && item.sellDate && isDateInRange(item.sellDate)) {
                     if (filterType === 'all' || filterType === 'income') {
                         items.push({
@@ -2212,7 +2208,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
                     return (
                         <div key={item._virtualId} 
-                            // 🌟 觸控防禦網：全面綁定長按與防止右鍵選單
                             onMouseDown={() => startPress(item)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                             onTouchStart={() => startPress(item)} onTouchEnd={cancelPress}
                             onContextMenu={(e) => { e.preventDefault(); cancelPress(); hasLongPressed.current = true; setItemToDelete(item); }}
@@ -2239,7 +2234,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
                                     <div className="font-bold text-gray-800 text-xs truncate">{finalName}</div>
-                                    {!item._isBulkHeader && cardBatch?.name && <div className="text-[10px] text-gray-500 truncate mb-0.5">{cardBatch.name}</div>}
+                                    {!item._isBulkHeader && !item.isMisc && cardBatch?.name && <div className="text-[10px] text-gray-500 truncate mb-0.5">{cardBatch.name}</div>}
                                     <div className="text-[10px] text-gray-400 flex items-center gap-1">
                                         {isIncome && <span className="text-[9px] bg-green-100 text-green-600 px-1 rounded-sm font-bold">售出</span>}
                                         <span className="truncate">{item.note || (item._isBulkHeader ? '批量購入支出' : (isIncome ? '出售' : '購買'))}</span>
@@ -2254,7 +2249,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                 })}
              </div>
 
-             {/* 🌟 精美的刪除確認視窗 */}
              {itemToDelete && (
                 <Modal title="確認刪除" onClose={() => setItemToDelete(null)} className="max-w-sm" footer={
                     <div className="flex gap-2 w-full">
