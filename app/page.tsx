@@ -1677,7 +1677,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   const allOwnedCards = useMemo(() => cards || [], [cards]);
 
-  // 🚀 效能升級：七大極速字典，徹底消滅幾千萬次迴圈卡頓！
+  // 🚀 效能升級：七大極速字典，徹底消滅迴圈卡頓！
   const inventoryMap = useMemo(() => {
       const map = {};
       (inventory || []).forEach(inv => {
@@ -2016,6 +2016,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
     </div>
   );
 }
+
+// 🚀 效能升級：卡片身分證字典
+    const cardMap = useMemo(() => {
+        const map = {};
+        (cards || []).forEach(c => map[c.id] = c);
+        return map;
+    }, [cards]);
 
 function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types }) {
     const [dateFilterMode, setDateFilterMode] = useState('month');
