@@ -2661,20 +2661,22 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [manualIds, setManualIds] = useState((record?.items || []).filter(i => !i.isMisc && i.isManual).map(i => i.cardId));
     const [cardDetails, setCardDetails] = useState((record?.items || []).filter(i => !i.isMisc).reduce((acc, item) => ({ ...acc, [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice } }), {}));
     
-    // 🌟 雜物狀態 (加入預設數量 1)
-    const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, quantity: i.quantity || 1, id: i.id || Date.now().toString() + Math.random() })));
+    // 🌟 雜物狀態 (移除數量)
+    const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, id: i.id || Date.now().toString() + Math.random() })));
 
     const [showCardSelector, setShowCardSelector] = useState(false);
     const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
+    
     const [cardToRemove, setCardToRemove] = useState(null);
+    const [miscToRemove, setMiscToRemove] = useState(null); // 🌟 新增雜物移除狀態
 
-    // 🌟 總售價包含卡片售價與雜物售價 (考量數量)
+    // 🌟 總售價包含卡片售價與雜物售價 (雜物固定為 1)
     const totalSoldPrice = useMemo(() => {
         let sum = 0;
         if (record?.id && inventory) {
             sum += selectedCards.reduce((acc, card) => acc + (Number(inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id)?.sellPrice) || 0), 0);
         }
-        sum += miscItems.reduce((acc, item) => acc + ((Number(item.sellPrice) || 0) * (Number(item.quantity) || 1)), 0);
+        sum += miscItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
         return sum;
     }, [record?.id, selectedCards, inventory, miscItems]);
 
@@ -2691,14 +2693,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         }));
 
         const finalMiscItems = updatedMiscItems.map(m => ({
-            id: m.id, name: m.name, quantity: Number(m.quantity) || 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
+            id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
             sellDate: m.sellDate, isMisc: true, isManual: true
         }));
 
         onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems] });
     };
 
-    // 🌟 計算均價時扣除雜物成本 (考量數量)
+    // 🌟 計算均價時扣除雜物成本 (雜物固定為 1)
     const recalculatePrices = (totalVal, currentManualIds, currentDetails, currentMiscItems) => {
         if (totalVal === '' || totalVal === undefined) {
             const next = { ...currentDetails };
@@ -2715,7 +2717,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         });
 
         let miscSum = 0;
-        currentMiscItems.forEach(m => { miscSum += (Number(m.buyPrice) || 0) * (Number(m.quantity) || 1); });
+        currentMiscItems.forEach(m => { miscSum += (Number(m.buyPrice) || 0); });
 
         const remaining = Math.max(0, total - manualSum - miscSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
@@ -2754,7 +2756,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     };
 
     const handleAddMisc = () => {
-        const newMisc = [...miscItems, { id: Date.now().toString(), name: '', quantity: 1, buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0] }];
+        const newMisc = [...miscItems, { id: Date.now().toString(), name: '', buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0] }];
         setMiscItems(newMisc);
         syncToParent(form, totalAmount, manualIds, cardDetails, newMisc);
     };
@@ -2762,22 +2764,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const handleMiscChange = (id, field, value) => {
         let nextMisc = miscItems.map(m => m.id === id ? { ...m, [field]: value } : m);
         setMiscItems(nextMisc);
-        if (field === 'buyPrice' || field === 'quantity') {
+        if (field === 'buyPrice') {
             const nextDetails = recalculatePrices(totalAmount, manualIds, cardDetails, nextMisc);
             setCardDetails(nextDetails);
             syncToParent(form, totalAmount, manualIds, nextDetails, nextMisc);
         } else {
             syncToParent(form, totalAmount, manualIds, cardDetails, nextMisc);
         }
-    };
-
-    const handleDeleteMisc = (id) => {
-        if (!confirm("確定刪除此雜物？")) return;
-        const nextMisc = miscItems.filter(m => m.id !== id);
-        setMiscItems(nextMisc);
-        const nextDetails = recalculatePrices(totalAmount, manualIds, cardDetails, nextMisc);
-        setCardDetails(nextDetails);
-        syncToParent(form, totalAmount, manualIds, nextDetails, nextMisc);
     };
 
     const handleConfirmSelectCards = (newSelectedIds) => {
@@ -2794,6 +2787,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         pressTimer.current = setTimeout(() => { setCardToRemove({ id: cardId, title }); }, 500);
     };
     const cancelPress = () => clearTimeout(pressTimer.current);
+
+    const miscPressTimer = useRef(null);
+    const startMiscPress = (miscId, name) => {
+        miscPressTimer.current = setTimeout(() => { setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
+    };
+    const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
     return (
         <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
@@ -2879,7 +2878,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
                                             {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
-                                            <div className="text-[9px] text-gray-400 mt-1 flex items-center gap-1"><Trash2 className="w-3 h-3" />長按可移除</div>
                                         </div>
                                     </div>
                                     
@@ -2921,54 +2919,44 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             {miscItems.map((misc, idx) => (
                                 <div key={misc.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-colors relative">
                                     
-                                    <div className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto">
+                                    {/* 左側：熱區長按刪除，並防止輸入框觸發長按 */}
+                                    <div 
+                                        className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto cursor-pointer select-none"
+                                        onMouseDown={() => startMiscPress(misc.id, misc.name)} onMouseUp={cancelMiscPress} onMouseLeave={cancelMiscPress}
+                                        onTouchStart={() => startMiscPress(misc.id, misc.name)} onTouchEnd={cancelMiscPress}
+                                        onContextMenu={(e) => { e.preventDefault(); cancelMiscPress(); setMiscToRemove({ id: misc.id, name: misc.name || '未命名雜物' }); }}
+                                    >
                                         <div className="w-10 h-10 sm:w-12 sm:h-12 aspect-square flex-shrink-0 bg-orange-50 rounded-lg border border-orange-100 flex items-center justify-center">
                                             <Tag className="w-5 h-5 text-orange-400" />
                                         </div>
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center items-start">
                                             <input 
                                                 type="text" 
                                                 placeholder={`雜物名稱 ${idx + 1} (例: 專卡/海報)`} 
                                                 value={misc.name} 
                                                 onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} 
+                                                onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
                                                 className="w-full text-sm font-bold text-gray-800 bg-transparent border-b border-transparent focus:border-orange-400 outline-none pb-0.5 placeholder-gray-300 mb-1 transition-colors" 
                                             />
-                                            <div className="flex items-center gap-3">
-                                                <div className="text-[10px] text-gray-400 flex items-center gap-0.5 cursor-pointer hover:text-red-500 transition-colors" onClick={() => handleDeleteMisc(misc.id)}>
-                                                    <Trash2 className="w-3 h-3" />移除
+                                            {Number(misc.sellPrice) > 0 && (
+                                                <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded w-fit">
+                                                   <Calendar className="w-3 h-3 text-green-500" />
+                                                   <input 
+                                                       type="date" 
+                                                       value={misc.sellDate} 
+                                                       onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} 
+                                                       onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
+                                                       className="bg-transparent text-[10px] font-bold text-green-600 outline-none cursor-pointer" 
+                                                   />
                                                 </div>
-                                                {Number(misc.sellPrice) > 0 && (
-                                                    <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded">
-                                                       <Calendar className="w-3 h-3 text-green-500" />
-                                                       <input 
-                                                           type="date" 
-                                                           value={misc.sellDate} 
-                                                           onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} 
-                                                           className="bg-transparent text-[10px] font-bold text-green-600 outline-none cursor-pointer" 
-                                                       />
-                                                    </div>
-                                                )}
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
                                     
-                                    {/* 右側：購入成本 -> 售出金額 -> 數量 */}
+                                    {/* 右側：售出單價 -> 購入單價 */}
                                     <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
                                         <div className="flex flex-col items-end">
-                                            <label className="text-[9px] text-red-400 font-bold uppercase mb-0.5">購入單價</label>
-                                            <div className="flex items-baseline">
-                                                <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
-                                                <input 
-                                                    type="number" placeholder="0" step="50" min="0"
-                                                    value={misc.buyPrice} 
-                                                    onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
-                                                    className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-red-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-red-600 placeholder-red-200 transition-colors" 
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col items-end">
-                                            <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出單價</label>
+                                            <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
                                             <div className="flex items-baseline">
                                                 <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
                                                 <input 
@@ -2981,13 +2969,16 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         </div>
 
                                         <div className="flex flex-col items-end">
-                                            <label className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">數量</label>
-                                            <input 
-                                                type="number" min="1" 
-                                                value={misc.quantity} 
-                                                onChange={e => handleMiscChange(misc.id, 'quantity', e.target.value)} 
-                                                className="w-8 sm:w-10 text-right border-b border-gray-200 focus:border-black outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors" 
-                                            />
+                                            <label className="text-[9px] text-red-400 font-bold uppercase mb-0.5">購入</label>
+                                            <div className="flex items-baseline">
+                                                <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                <input 
+                                                    type="number" placeholder="0" step="50" min="0"
+                                                    value={misc.buyPrice} 
+                                                    onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
+                                                    className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-red-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-red-600 placeholder-red-200 transition-colors" 
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -3002,6 +2993,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 </div>
             </div>
 
+            {/* 🌟 移除卡片確認 Modal */}
             {cardToRemove && (
                 <Modal title="移除卡片" onClose={() => setCardToRemove(null)} className="max-w-sm" footer={
                     <div className="flex gap-2 w-full">
@@ -3018,6 +3010,26 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     </div>
                 }>
                     <div className="p-6 text-center text-gray-600 text-sm">確定要從這筆盤收中移除「{cardToRemove.title}」嗎？<br/>這不會刪除卡片圖鑑本身。</div>
+                </Modal>
+            )}
+
+            {/* 🌟 移除雜物確認 Modal */}
+            {miscToRemove && (
+                <Modal title="移除雜物" onClose={() => setMiscToRemove(null)} className="max-w-sm" footer={
+                    <div className="flex gap-2 w-full">
+                        <button onClick={() => setMiscToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                        <button onClick={() => {
+                            const miscId = miscToRemove.id;
+                            const nextMisc = miscItems.filter(m => m.id !== miscId);
+                            setMiscItems(nextMisc);
+                            const nextDetails = recalculatePrices(totalAmount, manualIds, cardDetails, nextMisc);
+                            setCardDetails(nextDetails);
+                            syncToParent(form, totalAmount, manualIds, nextDetails, nextMisc);
+                            setMiscToRemove(null);
+                        }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                    </div>
+                }>
+                    <div className="p-6 text-center text-gray-600 text-sm">確定要刪除雜物「{miscToRemove.name}」嗎？</div>
                 </Modal>
             )}
 
