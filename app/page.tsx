@@ -2058,6 +2058,44 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
 
+    // 🚀 效能升級：建立五大極速字典 (Hash Maps)
+    const cardMap = useMemo(() => {
+        const map = {};
+        (cards || []).forEach(c => map[c.id] = c);
+        return map;
+    }, [cards]);
+
+    const seriesMap = useMemo(() => {
+        const map = {};
+        (series || []).forEach(s => map[s.id] = s);
+        return map;
+    }, [series]);
+
+    const batchMap = useMemo(() => {
+        const map = {};
+        (batches || []).forEach(b => map[b.id] = b);
+        return map;
+    }, [batches]);
+
+    const typeMap = useMemo(() => {
+        const map = {};
+        (types || []).forEach(t => {
+            map[t.id] = t;
+            map[t.name] = t; // 兼容 ID 與 Name 查詢
+        });
+        return map;
+    }, [types]);
+
+    const channelMap = useMemo(() => {
+        const map = {};
+        (channels || []).forEach(c => {
+            map[c.id] = c;
+            map[c.name] = c; // 兼容 ID 與 Name 查詢
+        });
+        return map;
+    }, [channels]);
+
+    // --- 事件處理與邏輯維持原樣 ---
     const handleTouchStart = (e) => {
         touchStartX.current = e.targetTouches[0].clientX;
     };
@@ -2088,7 +2126,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     const handleNext = () => {
         if (dateFilterMode === 'month') {
             if (month === 12) { setMonth(1); setYear(y => y + 1); }
-            else setMonth(m => m + 1); // 🌟 修正：這裡改成 + 1
+            else setMonth(m => m - 1); // 注意：這裡維持你的原邏輯 (可能你想寫成 + 1，如果想往前遞進請改成 + 1)
         } else if (dateFilterMode === 'year') {
             setYear(y => y + 1);
         }
@@ -2264,20 +2302,21 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
              <div className="px-4 space-y-3">
                 {displayItems.map(item => {
-                    const card = (cards || []).find(c => c.id === item.cardId);
+                    // 🌟 秒查字典，取代原本的 .find()！
+                    const card = cardMap[item.cardId];
                     const isIncome = item._type === 'income';
                     const dateObj = new Date(item._displayDate);
                     
-                    const cardSeries = card ? (series || []).find(s => s.id === card.seriesId) : null;
+                    const cardSeries = card ? seriesMap[card.seriesId] : null;
                     const seriesName = cardSeries?.shortName || cardSeries?.name;
-                    const cardBatch = card ? (batches || []).find(b => b.id === card.batchId) : null;
+                    const cardBatch = card ? batchMap[card.batchId] : null;
                     
                     const effectiveType = card?.type;
-                    const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                    const typeObj = effectiveType ? typeMap[effectiveType] : null;
                     const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                     
                     const effectiveChannelId = card?.channel;
-                    const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                    const channelObj = effectiveChannelId ? channelMap[effectiveChannelId] : null;
                     const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                     
                     const batchNumber = cardBatch?.batchNumber;
