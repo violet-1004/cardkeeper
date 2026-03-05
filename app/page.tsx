@@ -2116,6 +2116,20 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                 }
                 expense += (Number(record.totalAmount) || 0);
             }
+            
+            // 🌟 處理雜物售出，把它當作獨立的收入列在紀錄裡
+            (record.items || []).forEach((item, idx) => {
+                if (item.isMisc && Number(item.sellPrice) > 0 && item.sellDate && isDateInRange(item.sellDate)) {
+                    if (filterType === 'all' || filterType === 'income') {
+                        items.push({
+                            id: `misc_${record.id}_${idx}`, _virtualId: `misc_${record.id}_${idx}`, _type: 'income',
+                            name: `[雜物] ${item.name} (${record.name})`, _displayPrice: item.sellPrice, _displayDate: item.sellDate,
+                            note: '雜物售出', isMisc: true, originalRecord: record
+                        });
+                    }
+                    income += (Number(item.sellPrice) || 0);
+                }
+            });
         });
 
         const filteredItems = items.filter(item => !(item.bulkRecordId && item._type === 'expense'));
@@ -2211,8 +2225,9 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     <span className="text-sm text-gray-800 font-black leading-none mt-0.5">{dateObj.getDate()}</span>
                                 </div>
                                 <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
-                                    {item._isBulkHeader ? (
-                                        // 🌟 紀錄清單的包裹頭像超級小，強制壓成 50px 尺寸，檔案會小於 1KB
+                                    {item.isMisc ? (
+                                        <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
+                                    ) : item._isBulkHeader ? (
                                         item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
                                     ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" /> )}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
@@ -2639,33 +2654,48 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     });
 
     const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
-    const [manualIds, setManualIds] = useState((record?.items || []).filter(i => i.isManual).map(i => i.cardId));
-    const [cardDetails, setCardDetails] = useState((record?.items || []).reduce((acc, item) => ({ ...acc, [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice } }), {}));
+    const [manualIds, setManualIds] = useState((record?.items || []).filter(i => !i.isMisc && i.isManual).map(i => i.cardId));
+    const [cardDetails, setCardDetails] = useState((record?.items || []).filter(i => !i.isMisc).reduce((acc, item) => ({ ...acc, [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice } }), {}));
     
+    // 🌟 新增：雜物狀態
+    const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, id: i.id || Date.now().toString() + Math.random() })));
+
     const [showCardSelector, setShowCardSelector] = useState(false);
     const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
-
-    // 🌟 新增：長按移除卡片的狀態
     const [cardToRemove, setCardToRemove] = useState(null);
 
+    // 🌟 總售價包含卡片售價與雜物售價
     const totalSoldPrice = useMemo(() => {
-        if (!record?.id || !inventory) return 0;
-        return selectedCards.reduce((sum, card) => sum + (Number(inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id)?.sellPrice) || 0), 0);
-    }, [record?.id, selectedCards, inventory]);
+        let sum = 0;
+        if (record?.id && inventory) {
+            sum += selectedCards.reduce((acc, card) => acc + (Number(inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id)?.sellPrice) || 0), 0);
+        }
+        sum += miscItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
+        return sum;
+    }, [record?.id, selectedCards, inventory, miscItems]);
 
     const recordIdRef = useRef(record?.id);
     useEffect(() => { recordIdRef.current = record?.id; }, [record?.id]);
 
-    const syncToParent = (updatedForm, updatedTotal, updatedManualIds, updatedDetails) => {
+    const syncToParent = (updatedForm, updatedTotal, updatedManualIds, updatedDetails, updatedMiscItems) => {
         if (!updatedForm.name.trim() && !recordIdRef.current) return;
-        const finalItems = Object.keys(updatedDetails).map(cardId => ({
+        
+        const finalCardItems = Object.keys(updatedDetails).map(cardId => ({
             cardId, quantity: Number(updatedDetails[cardId].quantity) || 1,
-            buyPrice: Number(updatedDetails[cardId].buyPrice) || 0, isManual: updatedManualIds.includes(cardId)
+            buyPrice: Number(updatedDetails[cardId].buyPrice) || 0, isManual: updatedManualIds.includes(cardId),
+            isMisc: false
         }));
-        onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: finalItems });
+
+        const finalMiscItems = updatedMiscItems.map(m => ({
+            id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
+            sellDate: m.sellDate, isMisc: true, isManual: true
+        }));
+
+        onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems] });
     };
 
-    const recalculatePrices = (totalVal, currentManualIds, currentDetails) => {
+    // 🌟 計算均價時要扣除雜物的成本
+    const recalculatePrices = (totalVal, currentManualIds, currentDetails, currentMiscItems) => {
         if (totalVal === '' || totalVal === undefined) {
             const next = { ...currentDetails };
             Object.keys(next).forEach(cardId => { if (!currentManualIds.includes(cardId)) next[cardId] = { ...next[cardId], buyPrice: '' }; });
@@ -2673,12 +2703,18 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         }
         const total = Number(totalVal) || 0;
         let manualSum = 0; let autoQty = 0;
+        
         Object.keys(currentDetails).forEach(cardId => {
             const qty = Number(currentDetails[cardId]?.quantity || 1);
             if (currentManualIds.includes(cardId)) manualSum += (Number(currentDetails[cardId]?.buyPrice || 0) * qty);
             else autoQty += qty;
         });
-        const remaining = Math.max(0, total - manualSum);
+
+        // 🌟 扣除雜物成本
+        let miscSum = 0;
+        currentMiscItems.forEach(m => { miscSum += Number(m.buyPrice) || 0; });
+
+        const remaining = Math.max(0, total - manualSum - miscSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
         const next = { ...currentDetails };
         let hasChanges = false;
@@ -2693,13 +2729,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     const handleFormChange = (key, value) => {
         const nextForm = { ...form, [key]: value };
-        setForm(nextForm); syncToParent(nextForm, totalAmount, manualIds, cardDetails);
+        setForm(nextForm); syncToParent(nextForm, totalAmount, manualIds, cardDetails, miscItems);
     };
 
     const handleTotalAmountChange = (e) => {
         const val = e.target.value; setTotalAmount(val);
-        const nextDetails = recalculatePrices(val, manualIds, cardDetails);
-        setCardDetails(nextDetails); syncToParent(form, val, manualIds, nextDetails);
+        const nextDetails = recalculatePrices(val, manualIds, cardDetails, miscItems);
+        setCardDetails(nextDetails); syncToParent(form, val, manualIds, nextDetails, miscItems);
     };
 
     const handleDetailChange = (id, field, value) => {
@@ -2710,20 +2746,47 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         }
         setManualIds(nextManualIds);
         let nextDetails = { ...cardDetails, [id]: { ...cardDetails[id], [field]: value } };
-        nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
-        setCardDetails(nextDetails); syncToParent(form, totalAmount, nextManualIds, nextDetails);
+        nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails, miscItems);
+        setCardDetails(nextDetails); syncToParent(form, totalAmount, nextManualIds, nextDetails, miscItems);
+    };
+
+    // 🌟 雜物操作
+    const handleAddMisc = () => {
+        const newMisc = [...miscItems, { id: Date.now().toString(), name: '', buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0] }];
+        setMiscItems(newMisc);
+        syncToParent(form, totalAmount, manualIds, cardDetails, newMisc);
+    };
+
+    const handleMiscChange = (id, field, value) => {
+        let nextMisc = miscItems.map(m => m.id === id ? { ...m, [field]: value } : m);
+        setMiscItems(nextMisc);
+        if (field === 'buyPrice') {
+            const nextDetails = recalculatePrices(totalAmount, manualIds, cardDetails, nextMisc);
+            setCardDetails(nextDetails);
+            syncToParent(form, totalAmount, manualIds, nextDetails, nextMisc);
+        } else {
+            syncToParent(form, totalAmount, manualIds, cardDetails, nextMisc);
+        }
+    };
+
+    const handleDeleteMisc = (id) => {
+        if (!confirm("確定刪除此雜物？")) return;
+        const nextMisc = miscItems.filter(m => m.id !== id);
+        setMiscItems(nextMisc);
+        const nextDetails = recalculatePrices(totalAmount, manualIds, cardDetails, nextMisc);
+        setCardDetails(nextDetails);
+        syncToParent(form, totalAmount, manualIds, nextDetails, nextMisc);
     };
 
     const handleConfirmSelectCards = (newSelectedIds) => {
         const nextDetails = {};
         let nextManualIds = manualIds.filter(id => newSelectedIds.includes(id));
         newSelectedIds.forEach(id => { nextDetails[id] = cardDetails[id] || { quantity: 1, buyPrice: '' }; });
-        const finalDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
-        setCardDetails(finalDetails); setManualIds(nextManualIds); syncToParent(form, totalAmount, nextManualIds, finalDetails);
+        const finalDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails, miscItems);
+        setCardDetails(finalDetails); setManualIds(nextManualIds); syncToParent(form, totalAmount, nextManualIds, finalDetails, miscItems);
         setShowCardSelector(false);
     };
 
-    // --- 長按刪除計時器 ---
     const pressTimer = useRef(null);
     const startPress = (cardId, title) => {
         pressTimer.current = setTimeout(() => { setCardToRemove({ id: cardId, title }); }, 500);
@@ -2792,7 +2855,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         </button>
                     </div>
                     
-                    <div className="space-y-3 max-h-[45vh] overflow-y-auto px-1">
+                    <div className="space-y-3 max-h-[40vh] overflow-y-auto px-1 pb-4">
                         {selectedCards.map(card => {
                             const cardSeries = (series || []).find(s => s.id === card.seriesId);
                             const cardBatch = (batches || []).find(b => b.id === card.batchId);
@@ -2802,7 +2865,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
                             return (
                                 <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
-                                    {/* 🌟 觸控防禦網，左半邊皆為長按熱區 */}
                                     <div 
                                         className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
                                         onMouseDown={() => startPress(card.id, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
@@ -2839,10 +2901,84 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         })}
                         {selectedCards.length === 0 && <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">點擊右上角「+ 新增卡片」加入這筆盤收的內容</div>}
                     </div>
+
+                    {/* 🌟 新增：雜物記錄區塊 */}
+                    <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
+                        <div className="flex justify-between items-end mb-3 px-1">
+                            <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                                <Tag className="w-4 h-4 text-orange-500"/>
+                                雜物記錄 
+                                <span className="text-gray-400 text-xs font-normal ml-1">(自動從總金額扣除)</span>
+                            </div>
+                            <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                                <Plus className="w-3 h-3"/> 新增雜物
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-3 px-1">
+                            {miscItems.map((misc, idx) => (
+                                <div key={misc.id} className="bg-orange-50/30 p-3 rounded-xl border border-orange-100">
+                                    <div className="flex justify-between items-center mb-2 gap-2">
+                                        <input 
+                                            type="text" 
+                                            placeholder={`雜物名稱 ${idx + 1} (例如: 空專、海報)`} 
+                                            value={misc.name} 
+                                            onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} 
+                                            className="font-bold text-sm bg-transparent border-b border-gray-300 outline-none focus:border-orange-500 w-full text-gray-800 placeholder-gray-400" 
+                                        />
+                                        <button onClick={() => handleDeleteMisc(misc.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 font-bold uppercase">購入成本 (含在盤收內)</label>
+                                            <div className="flex items-center mt-1 bg-white border border-gray-200 rounded-lg px-2 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
+                                                <span className="text-xs text-gray-400 font-bold">$</span>
+                                                <input 
+                                                    type="number" placeholder="0" 
+                                                    value={misc.buyPrice} 
+                                                    onChange={(e) => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
+                                                    className="w-full bg-transparent p-1.5 text-sm font-bold text-gray-700 outline-none" 
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-green-600 font-bold uppercase">售出金額 (產生收入)</label>
+                                            <div className="flex items-center mt-1 bg-white border border-green-200 rounded-lg px-2 focus-within:ring-2 focus-within:ring-green-100 transition-all">
+                                                <span className="text-xs text-green-500 font-bold">$</span>
+                                                <input 
+                                                    type="number" placeholder="0" 
+                                                    value={misc.sellPrice} 
+                                                    onChange={(e) => handleMiscChange(misc.id, 'sellPrice', e.target.value)} 
+                                                    className="w-full bg-transparent p-1.5 text-sm font-bold text-green-700 outline-none" 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {Number(misc.sellPrice) > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-orange-100/50 animate-fade-in">
+                                            <label className="text-[10px] text-gray-500 font-bold flex items-center gap-1"><Calendar className="w-3 h-3"/> 售出日期</label>
+                                            <input 
+                                                type="date" 
+                                                value={misc.sellDate} 
+                                                onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} 
+                                                className="w-full bg-white border border-gray-200 rounded-lg p-1.5 text-xs outline-none mt-1 text-gray-600 font-medium" 
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {miscItems.length === 0 && (
+                                <div className="text-[11px] text-gray-400 text-center py-2">
+                                    這筆盤收中沒有獨立計算的雜物。
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* 🌟 精美的移除卡片確認視窗 */}
             {cardToRemove && (
                 <Modal title="移除卡片" onClose={() => setCardToRemove(null)} className="max-w-sm" footer={
                     <div className="flex gap-2 w-full">
@@ -2852,15 +2988,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             let nextManualIds = manualIds.filter(id => id !== cardId);
                             let nextDetails = { ...cardDetails };
                             delete nextDetails[cardId];
-                            nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
-                            setCardDetails(nextDetails); setManualIds(nextManualIds); syncToParent(form, totalAmount, nextManualIds, nextDetails);
+                            nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails, miscItems);
+                            setCardDetails(nextDetails); setManualIds(nextManualIds); syncToParent(form, totalAmount, nextManualIds, nextDetails, miscItems);
                             setCardToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
                 }>
-                    <div className="p-6 text-center text-gray-600 text-sm">
-                        確定要從這筆盤收中移除「{cardToRemove.title}」嗎？<br/>這不會刪除卡片圖鑑本身。
-                    </div>
+                    <div className="p-6 text-center text-gray-600 text-sm">確定要從這筆盤收中移除「{cardToRemove.title}」嗎？<br/>這不會刪除卡片圖鑑本身。</div>
                 </Modal>
             )}
 
@@ -4342,8 +4476,8 @@ export default function App() {
           savedRecordId = newRecord.id;
           setEditingBulkRecord(newRecord);
       }
-
-      const newBulkInvItems = (dataToSave.items || []).map((item, idx) => {
+        // 🌟 將雜物過濾掉，避免存入實體卡片庫存，雜物只會存在盤收的 JSON 裡
+      const newBulkInvItems = (dataToSave.items || []).filter(item => !item.isMisc).map((item, idx) => {
           const existing = (inventory || []).find(i => i.bulkRecordId === savedRecordId && i.cardId === item.cardId);
           return {
               id: existing?.id || `bulk_inv_${savedRecordId}_${idx}_${Date.now()}`,
