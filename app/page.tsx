@@ -1979,12 +1979,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   );
 }
 
-// 🚀 效能升級：卡片身分證字典
-    const cardMap = useMemo(() => {
-        const map = {};
-        (cards || []).forEach(c => map[c.id] = c);
-        return map;
-    }, [cards]);
 
 function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types }) {
     const [dateFilterMode, setDateFilterMode] = useState('month');
@@ -2315,7 +2309,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     );
 }
 
-function BulkTab({ records, allRecords, onAdd, onEdit }) {
+function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
 
@@ -4593,37 +4587,6 @@ export default function App() {
           batches={batches}
           channels={channels}
           types={types}
-          setViewingCard={setViewingCard}
-          inventory={inventory}
-          openModal={openModal}
-          uniqueTypes={uniqueTypes}
-          combinedTypes={combinedTypes}
-          combinedChannels={combinedChannels}
-          uniqueSeriesTypes={uniqueSeriesTypes}
-          
-          isSelectionMode={isSelectionMode}
-          setIsSelectionMode={setIsSelectionMode}
-          selectedCardIds={selectedCardIds}
-          setSelectedCardIds={setSelectedCardIds}
-          batchCategorizeTarget={batchCategorizeTarget}
-          setBatchCategorizeTarget={setBatchCategorizeTarget}
-          
-          allCards={cards}
-          setGroups={setGroups}
-          setSeries={setSeries}
-          setBatches={setBatches}
-          setCards={setCards}
-          cols={libraryCols}
-          setCols={setLibraryCols}
-        />;
-        return <LibraryTab 
-          currentGroupId={currentGroupId}
-          members={members} setMembers={setMembers}
-          series={series} 
-          batches={batches}
-          channels={channels}
-          types={types}
-          cards={cards}
           setViewingCard={setViewingCard}
           inventory={inventory}
           openModal={openModal}
