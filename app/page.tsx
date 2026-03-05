@@ -2228,8 +2228,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     {item.isMisc ? (
                                         <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
                                     ) : item._isBulkHeader ? (
-                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
-                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" /> )}
+                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />)}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
@@ -2866,7 +2866,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
                                     >
                                         <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
-                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" />
+                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3424,7 +3424,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                             <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                     <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
-                                        <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" />
+                                        <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
