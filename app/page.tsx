@@ -4655,19 +4655,7 @@ export default function App() {
           setCols={setLibraryCols}
         />;
       case 'collection': 
-        return <CollectionTab 
-           cards={(cards || []).filter(c => c.groupId === currentGroupId)}
-           inventory={inventory}
-           setViewingCard={setViewingCard}
-           members={(members || []).filter(m => m.groupId === currentGroupId)}
-           series={(series || []).filter(s => s.groupId === currentGroupId)}
-           batches={(batches || []).filter(b => b.groupId === currentGroupId)}
-           channels={(channels || []).filter(c => c.groupId === currentGroupId)}
-           types={(types || []).filter(t => t.groupId === currentGroupId)}
-           sales={sales} 
-           cols={collectionCols}
-           setCols={setCollectionCols}
-        />;
+        return <CollectionTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} members={members} series={series} batches={batches} channels={channels} types={types} sales={sales} cols={cols} setCols={setCols} />;
       case 'bulk':
         return <BulkTab 
             records={(bulkRecords || []).filter(r => r.groupId === currentGroupId)} 
@@ -4676,36 +4664,9 @@ export default function App() {
             onEdit={(record) => setEditingBulkRecord(record)} 
         />;
       case 'inventory': 
-        return <InventoryTab 
-          cards={cards} 
-          inventory={groupInventory} 
-          setViewingCard={setViewingCard}
-          series={series}
-          batches={batches}
-          channels={channels}
-          types={types}
-          bulkRecords={(bulkRecords || []).filter(r => r.groupId === currentGroupId)} 
-        />;
+        return <InventoryTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} series={series} bulkRecords={bulkRecords} batches={batches} channels={channels} types={types} />;
       case 'export': 
-        return <ExportTab 
-          cards={cards} 
-          customLists={customLists} 
-          setCustomLists={setCustomLists} 
-          setViewingCard={setViewingCard}
-          isExportMode={isExportMode}
-          setIsExportMode={setIsExportMode}
-          sales={sales} 
-          inventory={inventory}
-          members={members}
-          series={series}
-          batches={batches}
-          channels={channels}
-          types={types}
-          cols={exportCols}
-          setCols={setExportCols}
-          showDetails={exportShowDetails}
-          setShowDetails={setExportShowDetails}
-        />;
+        return <ExportTab cards={cards} customLists={customLists} setCustomLists={setCustomLists} setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} sales={sales} inventory={inventory} members={members} series={series} batches={batches} channels={channels} types={types} cols={cols} setCols={setCols} showDetails={showDetails} setShowDetails={setShowDetails} />;
       default: return null;
     }
   };
