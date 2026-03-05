@@ -1983,7 +1983,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 }
 
 
-function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types }) {
+function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types, onEditBulkRecord }) {
     const [dateFilterMode, setDateFilterMode] = useState('month');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -2128,7 +2128,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                         name: record.name,
                         _displayPrice: record.totalAmount,
                         _displayDate: record.buyDate,
-                        image: record.image
+                        image: record.image,
+                        originalRecord: record // 🌟 補上這行，把整包原始盤收紀錄存起來
                     });
                 }
                 expense += (Number(record.totalAmount) || 0);
@@ -2260,8 +2261,19 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     const displayTitle = card ? [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ') : '';
                     const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片');
 
-                    return (
-                        <div key={item._virtualId} onClick={() => !item._isBulkHeader && card && setViewingCard(card)} className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform">
+                    return (<div key={item._virtualId} 
+                            onClick={() => {
+                                if (item._isBulkHeader && item.originalRecord) {
+                                    // 🌟 如果是包裹，就打開盤收詳情
+                                    if (onEditBulkRecord) onEditBulkRecord(item.originalRecord);
+                                } else if (card) {
+                                    // 🌟 如果是卡片，就打開卡片詳情
+                                    setViewingCard(card);
+                                }
+                            }} 
+                            className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-indigo-300 border border-transparent"
+                        >
+
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
                                     <span className="text-[8px] text-gray-400 font-bold leading-none">{dateObj.getFullYear()}</span>
@@ -4629,8 +4641,8 @@ export default function App() {
             onAdd={() => setEditingBulkRecord('new')} 
             onEdit={(record) => setEditingBulkRecord(record)} 
         />;
-      case 'inventory': 
-        return <InventoryTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} series={series} bulkRecords={bulkRecords} batches={batches} channels={channels} types={types} />;
+     case 'inventory': 
+        return <InventoryTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} series={series} bulkRecords={bulkRecords} batches={batches} channels={channels} types={types} onEditBulkRecord={(record) => setEditingBulkRecord(record)} />;
       case 'export': 
         return <ExportTab 
           cards={cards} customLists={customLists} setCustomLists={setCustomLists} 
