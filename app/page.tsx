@@ -1592,7 +1592,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 圖鑑列表：強制壓縮畫質至 30%，並加入 lazy 懶加載 */}
-                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" />
+                                <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 20vw" unoptimized={true} />
                             {card.isWishlist && (
                                 <div className="absolute top-2 left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
                                     <Heart className="w-3 h-3 fill-current" />
