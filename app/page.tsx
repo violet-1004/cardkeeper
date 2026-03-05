@@ -2371,17 +2371,33 @@ function BulkTab({ records, allRecords, onAdd, onEdit }) {
         }
     };
 
-    const RenderFilterSection = ({ label, options, current, onChange }) => (
-        <div className="flex items-center gap-3 overflow-hidden">
-           <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
-           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
-               <button onClick={() => onChange('All')} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-all ${current === 'All' ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>全部</button>
-               {(options || []).map(opt => (
-                   <button key={opt} onClick={() => onChange(opt)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-all ${current === opt ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>{opt}</button>
-               ))}
-           </div>
+    const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
+     <div className="flex items-center gap-3 overflow-hidden">
+        <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+            {(options || []).map(opt => {
+                const id = typeof opt === 'object' ? opt.id : opt;
+                const name = mapName ? mapName(opt) : opt;
+                const isSelected = current === id;
+                return (
+                    // 🌟 換成最安全的原生 button，避免 FilterTagItem 遺失報錯
+                    <button 
+                        key={id}
+                        onClick={() => {
+                            if (disableToggleOff && isSelected) return; 
+                            onChange(isSelected ? 'All' : id);
+                        }}
+                        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${
+                            isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                    >
+                        {name}
+                    </button>
+                )
+            })}
         </div>
-    );
+     </div>
+  );
 
     return (
         <div className="space-y-6 pb-24">
