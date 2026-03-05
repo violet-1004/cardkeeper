@@ -1999,6 +1999,18 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
 
+    const pressTimer = useRef(null);
+    const hasLongPressed = useRef(false);
+
+    const startPress = (item) => {
+        hasLongPressed.current = false;
+        pressTimer.current = setTimeout(() => {
+            hasLongPressed.current = true;
+            setItemToDelete(item); 
+        }, 500); 
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
+
     const cardMap = useMemo(() => {
         const map = {};
         (cards || []).forEach(c => map[c.id] = c);
@@ -2664,6 +2676,23 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     
     const [cardToRemove, setCardToRemove] = useState(null);
     const [miscToRemove, setMiscToRemove] = useState(null); // 🌟 新增雜物移除狀態
+
+    // 👇 請把這塊完整的長按大腦，貼在 BulkRecordDetailView 的上半部 👇
+    const [cardToRemove, setCardToRemove] = useState(null);
+    const [miscToRemove, setMiscToRemove] = useState(null);
+    
+    const pressTimer = useRef(null);
+    const startPress = (cardId, title) => {
+        pressTimer.current = setTimeout(() => { setCardToRemove({ id: cardId, title }); }, 500);
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
+
+    const miscPressTimer = useRef(null);
+    const startMiscPress = (miscId, name) => {
+        miscPressTimer.current = setTimeout(() => { setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
+    };
+    const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
+    // 👆 補到這裡 👆
 
     // 🌟 總售價包含卡片售價與雜物售價 (雜物固定為 1)
     const totalSoldPrice = useMemo(() => {
