@@ -2656,16 +2656,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [manualIds, setManualIds] = useState((record?.items || []).filter(i => !i.isMisc && i.isManual).map(i => i.cardId));
     const [cardDetails, setCardDetails] = useState((record?.items || []).filter(i => !i.isMisc).reduce((acc, item) => ({ ...acc, [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice } }), {}));
     
-    // 🌟 雜物狀態 (移除數量)
     const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, id: i.id || Date.now().toString() + Math.random() })));
 
     const [showCardSelector, setShowCardSelector] = useState(false);
     const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
     
     const [cardToRemove, setCardToRemove] = useState(null);
-    const [miscToRemove, setMiscToRemove] = useState(null); // 🌟 新增雜物移除狀態
+    const [miscToRemove, setMiscToRemove] = useState(null);
 
-    // 🌟 總售價包含卡片售價與雜物售價 (雜物固定為 1)
     const totalSoldPrice = useMemo(() => {
         let sum = 0;
         if (record?.id && inventory) {
@@ -2695,7 +2693,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems] });
     };
 
-    // 🌟 計算均價時扣除雜物成本 (雜物固定為 1)
     const recalculatePrices = (totalVal, currentManualIds, currentDetails, currentMiscItems) => {
         if (totalVal === '' || totalVal === undefined) {
             const next = { ...currentDetails };
@@ -2777,18 +2774,28 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         setShowCardSelector(false);
     };
 
+    // 🌟 升級版：加入防幽靈點擊機制的長按大腦 (卡片專用)
     const pressTimer = useRef(null);
+    const hasCardLongPressed = useRef(false);
     const startPress = (cardId, title) => {
-        pressTimer.current = setTimeout(() => { setCardToRemove({ id: cardId, title }); }, 500);
+        hasCardLongPressed.current = false;
+        pressTimer.current = setTimeout(() => { 
+            hasCardLongPressed.current = true;
+            setCardToRemove({ id: cardId, title }); 
+        }, 500);
     };
-    // 🌟 絕對不能漏掉這行！
     const cancelPress = () => clearTimeout(pressTimer.current);
 
+    // 🌟 升級版：加入防幽靈點擊機制的長按大腦 (雜物專用)
     const miscPressTimer = useRef(null);
+    const hasMiscLongPressed = useRef(false);
     const startMiscPress = (miscId, name) => {
-        miscPressTimer.current = setTimeout(() => { setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
+        hasMiscLongPressed.current = false;
+        miscPressTimer.current = setTimeout(() => { 
+            hasMiscLongPressed.current = true;
+            setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); 
+        }, 500);
     };
-    // 🌟 還有這行也要確保存在！
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
     return (
@@ -2863,8 +2870,15 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
                             return (
                                 <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
-                                    {/* 🌟 拿掉誤貼的長按事件，恢復乾淨的左側排版 */}
-                                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                                    {/* 🌟 卡片：觸控防禦網與防幽靈點擊 */}
+                                    <div 
+                                        className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
+                                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                        onMouseDown={() => startPress(card.id, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                                        onTouchStart={() => startPress(card.id, displayTitle)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+                                        onContextMenu={(e) => { e.preventDefault(); cancelPress(); setCardToRemove({ id: card.id, title: displayTitle }); }}
+                                        onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
+                                    >
                                         <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
                                             <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" />
                                         </div>
@@ -2895,7 +2909,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         {selectedCards.length === 0 && <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">點擊右上角「+ 新增卡片」加入這筆盤收的內容</div>}
                     </div>
 
-                    {/* 🌟 完美的雜物記錄區塊 */}
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
@@ -2911,13 +2924,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <div className="space-y-3 px-1 pb-4">
                             {miscItems.map((misc, idx) => (
                                 <div key={misc.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-colors relative">
-                                    
-                                    {/* 左側：熱區長按刪除，並防止輸入框觸發長按 */}
+                                    {/* 🌟 雜物：觸控防禦網與防幽靈點擊 */}
                                     <div 
                                         className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto cursor-pointer select-none"
+                                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                         onMouseDown={() => startMiscPress(misc.id, misc.name)} onMouseUp={cancelMiscPress} onMouseLeave={cancelMiscPress}
-                                        onTouchStart={() => startMiscPress(misc.id, misc.name)} onTouchEnd={cancelMiscPress}
+                                        onTouchStart={() => startMiscPress(misc.id, misc.name)} onTouchEnd={cancelMiscPress} onTouchMove={cancelMiscPress}
                                         onContextMenu={(e) => { e.preventDefault(); cancelMiscPress(); setMiscToRemove({ id: misc.id, name: misc.name || '未命名雜物' }); }}
+                                        onClick={(e) => { if (hasMiscLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
                                     >
                                         <div className="w-10 h-10 sm:w-12 sm:h-12 aspect-square flex-shrink-0 bg-orange-50 rounded-lg border border-orange-100 flex items-center justify-center">
                                             <Tag className="w-5 h-5 text-orange-400" />
@@ -2946,7 +2960,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         </div>
                                     </div>
                                     
-                                    {/* 右側：售出單價 -> 購入單價 */}
                                     <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
                                         <div className="flex flex-col items-end">
                                             <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
@@ -2960,7 +2973,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                 />
                                             </div>
                                         </div>
-
                                         <div className="flex flex-col items-end">
                                             <label className="text-[9px] text-red-400 font-bold uppercase mb-0.5">購入</label>
                                             <div className="flex items-baseline">
@@ -4501,8 +4513,16 @@ export default function App() {
           setEditingBulkRecord(newRecord);
       }
         // 🌟 將雜物過濾掉，避免存入實體卡片庫存，雜物只會存在盤收的 JSON 裡
+      // 🌟 將雜物過濾掉，避免存入實體卡片庫存，雜物只會存在盤收的 JSON 裡
       const newBulkInvItems = (dataToSave.items || []).filter(item => !item.isMisc).map((item, idx) => {
           const existing = (inventory || []).find(i => i.bulkRecordId === savedRecordId && i.cardId === item.cardId);
+          
+          // 🌟 智慧判斷備註：如果是系統產生的「來自盤收:」，就自動跟隨新名字更新！(保留使用者手動寫的其他備註)
+          let nextNote = existing?.note || `來自盤收: ${dataToSave.name}`;
+          if (nextNote.startsWith('來自盤收:')) {
+              nextNote = `來自盤收: ${dataToSave.name}`;
+          }
+
           return {
               id: existing?.id || `bulk_inv_${savedRecordId}_${idx}_${Date.now()}`,
               cardId: item.cardId,
@@ -4515,7 +4535,7 @@ export default function App() {
               sellPrice: existing?.sellPrice || 0,
               sellDate: existing?.sellDate || '',
               condition: existing?.condition || '無損',
-              note: existing?.note || `來自盤收: ${dataToSave.name}`
+              note: nextNote // 🌟 套用最新的備註
           };
       });
 
@@ -4529,9 +4549,13 @@ export default function App() {
   };
 
   const handleDeleteBulkRecord = async (id) => {
+      // 1. 更新前端畫面狀態，立刻隱藏
       setBulkRecords(prev => prev.filter(r => r.id !== id));
       setInventory(prev => prev.filter(i => i.bulkRecordId !== id));
       setEditingBulkRecord(null);
+      
+      // 2. 同步刪除資料庫資料 (先刪除盤收內的所有小卡紀錄，再刪除盤收本身)
+      await supabase.from('ui_inventory').delete().eq('bulk_record_id', id);
       await supabase.from('bulk_records').delete().eq('id', id);
   };
 
