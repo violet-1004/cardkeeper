@@ -1600,13 +1600,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                             )}
 
                             {isSelectionMode && (
-                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white/50 border-gray-400'}`}
+                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white/50 border-gray-400'}`}
                                 >
                                     {isSelected && <Check className="w-3 h-3 text-white" />}
                                 </div>
                             )}
-                            {!isSelectionMode && qty > 0 && (
-                                <div className="absolute top-2 right-2 bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
+                            {qty > 0 && (
+                                /* 🌟 解除隱藏限制，並在批量選取時自動將位置改為 right-8 避免重疊 */
+                                <div className={`absolute top-2 ${isSelectionMode ? 'right-8' : 'right-2'} bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow z-10 transition-all`}>
                                     {qty}
                                 </div>
                             )}
@@ -2117,17 +2118,20 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                 expense += (Number(record.totalAmount) || 0);
             }
             
-            // 🌟 處理雜物售出，把它當作獨立的收入列在紀錄裡
+            // 🌟 處理雜物售出 (把 單價 x 數量 算成總收入)
             (record.items || []).forEach((item, idx) => {
-                if (item.isMisc && Number(item.sellPrice) > 0 && item.sellDate && isDateInRange(item.sellDate)) {
+                const qty = Number(item.quantity) || 1;
+                const totalSellPrice = (Number(item.sellPrice) || 0) * qty;
+                
+                if (item.isMisc && totalSellPrice > 0 && item.sellDate && isDateInRange(item.sellDate)) {
                     if (filterType === 'all' || filterType === 'income') {
                         items.push({
                             id: `misc_${record.id}_${idx}`, _virtualId: `misc_${record.id}_${idx}`, _type: 'income',
-                            name: `[雜物] ${item.name} (${record.name})`, _displayPrice: item.sellPrice, _displayDate: item.sellDate,
-                            note: '雜物售出', isMisc: true, originalRecord: record
+                            name: `[雜物] ${item.name} (${record.name})`, _displayPrice: totalSellPrice, _displayDate: item.sellDate,
+                            note: `數量: ${qty}`, isMisc: true, originalRecord: record
                         });
                     }
-                    income += (Number(item.sellPrice) || 0);
+                    income += totalSellPrice;
                 }
             });
         });
@@ -2657,20 +2661,20 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [manualIds, setManualIds] = useState((record?.items || []).filter(i => !i.isMisc && i.isManual).map(i => i.cardId));
     const [cardDetails, setCardDetails] = useState((record?.items || []).filter(i => !i.isMisc).reduce((acc, item) => ({ ...acc, [item.cardId]: { quantity: item.quantity, buyPrice: item.buyPrice } }), {}));
     
-    // 🌟 新增：雜物狀態
-    const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, id: i.id || Date.now().toString() + Math.random() })));
+    // 🌟 雜物狀態 (加入預設數量 1)
+    const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, quantity: i.quantity || 1, id: i.id || Date.now().toString() + Math.random() })));
 
     const [showCardSelector, setShowCardSelector] = useState(false);
     const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
     const [cardToRemove, setCardToRemove] = useState(null);
 
-    // 🌟 總售價包含卡片售價與雜物售價
+    // 🌟 總售價包含卡片售價與雜物售價 (考量數量)
     const totalSoldPrice = useMemo(() => {
         let sum = 0;
         if (record?.id && inventory) {
             sum += selectedCards.reduce((acc, card) => acc + (Number(inventory.find(i => i.bulkRecordId === record.id && i.cardId === card.id)?.sellPrice) || 0), 0);
         }
-        sum += miscItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
+        sum += miscItems.reduce((acc, item) => acc + ((Number(item.sellPrice) || 0) * (Number(item.quantity) || 1)), 0);
         return sum;
     }, [record?.id, selectedCards, inventory, miscItems]);
 
@@ -2687,14 +2691,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         }));
 
         const finalMiscItems = updatedMiscItems.map(m => ({
-            id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
+            id: m.id, name: m.name, quantity: Number(m.quantity) || 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
             sellDate: m.sellDate, isMisc: true, isManual: true
         }));
 
         onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems] });
     };
 
-    // 🌟 計算均價時要扣除雜物的成本
+    // 🌟 計算均價時扣除雜物成本 (考量數量)
     const recalculatePrices = (totalVal, currentManualIds, currentDetails, currentMiscItems) => {
         if (totalVal === '' || totalVal === undefined) {
             const next = { ...currentDetails };
@@ -2710,9 +2714,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             else autoQty += qty;
         });
 
-        // 🌟 扣除雜物成本
         let miscSum = 0;
-        currentMiscItems.forEach(m => { miscSum += Number(m.buyPrice) || 0; });
+        currentMiscItems.forEach(m => { miscSum += (Number(m.buyPrice) || 0) * (Number(m.quantity) || 1); });
 
         const remaining = Math.max(0, total - manualSum - miscSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
@@ -2750,9 +2753,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         setCardDetails(nextDetails); syncToParent(form, totalAmount, nextManualIds, nextDetails, miscItems);
     };
 
-    // 🌟 雜物操作
     const handleAddMisc = () => {
-        const newMisc = [...miscItems, { id: Date.now().toString(), name: '', buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0] }];
+        const newMisc = [...miscItems, { id: Date.now().toString(), name: '', quantity: 1, buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0] }];
         setMiscItems(newMisc);
         syncToParent(form, totalAmount, manualIds, cardDetails, newMisc);
     };
@@ -2760,7 +2762,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const handleMiscChange = (id, field, value) => {
         let nextMisc = miscItems.map(m => m.id === id ? { ...m, [field]: value } : m);
         setMiscItems(nextMisc);
-        if (field === 'buyPrice') {
+        if (field === 'buyPrice' || field === 'quantity') {
             const nextDetails = recalculatePrices(totalAmount, manualIds, cardDetails, nextMisc);
             setCardDetails(nextDetails);
             syncToParent(form, totalAmount, manualIds, nextDetails, nextMisc);
@@ -2902,76 +2904,97 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         {selectedCards.length === 0 && <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">點擊右上角「+ 新增卡片」加入這筆盤收的內容</div>}
                     </div>
 
-                    {/* 🌟 新增：雜物記錄區塊 */}
+                    {/* 🌟 完美的雜物記錄區塊 */}
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
                                 <Tag className="w-4 h-4 text-orange-500"/>
                                 雜物記錄 
-                                <span className="text-gray-400 text-xs font-normal ml-1">(自動從總金額扣除)</span>
+                                <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
                             </div>
                             <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增雜物
                             </button>
                         </div>
                         
-                        <div className="space-y-3 px-1">
+                        <div className="space-y-3 px-1 pb-4">
                             {miscItems.map((misc, idx) => (
-                                <div key={misc.id} className="bg-orange-50/30 p-3 rounded-xl border border-orange-100">
-                                    <div className="flex justify-between items-center mb-2 gap-2">
-                                        <input 
-                                            type="text" 
-                                            placeholder={`雜物名稱 ${idx + 1} (例如: 空專、海報)`} 
-                                            value={misc.name} 
-                                            onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} 
-                                            className="font-bold text-sm bg-transparent border-b border-gray-300 outline-none focus:border-orange-500 w-full text-gray-800 placeholder-gray-400" 
-                                        />
-                                        <button onClick={() => handleDeleteMisc(misc.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-[10px] text-gray-500 font-bold uppercase">購入成本 (含在盤收內)</label>
-                                            <div className="flex items-center mt-1 bg-white border border-gray-200 rounded-lg px-2 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
-                                                <span className="text-xs text-gray-400 font-bold">$</span>
-                                                <input 
-                                                    type="number" placeholder="0" 
-                                                    value={misc.buyPrice} 
-                                                    onChange={(e) => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
-                                                    className="w-full bg-transparent p-1.5 text-sm font-bold text-gray-700 outline-none" 
-                                                />
-                                            </div>
+                                <div key={misc.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-colors relative">
+                                    
+                                    <div className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto">
+                                        <div className="w-10 h-10 sm:w-12 sm:h-12 aspect-square flex-shrink-0 bg-orange-50 rounded-lg border border-orange-100 flex items-center justify-center">
+                                            <Tag className="w-5 h-5 text-orange-400" />
                                         </div>
-                                        <div>
-                                            <label className="text-[10px] text-green-600 font-bold uppercase">售出金額 (產生收入)</label>
-                                            <div className="flex items-center mt-1 bg-white border border-green-200 rounded-lg px-2 focus-within:ring-2 focus-within:ring-green-100 transition-all">
-                                                <span className="text-xs text-green-500 font-bold">$</span>
-                                                <input 
-                                                    type="number" placeholder="0" 
-                                                    value={misc.sellPrice} 
-                                                    onChange={(e) => handleMiscChange(misc.id, 'sellPrice', e.target.value)} 
-                                                    className="w-full bg-transparent p-1.5 text-sm font-bold text-green-700 outline-none" 
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {Number(misc.sellPrice) > 0 && (
-                                        <div className="mt-2 pt-2 border-t border-orange-100/50 animate-fade-in">
-                                            <label className="text-[10px] text-gray-500 font-bold flex items-center gap-1"><Calendar className="w-3 h-3"/> 售出日期</label>
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
                                             <input 
-                                                type="date" 
-                                                value={misc.sellDate} 
-                                                onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} 
-                                                className="w-full bg-white border border-gray-200 rounded-lg p-1.5 text-xs outline-none mt-1 text-gray-600 font-medium" 
+                                                type="text" 
+                                                placeholder={`雜物名稱 ${idx + 1} (例: 專卡/海報)`} 
+                                                value={misc.name} 
+                                                onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} 
+                                                className="w-full text-sm font-bold text-gray-800 bg-transparent border-b border-transparent focus:border-orange-400 outline-none pb-0.5 placeholder-gray-300 mb-1 transition-colors" 
+                                            />
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-[10px] text-gray-400 flex items-center gap-0.5 cursor-pointer hover:text-red-500 transition-colors" onClick={() => handleDeleteMisc(misc.id)}>
+                                                    <Trash2 className="w-3 h-3" />移除
+                                                </div>
+                                                {Number(misc.sellPrice) > 0 && (
+                                                    <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded">
+                                                       <Calendar className="w-3 h-3 text-green-500" />
+                                                       <input 
+                                                           type="date" 
+                                                           value={misc.sellDate} 
+                                                           onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} 
+                                                           className="bg-transparent text-[10px] font-bold text-green-600 outline-none cursor-pointer" 
+                                                       />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* 右側：購入成本 -> 售出金額 -> 數量 */}
+                                    <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
+                                        <div className="flex flex-col items-end">
+                                            <label className="text-[9px] text-red-400 font-bold uppercase mb-0.5">購入單價</label>
+                                            <div className="flex items-baseline">
+                                                <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                <input 
+                                                    type="number" placeholder="0" step="50" min="0"
+                                                    value={misc.buyPrice} 
+                                                    onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
+                                                    className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-red-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-red-600 placeholder-red-200 transition-colors" 
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col items-end">
+                                            <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出單價</label>
+                                            <div className="flex items-baseline">
+                                                <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
+                                                <input 
+                                                    type="number" placeholder="0" step="50" min="0"
+                                                    value={misc.sellPrice} 
+                                                    onChange={e => handleMiscChange(misc.id, 'sellPrice', e.target.value)} 
+                                                    className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" 
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col items-end">
+                                            <label className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">數量</label>
+                                            <input 
+                                                type="number" min="1" 
+                                                value={misc.quantity} 
+                                                onChange={e => handleMiscChange(misc.id, 'quantity', e.target.value)} 
+                                                className="w-8 sm:w-10 text-right border-b border-gray-200 focus:border-black outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors" 
                                             />
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
                             ))}
                             {miscItems.length === 0 && (
-                                <div className="text-[11px] text-gray-400 text-center py-2">
-                                    這筆盤收中沒有獨立計算的雜物。
+                                <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">
+                                    此盤收未新增任何雜物。
                                 </div>
                             )}
                         </div>
