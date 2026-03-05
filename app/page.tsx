@@ -1662,15 +1662,23 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 }
 
 function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols }) {
-  const [filterSubunit, setFilterSubunit] = useState('All'); // 🌟 新增分隊狀態
+  // 🌟 1. 收藏櫃專屬狀態 (全數復活！)
+  const [viewMode, setViewMode] = useState('all'); // 全部、想要、販售
+  const [showDetails, setShowDetails] = useState(true);
+
+  const [filterSubunit, setFilterSubunit] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
   const [filterType, setFilterType] = useState('All');
   const [filterChannel, setFilterChannel] = useState('All');
 
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [cardMarks, setCardMarks] = useState({});
+  const [showSeriesModal, setShowSeriesModal] = useState(false);
+  const [filterSeriesType, setFilterSeriesType] = useState('All');
+  const [filterSeries, setFilterSeries] = useState('All');
+  const [filterBatch, setFilterBatch] = useState('All');
 
-  // 🚀 效能升級字典
+  // 🌟 2. 基礎卡池與效能字典
+  const allOwnedCards = useMemo(() => cards || [], [cards]);
+
   const inventoryMap = useMemo(() => {
       const map = {};
       (inventory || []).forEach(inv => {
@@ -1683,27 +1691,14 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   const salesMap = useMemo(() => {
       const map = {};
-      (sales || []).forEach(s => { if (s.quantity > 0) map[s.cardId] = s; });
+      (sales || []).forEach(s => { if (s.quantity > 0) map[s.cardId] = true; });
       return map;
   }, [sales]);
 
-  // 🌟 1. 取得目前視圖中所有的原始卡片 (Pool)
-  const poolCards = useMemo(() => {
-      if (!activeView) return [];
-      if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
-      if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
-      if (activeView === 'selling') return (cards || []).filter(c => salesMap[c.id]);
-      if (typeof activeView === 'object' && activeView.items) {
-          return activeView.items.map(item => (cards || []).find(c => c.id === item.cardId)).filter(Boolean);
-      }
-      return [];
-  }, [activeView, cards, inventoryMap, salesMap]);
-
-  // 🌟 2. 計算可用分隊並自動預設選取第一個
   const availableSubunits = useMemo(() => {
-      const ids = new Set(poolCards.map(c => c.memberId));
+      const ids = new Set(allOwnedCards.map(c => c.memberId));
       return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
-  }, [poolCards, members]);
+  }, [allOwnedCards, members]);
 
   useEffect(() => {
       if (availableSubunits.length > 0 && (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit))) {
@@ -1711,14 +1706,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       }
   }, [availableSubunits, filterSubunit]);
 
-  // 🌟 3. 連動過濾：成員、子類、通路 (皆維持圖鑑排序)
   const subunitFilteredCards = useMemo(() => {
-      if (filterSubunit === 'All') return poolCards;
-      return poolCards.filter(c => {
+      if (filterSubunit === 'All') return allOwnedCards;
+      return allOwnedCards.filter(c => {
           const m = (members || []).find(mem => mem.id === c.memberId);
           return m && m.subunit === filterSubunit;
       });
-  }, [poolCards, filterSubunit, members]);
+  }, [allOwnedCards, filterSubunit, members]);
 
   const availableMembers = useMemo(() => {
       const ids = new Set(subunitFilteredCards.map(c => c.memberId));
@@ -1760,8 +1754,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       return filtered;
   }, [allOwnedCards, batches, filterSeries]);
 
-  const getMemberName = (id) => (members || []).find(m => m.id === id)?.name || 'Unknown';
-  
   const getSeriesSummary = () => {
       const parts = [];
       if (filterSeriesType !== 'All') parts.push(filterSeriesType);
@@ -1866,7 +1858,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const ownedCount = filteredCards.filter(c => (inventoryMap[c.id] || 0) > 0).length;
   const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
-  // 🌟 5. 新增 disableToggleOff 屬性來防止取消選取
   const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
      <div className="flex items-center gap-3 overflow-hidden">
         <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
@@ -1881,7 +1872,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         text={name}
                         isSelected={isSelected}
                         onClick={() => {
-                            if (disableToggleOff && isSelected) return; // 已選取且不可取消時，無動作
+                            if (disableToggleOff && isSelected) return; 
                             onChange(isSelected ? 'All' : id);
                         }}
                         onLongPress={() => {}} 
@@ -1946,7 +1937,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            {/* 🌟 收藏櫃的頂部篩選：分隊鎖定不可取消，其他正常 */}
             {availableSubunits.length > 0 && (
                 <RenderFilterSection 
                     label="分隊" 
@@ -2019,7 +2009,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`} 
                     >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
-                            <img src={card.image} loading="lazy" className="w-full h-full object-cover pointer-events-none" />
+                            <img src={card.image} loading="lazy" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                             
                             {card.isWishlist && (
                                 <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
@@ -3654,7 +3644,6 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     
     // 🌟 核心視圖狀態：預設 null，讓畫面一開始顯示資料夾選單
     const [activeView, setActiveView] = useState(null);
-
     const [isListModalOpen, setIsListModalOpen] = useState(false);
     const [editingListId, setEditingListId] = useState(null);
     const [listTitleInput, setListTitleInput] = useState('');
