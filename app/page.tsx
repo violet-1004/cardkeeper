@@ -4586,6 +4586,37 @@ export default function App() {
     switch(activeTab) {
       case 'library': 
         return <LibraryTab 
+          cards={cards} // 🌟 補上這行：把卡片傳進去！
+          currentGroupId={currentGroupId}
+          members={members} setMembers={setMembers}
+          series={series} 
+          batches={batches}
+          channels={channels}
+          types={types}
+          setViewingCard={setViewingCard}
+          inventory={inventory}
+          openModal={openModal}
+          uniqueTypes={uniqueTypes}
+          combinedTypes={combinedTypes}
+          combinedChannels={combinedChannels}
+          uniqueSeriesTypes={uniqueSeriesTypes}
+          
+          isSelectionMode={isSelectionMode}
+          setIsSelectionMode={setIsSelectionMode}
+          selectedCardIds={selectedCardIds}
+          setSelectedCardIds={setSelectedCardIds}
+          batchCategorizeTarget={batchCategorizeTarget}
+          setBatchCategorizeTarget={setBatchCategorizeTarget}
+          
+          allCards={cards}
+          setGroups={setGroups}
+          setSeries={setSeries}
+          setBatches={setBatches}
+          setCards={setCards}
+          cols={libraryCols}
+          setCols={setLibraryCols}
+        />;
+        return <LibraryTab 
           currentGroupId={currentGroupId}
           members={members} setMembers={setMembers}
           series={series} 
@@ -4786,6 +4817,7 @@ export default function App() {
 
       {modalState.type === 'bulkOwn' && (
           <BulkOwnModal 
+             cards={cards} // 🌟 補上這行：讓批量入庫也能拿到完整卡片資料！
              selectedCards={(cards || []).filter(c => selectedCardIds.includes(c.id))}
              onClose={closeModal}
              onSave={handleBulkOwn}
