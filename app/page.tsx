@@ -4580,7 +4580,7 @@ export default function App() {
     switch(activeTab) {
       case 'library': 
         return <LibraryTab 
-          cards={cards} // 🌟 補上這行：把卡片傳進去！
+          cards={cards} 
           currentGroupId={currentGroupId}
           members={members} setMembers={setMembers}
           series={series} 
@@ -4607,13 +4607,20 @@ export default function App() {
           setSeries={setSeries}
           setBatches={setBatches}
           setCards={setCards}
-          cols={libraryCols}
-          setCols={setLibraryCols}
+          cols={libraryCols}           // 🌟 修正：對應 libraryCols
+          setCols={setLibraryCols}     // 🌟 修正：對應 setLibraryCols
         />;
       case 'collection': 
-        return <CollectionTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} members={members} series={series} batches={batches} channels={channels} types={types} sales={sales} cols={cols} setCols={setCols} />;
+        return <CollectionTab 
+          cards={cards} inventory={inventory} setViewingCard={setViewingCard} 
+          members={members} series={series} batches={batches} channels={channels} 
+          types={types} sales={sales} 
+          cols={collectionCols}       // 🌟 致命錯誤修正：把 cols 換成 collectionCols
+          setCols={setCollectionCols} // 🌟 致命錯誤修正：把 setCols 換成 setCollectionCols
+        />;
       case 'bulk':
         return <BulkTab 
+            cards={cards}
             records={(bulkRecords || []).filter(r => r.groupId === currentGroupId)} 
             allRecords={bulkRecords}
             onAdd={() => setEditingBulkRecord('new')} 
@@ -4622,7 +4629,16 @@ export default function App() {
       case 'inventory': 
         return <InventoryTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} series={series} bulkRecords={bulkRecords} batches={batches} channels={channels} types={types} />;
       case 'export': 
-        return <ExportTab cards={cards} customLists={customLists} setCustomLists={setCustomLists} setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} sales={sales} inventory={inventory} members={members} series={series} batches={batches} channels={channels} types={types} cols={cols} setCols={setCols} showDetails={showDetails} setShowDetails={setShowDetails} />;
+        return <ExportTab 
+          cards={cards} customLists={customLists} setCustomLists={setCustomLists} 
+          setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} 
+          sales={sales} inventory={inventory} members={members} series={series} 
+          batches={batches} channels={channels} types={types} 
+          cols={exportCols}                     // 🌟 修正：把 cols 換成 exportCols
+          setCols={setExportCols}               // 🌟 修正：把 setCols 換成 setExportCols
+          showDetails={exportShowDetails}       // 🌟 順手修正：把 showDetails 換成 exportShowDetails
+          setShowDetails={setExportShowDetails} // 🌟 順手修正
+        />;
       default: return null;
     }
   };
