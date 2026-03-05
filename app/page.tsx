@@ -1994,6 +1994,26 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
 
+    const pressTimer = useRef(null);
+    const hasLongPressed = useRef(false);
+
+    const startPress = (item) => {
+        hasLongPressed.current = false;
+        pressTimer.current = setTimeout(() => {
+            hasLongPressed.current = true;
+            if (item._isBulkHeader) {
+                if (confirm(`確定要刪除盤收紀錄「${item.name}」嗎？\n這將同時刪除內含的所有卡片庫存！`)) {
+                    if (onDeleteBulkRecord) onDeleteBulkRecord(item.originalRecord.id);
+                }
+            } else {
+                if (confirm(`確定要刪除這筆紀錄嗎？金額: $${item._displayPrice}`)) {
+                    if (onDeleteInventory) onDeleteInventory(item.id);
+                }
+            }
+        }, 600); // 600毫秒觸發長按
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
+
     // 🚀 效能升級：建立五大極速字典 (Hash Maps)
     const cardMap = useMemo(() => {
         const map = {};
@@ -2261,17 +2281,25 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     const displayTitle = card ? [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ') : '';
                     const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片');
 
-                    return (<div key={item._virtualId} 
-                            onClick={() => {
+                    return (
+                        <div key={item._virtualId} 
+                            onMouseDown={() => startPress(item)}
+                            onMouseUp={cancelPress}
+                            onMouseLeave={cancelPress}
+                            onTouchStart={() => startPress(item)}
+                            onTouchEnd={cancelPress}
+                            onClick={(e) => {
+                                if (hasLongPressed.current) {
+                                    e.preventDefault(); // 如果是長按，就不觸發點擊打開
+                                    return;
+                                }
                                 if (item._isBulkHeader && item.originalRecord) {
-                                    // 🌟 如果是包裹，就打開盤收詳情
                                     if (onEditBulkRecord) onEditBulkRecord(item.originalRecord);
                                 } else if (card) {
-                                    // 🌟 如果是卡片，就打開卡片詳情
                                     setViewingCard(card);
                                 }
                             }} 
-                            className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-indigo-300 border border-transparent"
+                            className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-indigo-300 border border-transparent select-none"
                         >
 
                             <div className="flex items-center gap-3 overflow-hidden">
@@ -2721,6 +2749,25 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     
     const [showCardSelector, setShowCardSelector] = useState(false);
     const selectedCards = (cards || []).filter(c => Object.keys(cardDetails).includes(c.id));
+
+    // 🌟 長按移除卡片計時器
+    const pressTimer = useRef(null);
+    const startPress = (cardId, title) => {
+        pressTimer.current = setTimeout(() => {
+            if (confirm(`確定要從這筆盤收中移除「${title || '這張卡片'}」嗎？`)) {
+                let nextManualIds = manualIds.filter(id => id !== cardId);
+                let nextDetails = { ...cardDetails };
+                delete nextDetails[cardId];
+                
+                nextDetails = recalculatePrices(totalAmount, nextManualIds, nextDetails);
+                setCardDetails(nextDetails);
+                setManualIds(nextManualIds);
+                syncToParent(form, totalAmount, nextManualIds, nextDetails);
+            }
+        }, 600);
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
+  
 
     const totalSoldPrice = useMemo(() => {
         if (!record?.id || !inventory) return 0;
@@ -3561,21 +3608,32 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
 
                         return (
                             <div key={card.id} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${manualIds.includes(card.id) ? 'bg-indigo-50/30' : ''}`}>
-                                <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border">
-                                <Image 
-                                src={card.image} 
-                                alt="卡片圖片" 
-                                fill 
-                                className="object-cover pointer-events-none" 
-                                sizes="(max-width: 768px) 33vw, 15vw"
-                                />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
-                                    {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
+                                {/* 🌟 將長按事件綁定在左半邊，避免點擊輸入框時誤觸 */}
+                                <div 
+                                    className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
+                                    onMouseDown={() => startPress(card.id, displayTitle)}
+                                    onMouseUp={cancelPress}
+                                    onMouseLeave={cancelPress}
+                                    onTouchStart={() => startPress(card.id, displayTitle)}
+                                    onTouchEnd={cancelPress}
+                                >
+                                    <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
+                                        <Image 
+                                        src={card.image} 
+                                        alt="卡片圖片" 
+                                        fill 
+                                        className="object-cover pointer-events-none" 
+                                        sizes="(max-width: 768px) 33vw, 15vw"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
+                                        {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
+                                        <div className="text-[9px] text-gray-400 mt-1 flex items-center gap-1"><Trash2 className="w-3 h-3" />長按可移除</div>
+                                    </div>
                                 </div>
                                 
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 flex-shrink-0">
                                     <div className="flex flex-col items-end">
                                         <label className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">數量</label>
                                         <input 
@@ -4641,9 +4699,24 @@ export default function App() {
             onAdd={() => setEditingBulkRecord('new')} 
             onEdit={(record) => setEditingBulkRecord(record)} 
         />;
-     case 'inventory': 
-        return <InventoryTab cards={cards} inventory={inventory} setViewingCard={setViewingCard} series={series} bulkRecords={bulkRecords} batches={batches} channels={channels} types={types} onEditBulkRecord={(record) => setEditingBulkRecord(record)} />;
-      case 'export': 
+        case 'inventory': 
+        return <InventoryTab 
+            cards={cards} 
+            inventory={inventory} 
+            setViewingCard={setViewingCard} 
+            series={series} 
+            bulkRecords={bulkRecords} 
+            batches={batches} 
+            channels={channels} 
+            types={types} 
+            onEditBulkRecord={(record) => setEditingBulkRecord(record)} 
+            onDeleteInventory={async (id) => {
+                setInventory(prev => prev.filter(i => i.id !== id));
+                await supabase.from('ui_inventory').delete().eq('id', id);
+            }}
+            onDeleteBulkRecord={handleDeleteBulkRecord}
+        />;
+           case 'export': 
         return <ExportTab 
           cards={cards} customLists={customLists} setCustomLists={setCustomLists} 
           setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} 
