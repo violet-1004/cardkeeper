@@ -4668,7 +4668,14 @@ export default function App() {
       const cleanData = (obj) => {
           const cleaned = {};
           (allowedKeys[type] || []).forEach(key => {
-              if (obj[key] !== undefined) cleaned[key] = obj[key];
+              if (obj[key] !== undefined) {
+                  // 🌟 修正：如果是日期欄位且為空字串，轉為 null，避免資料庫報錯
+                  if (key === 'date' && obj[key] === '') {
+                      cleaned[key] = null;
+                  } else {
+                      cleaned[key] = obj[key];
+                  }
+              }
           });
           return cleaned;
       };
