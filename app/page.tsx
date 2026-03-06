@@ -9,7 +9,7 @@ import {
   X, Maximize2, Minimize2, Save, BookOpen, User, Settings, Filter, 
   ChevronRight, MoreHorizontal, Search, Edit2, Check, Users, Heart, ShoppingBag, FolderPlus,
   ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp,
-  ChevronLeft, Folder, Package, Copy
+  ChevronLeft, Folder, Package, Copy, Disc
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
@@ -549,7 +549,7 @@ const SubunitTagItem = ({ text, isSelected, onClick, onLongPress }) => {
 };
 
 // --- 5. 表單與模態框 ---
-function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '韓拍', 'Mercari', '推特', '蝦皮'] , uniqueSources, onRenameSource, onDeleteSource}) {
+function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '韓拍', 'Mercari', '推特', '蝦皮'] , uniqueSources, onRenameSource, onDeleteSource, albums = [] }) {
     const isEdit = !!initialData.id;
     const isBulk = !!initialData.bulkRecordId;
     const initialSellDate = initialData.sellDate || (initialData.sellPrice > 0 ? initialData.buyDate : new Date().toISOString().split('T')[0]);
@@ -562,6 +562,9 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
         source: '',
         condition: '無損',
         status: '到貨',
+        albumId: '',
+        albumStatus: '未拆',
+        albumQuantity: 0,
         note: '',
         ...initialData,
         sellDate: initialSellDate
@@ -589,7 +592,8 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
                 _originalId: dataIdRef.current, // 🌟 修正：使用當前最新的 ID 作為原始 ID，避免因 ID 更新導致找不到舊資料
                 buyPrice: Number(nextForm.buyPrice) || 0,
                 sellPrice: Number(nextForm.sellPrice) || 0,
-                quantity: Number(nextForm.quantity) || 1
+                quantity: Number(nextForm.quantity) || 1,
+                albumQuantity: Number(nextForm.albumQuantity) || 0
             }, (newId) => {
                 if (newId) dataIdRef.current = newId;
             });
@@ -737,6 +741,43 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
                             className={`w-full bg-transparent text-2xl sm:text-4xl font-black text-red-600 outline-none text-right placeholder-red-200 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
                     </div>
+                </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
+                <div className="flex justify-between items-center">
+                     <label className="text-xs font-bold text-gray-500 flex items-center gap-1"><Disc className="w-3 h-3" /> 搭配專輯</label>
+                     {form.albumQuantity > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold">含專</span>}
+                </div>
+                <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                     <div className="relative">
+                         <select 
+                            value={form.albumId || ''} 
+                            onChange={e => handleChange('albumId', e.target.value)}
+                            className="w-full border p-2 rounded-lg bg-white text-xs outline-none appearance-none"
+                         >
+                            <option value="">選擇專輯...</option>
+                            {albums.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                         </select>
+                         <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                     </div>
+                     <button 
+                        type="button"
+                        onClick={() => handleChange('albumStatus', form.albumStatus === '未拆' ? '空專' : '未拆')}
+                        className={`px-2 py-1 rounded-lg border text-xs font-bold whitespace-nowrap ${form.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                     >
+                        {form.albumStatus}
+                     </button>
+                     <div className="flex items-center border rounded-lg bg-white overflow-hidden">
+                        <button type="button" onClick={() => handleChange('albumQuantity', Math.max(0, (Number(form.albumQuantity)||0) - 1))} className="px-2 hover:bg-gray-50 text-gray-500 h-full flex items-center"><Minus className="w-3 h-3" /></button>
+                        <input 
+                            type="number" 
+                            value={form.albumQuantity} 
+                            onChange={e => handleChange('albumQuantity', Math.max(0, Number(e.target.value)))}
+                            className="w-8 text-center text-xs font-bold outline-none appearance-none border-x h-full" 
+                        />
+                        <button type="button" onClick={() => handleChange('albumQuantity', (Number(form.albumQuantity)||0) + 1)} className="px-2 hover:bg-gray-50 text-gray-500 h-full flex items-center"><Plus className="w-3 h-3" /></button>
+                     </div>
                 </div>
             </div>
 
@@ -925,6 +966,8 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     const totalValidQty = validInv.reduce((acc, curr) => acc + (Number(curr.quantity) || 1), 0);
     // 4. 總金額 / 總張數 = 真實均價
     const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
+
+    const albums = useMemo(() => (series || []).filter(s => s.type === '專輯' && s.groupId === card.groupId), [series, card.groupId]);
 
     // 🌟 偵測重複的盤收資料 (同一個 bulkRecordId 出現多次)
     const duplicateBulkItems = useMemo(() => {
@@ -1248,6 +1291,11 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                                         {inv.source && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded">{inv.source}</span>}
                                         {inv.condition && <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 rounded">{inv.condition}</span>}
                                         <span className="text-xs text-gray-500">{inv.note || '無備註'}</span>
+                                        {inv.albumQuantity > 0 && (
+                                            <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 rounded border border-purple-100 flex items-center gap-1">
+                                                <Disc className="w-3 h-3" /> {inv.albumStatus} x{inv.albumQuantity}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="text-right flex flex-col items-end gap-0.5">
@@ -1344,6 +1392,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                                 uniqueSources={uniqueSources}
                                 onRenameSource={onRenameSource}
                                 onDeleteSource={onDeleteSource}
+                                albums={albums}
                             />
                         </form>
                     </div>
@@ -2554,6 +2603,11 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                         {isIncome && <span className="text-[9px] bg-green-100 text-green-600 px-1 rounded-sm font-bold">售出</span>}
                                         <span className="truncate">{item.note || (item._isBulkHeader ? '批量購入支出' : (isIncome ? '出售' : '購買'))}</span>
                                     </div>
+                                    {item.albumQuantity > 0 && (
+                                        <div className="text-[9px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded w-fit mt-0.5 flex items-center gap-1">
+                                            <Disc className="w-2.5 h-2.5" /> 含專 x{item.albumQuantity}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className={`text-sm font-black whitespace-nowrap ml-2 ${isIncome ? 'text-green-600' : 'text-gray-900'}`}>
@@ -2586,9 +2640,11 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     );
 }
 
-function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
+function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series, setInventory, setSales }) {
+    const [viewMode, setViewMode] = useState('bulk'); // 'bulk' | 'album'
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
+    const [albumPrices, setAlbumPrices] = useState({});
 
     const availableStatuses = ['未發貨', '囤貨', '到貨'];
     const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r.source).filter(Boolean))], [allRecords, records]);
@@ -2639,36 +2695,128 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
      </div>
   );
 
+    // Album Overview Logic
+    const albumInventory = useMemo(() => {
+        const map = {};
+        (inventory || []).forEach(inv => {
+            if (inv.albumQuantity > 0 && inv.albumId) {
+                if (!map[inv.albumId]) map[inv.albumId] = { count: 0, items: [] };
+                map[inv.albumId].count += inv.albumQuantity;
+                map[inv.albumId].items.push(inv);
+            }
+        });
+        return map;
+    }, [inventory]);
+
+    const albumList = useMemo(() => {
+        return Object.keys(albumInventory).map(albumId => {
+            const s = (series || []).find(ser => ser.id === albumId);
+            return {
+                id: albumId,
+                name: s?.name || '未知專輯',
+                date: s?.date || '9999-12-31',
+                image: s?.image,
+                count: albumInventory[albumId].count,
+                items: albumInventory[albumId].items
+            };
+        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    }, [albumInventory, series]);
+
+    const handleSellAlbum = async (albumId) => {
+        const price = Number(albumPrices[albumId]) || 0;
+        const targetItems = albumInventory[albumId]?.items || [];
+        const targetItem = targetItems.find(i => i.albumQuantity > 0);
+        
+        if (!targetItem) return alert("庫存不足！");
+
+        const newQuantity = targetItem.albumQuantity - 1;
+        const updatedItem = { ...targetItem, albumQuantity: newQuantity };
+        
+        setInventory(prev => prev.map(i => i.id === targetItem.id ? updatedItem : i));
+        await supabase.from('ui_inventory').update({ album_quantity: newQuantity }).eq('id', targetItem.id);
+
+        const newSale = {
+            id: Date.now().toString(),
+            cardId: targetItem.cardId,
+            price: price,
+            quantity: 1,
+            date: new Date().toISOString().split('T')[0],
+            note: `售出專輯: ${(series || []).find(s => s.id === albumId)?.name || '未知'}`,
+            color: 'bg-purple-500'
+        };
+        setSales(prev => [...prev, newSale]);
+        await supabase.from('ui_sales').insert(toSnakeCase(newSale));
+    };
+
     return (
         <div className="space-y-6 pb-24">
             <div className="flex justify-between items-center px-2">
                 <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收包裹管理</h2>
-                <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增包裹</button>
-            </div>
-            <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
-                <RenderFilterSection label="狀態" options={availableStatuses} current={filterStatus} onChange={setFilterStatus} />
-                {availableSources.length > 0 && <RenderFilterSection label="來源" options={availableSources} current={filterSource} onChange={setFilterSource} />}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {filteredRecords.map(record => (
-                    <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
-                        <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
-                            {/* 🌟 限制包裹清單的縮圖檔案大小 */}
-                            {record.image ? <Image src={record.image} alt={record.name || 'bulk'} fill sizes="150px" className="object-cover pointer-events-none" unoptimized={true} /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
-                        </div>
-                        <div className="px-1 flex flex-col flex-1 justify-between">
-                            <div>
-                                <div className="font-bold text-sm text-gray-800 leading-tight line-clamp-2 mb-1">{record.name}</div>
-                                <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 truncate mb-1.5"><span className="text-red-500">${Number(record.totalAmount).toLocaleString()}</span><span>· {(record.items || []).length} 張卡片</span></div>
-                            </div>
-                            <div className="flex gap-1.5 flex-wrap mt-auto pt-1">
-                                {record.status && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${getStatusStyle(record.status)}`}>{record.status}</span>}
-                                {record.source && <span className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 font-bold truncate max-w-[80px]">{record.source}</span>}
-                            </div>
-                        </div>
+                <div className="flex gap-2">
+                    <div className="bg-gray-100 p-1 rounded-lg flex items-center">
+                        <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>包裹</button>
+                        <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
                     </div>
-                ))}
+                    {viewMode === 'bulk' && <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>}
+                </div>
             </div>
+            
+            {viewMode === 'bulk' ? (
+                <>
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
+                        <RenderFilterSection label="狀態" options={availableStatuses} current={filterStatus} onChange={setFilterStatus} />
+                        {availableSources.length > 0 && <RenderFilterSection label="來源" options={availableSources} current={filterSource} onChange={setFilterSource} />}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {filteredRecords.map(record => (
+                            <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
+                                <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
+                                    {/* 🌟 限制包裹清單的縮圖檔案大小 */}
+                                    {record.image ? <Image src={record.image} alt={record.name || 'bulk'} fill sizes="150px" className="object-cover pointer-events-none" unoptimized={true} /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
+                                </div>
+                                <div className="px-1 flex flex-col flex-1 justify-between">
+                                    <div>
+                                        <div className="font-bold text-sm text-gray-800 leading-tight line-clamp-2 mb-1">{record.name}</div>
+                                        <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 truncate mb-1.5"><span className="text-red-500">${Number(record.totalAmount).toLocaleString()}</span><span>· {(record.items || []).length} 張卡片</span></div>
+                                    </div>
+                                    <div className="flex gap-1.5 flex-wrap mt-auto pt-1">
+                                        {record.status && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${getStatusStyle(record.status)}`}>{record.status}</span>}
+                                        {record.source && <span className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 font-bold truncate max-w-[80px]">{record.source}</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            ) : (
+                <div className="space-y-3 px-2">
+                    {albumList.map(album => (
+                        <div key={album.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
+                                {album.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-gray-800 text-sm truncate">{album.name}</div>
+                                <div className="text-xs text-gray-500">庫存: <span className="font-bold text-indigo-600">{album.count}</span></div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center border rounded-lg overflow-hidden bg-gray-50">
+                                    <span className="px-2 text-xs text-gray-400 font-bold">$</span>
+                                    <input 
+                                        type="number" 
+                                        placeholder="售價" 
+                                        value={albumPrices[album.id] || ''} 
+                                        onChange={e => setAlbumPrices({...albumPrices, [album.id]: e.target.value})}
+                                        className="w-16 bg-transparent text-sm font-bold text-gray-800 outline-none py-1.5"
+                                    />
+                                </div>
+                                <button onClick={() => handleSellAlbum(album.id)} className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">售出</button>
+                            </div>
+                        </div>
+                    ))}
+                    {albumList.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有專輯庫存</div>}
+                </div>
+            )}
         </div>
     );
 }
@@ -5048,6 +5196,10 @@ export default function App() {
             allRecords={bulkRecords}
             onAdd={() => setEditingBulkRecord('new')} 
             onEdit={(record) => setEditingBulkRecord(record)} 
+            inventory={inventory}
+            series={series}
+            setInventory={setInventory}
+            setSales={setSales}
         />;
         case 'inventory': 
         return <InventoryTab 
