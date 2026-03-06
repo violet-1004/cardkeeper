@@ -462,7 +462,7 @@ const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick })
       className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
     >
         {/* 🌟 限制最大生成寬度為 120px，強制伺服器輸出極小 KB 數的縮圖 */}
-        {series.image && <Image src={series.image} alt={series.name} fill sizes="120px" className="object-cover brightness-75 group-hover:brightness-100 transition-all pointer-events-none" />}
+        {series.image && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
         <div className="absolute inset-0 flex flex-col justify-end p-2 bg-gradient-to-t from-black/70 to-transparent">
             <span className="text-white font-bold text-sm truncate w-full">{series.name}</span>
             {series.shortName && <span className="text-white/70 text-[10px]">{series.shortName}</span>}
@@ -481,7 +481,7 @@ const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) =
       className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
     >
         {/* 🌟 限制最大生成寬度為 100px */}
-        {batch.image && <Image src={batch.image} alt={batch.name || 'batch'} fill sizes="100px" className="object-cover opacity-90 hover:opacity-100 pointer-events-none" />}
+        {batch.image && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
        <div className="absolute inset-0 flex items-end p-1 bg-gradient-to-t from-black/60 via-transparent to-transparent">
             <span className="text-xs font-bold text-white line-clamp-2 w-full leading-tight">{batch.name}</span>
         </div>
@@ -1988,7 +1988,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                     <div key={card.id} onClick={() => setViewingCard(card)} className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`}>
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
-                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                                <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                             {card.isWishlist && <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                         {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
                         </div>
@@ -2271,8 +2271,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     {item.isMisc ? (
                                         <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
                                     ) : item._isBulkHeader ? (
-                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
-                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />)}
+                                        item.image ? <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />: <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                    ) : (card && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />)}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
@@ -2644,7 +2644,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                 }}
                             >
                                 <div className="aspect-[2/3] bg-gray-100 relative">
-                                    <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                                    <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                                 </div>
                                 {count > 0 && (
                                     <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow z-10">
@@ -2909,7 +2909,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
                                     >
                                         <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
-                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                            <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3467,7 +3467,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                             <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                     <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
-                                        <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                       <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3820,7 +3820,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 return (
                     <div key={idx} onClick={() => !isEditMode && setViewingCard(card)} className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform">
                         <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0 overflow-hidden">
-                            <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" unoptimized={true}/>
+                            <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                             <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
                                 {isEditMode ? (
                                     <CardMarkInput initialValue={cardMarks[card.id]} onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})} />
