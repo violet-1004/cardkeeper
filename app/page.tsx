@@ -1772,7 +1772,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 
                         return (
                             <div key={card.id} 
-                                className={`cursor-pointer group relative select-none ${isSelected ? 'scale-95' : ''} ${qty === 0 && !isSelectionMode ? 'opacity-50 grayscale hover:grayscale-0 hover:opacity-100' : ''}`}
+                                className={`cursor-pointer group relative select-none ${isSelected ? 'scale-95' : ''}`}
                                 style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                 onMouseDown={() => { if(isSelectionMode) startPress(card.id); }} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                 onTouchStart={() => { if(isSelectionMode) startPress(card.id); }} onTouchEnd={cancelPress} onTouchMove={cancelPress}
@@ -1787,7 +1787,13 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                 }}
                             >
                                 <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-600' : 'border-gray-100'}`}>
-                                    <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
+                                    {card.image ? (
+                                        <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                            <ImageIcon className="w-8 h-8" />
+                                        </div>
+                                    )}
                                     <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
                                         {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                         {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
@@ -2154,7 +2160,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                     <div key={card.id} onClick={() => setViewingCard(card)} className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`}>
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
-                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                            {card.image ? (
+                                <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    <ImageIcon className="w-8 h-8" />
+                                </div>
+                            )}
                             
                             <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
                                 {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
@@ -2426,7 +2438,11 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                         <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
                                     ) : item._isBulkHeader ? (
                                         item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
-                                    ) : (card && <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />)}
+                                    ) : (card && card.image ? (
+                                        <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />
+                                    ) : (
+                                        <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-300"><ImageIcon className="w-4 h-4" /></div>
+                                    ))}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
@@ -2798,7 +2814,11 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                 }}
                             >
                                 <div className="aspect-[2/3] bg-gray-100 relative">
-                                    <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                                    {card.image ? (
+                                        <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-6 h-6" /></div>
+                                    )}
                                 </div>
                                 {count > 0 && (
                                     <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow z-10">
@@ -3064,7 +3084,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
                                     >
                                         <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
-                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                            {card.image ? (
+                                                <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-4 h-4" /></div>
+                                            )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3634,7 +3658,11 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                             <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                     <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
-                                        <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                        {card.image ? (
+                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-4 h-4" /></div>
+                                        )}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
@@ -3987,7 +4015,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 return (
                     <div key={idx} onClick={() => !isEditMode && setViewingCard(card)} className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform">
                         <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0 overflow-hidden">
-                            <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" unoptimized={true}/>
+                            {card.image ? (
+                                <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" unoptimized={true}/>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    <ImageIcon className="w-8 h-8" />
+                                </div>
+                            )}
                             <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
                                 {isEditMode ? (
                                     <CardMarkInput initialValue={cardMarks[card.id]} onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})} />
@@ -4389,6 +4423,8 @@ export default function App() {
           return publicUrl;
       } catch (err) {
           console.error("圖片上傳失敗:", err);
+          // 🌟 增加錯誤提示
+          alert(`圖片上傳失敗！\n錯誤訊息: ${err.message || '未知錯誤'}\n請檢查 Supabase 儲存空間是否已滿 (402) 或網路連線 (502)。`);
           return null;
       }
   };
@@ -4446,16 +4482,30 @@ export default function App() {
 
       // 🌟 1. 單筆資料的圖片上傳
       if (data.image) {
-          data.image = await uploadImageToSupabase(data.image);
+          const uploadedUrl = await uploadImageToSupabase(data.image);
+          // 🌟 如果上傳失敗 (回傳 null) 且原本是 base64 (代表是新圖片)，則中斷儲存，避免資料損壞
+          if (uploadedUrl === null && data.image.startsWith('data:')) {
+              return; 
+          }
+          data.image = uploadedUrl;
       }
 
       // 🌟 2. 處理批量新增小卡
       if (type === 'card' && Array.isArray(data)) {
           const processedData = await Promise.all(data.map(async (item) => {
               let imageUrl = item.image;
-              if (imageUrl) imageUrl = await uploadImageToSupabase(imageUrl);
+              if (imageUrl && imageUrl.startsWith('data:')) {
+                   const uploaded = await uploadImageToSupabase(imageUrl);
+                   imageUrl = uploaded;
+              }
               return { ...item, image: imageUrl };
           }));
+          
+          // 檢查是否有上傳失敗的 (如果是新圖片且變成了 null)
+          if (processedData.some(d => d.image === null && d.image !== data.find(x => x.name === d.name)?.image)) {
+               alert("部分圖片上傳失敗，已取消批量建立。");
+               return;
+          }
 
           const newCards = processedData.map((item, idx) => ({ ...item, id: Date.now().toString() + idx }));
           setCards(prev => [...prev, ...newCards]);
@@ -4629,7 +4679,9 @@ export default function App() {
       const dataToSave = { ...data, groupId: data.groupId || currentGroupId };
 
       if (dataToSave.image && !dataToSave.image.startsWith('http')) {
-          dataToSave.image = await uploadImageToSupabase(dataToSave.image);
+          const uploaded = await uploadImageToSupabase(dataToSave.image);
+          if (uploaded === null) return; // Stop if upload failed
+          dataToSave.image = uploaded;
       }
 
       if (dataToSave.id) {
