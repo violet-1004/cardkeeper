@@ -2812,6 +2812,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     cardId: item.cardId,
                     buyPrice: item.buyPrice,
                     sellPrice: matchedInv?.sellPrice || '',
+                    sellDate: matchedInv?.sellDate || '', // 🌟 初始化售出日期
                     isManual: item.isManual
                 };
             });
@@ -2837,7 +2838,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         
         const finalCardItems = updatedCardItems.map(item => ({
             id: item.uid, // 回傳 inventory ID 給 App
-            cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0,
+            cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate, // 🌟 傳遞售出日期
             isManual: item.isManual, isMisc: false
         }));
 
@@ -2922,7 +2923,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         const nextCardItems = newSelectedItems.map(newItem => {
             const existing = cardItems.find(c => c.uid === newItem.uid);
             if (existing) return existing;
-            return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', isManual: false };
+            return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false }; // 🌟 初始化新卡片的日期
         });
         const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems);
         setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems);
@@ -3035,6 +3036,18 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                     <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
                                         <div className="flex flex-col items-end">
                                             <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
+                                            {/* 🌟 新增：售出日期選擇器 (當有售價時顯示) */}
+                                            {Number(item.sellPrice) > 0 && (
+                                                <div className="flex items-center gap-1 bg-green-50 px-1 py-0.5 rounded mb-1">
+                                                   <Calendar className="w-2.5 h-2.5 text-green-500" />
+                                                   <input 
+                                                       type="date" 
+                                                       value={item.sellDate || ''} 
+                                                       onChange={e => handleCardChange(item.uid, 'sellDate', e.target.value)} 
+                                                       className="bg-transparent text-[9px] font-bold text-green-600 outline-none w-[65px] p-0" 
+                                                   />
+                                                </div>
+                                            )}
                                             <div className="flex items-baseline">
                                                 <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
                                                 <input 
@@ -4617,7 +4630,7 @@ export default function App() {
               source: dataToSave.source,
               status: dataToSave.status,
               sellPrice: item.sellPrice !== undefined && item.sellPrice !== '' ? Number(item.sellPrice) : (existing?.sellPrice || 0),
-              sellDate: existing?.sellDate || '',
+              sellDate: item.sellDate !== undefined ? item.sellDate : (existing?.sellDate || ''), // 🌟 優先使用表單傳來的日期
               condition: existing?.condition || '無損',
               note: nextNote
           };
