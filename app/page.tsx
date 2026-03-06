@@ -932,15 +932,29 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
 
       setInventory(prev => {
           let next = [...prev];
-          newItems.forEach(newItem => {
-              const idx = next.findIndex(i => i.id === newItem.id);
+          newItems.forEach(itemWithMeta => {
+              // 🌟 拆解出原始 ID 和乾淨的資料物件
+              const { _originalId, ...newItem } = itemWithMeta;
+              // 🌟 強化尋找邏輯：優先用原始 ID 找，找不到才用新 ID 找
+              const idToFind = _originalId || newItem.id;
+              
+              // 🌟 修正：轉成 String 比對，避免 ID 類型不一致 (例如 number vs string) 導致找不到而重複新增
+              let idx = next.findIndex(i => String(i.id) === String(idToFind));
+              
+              // 🌟 雙重保險：如果用原始 ID 找不到 (可能 ID 已經變更)，再試著用新 ID 找一次
+              if (idx === -1 && newItem.id) {
+                  idx = next.findIndex(i => String(i.id) === String(newItem.id));
+              }
+
               if (idx !== -1) next[idx] = newItem;
               else next.push(newItem);
           });
           return next;
       });
 
-      const { error } = await supabase.from('ui_inventory').upsert(newItems.map(toSnakeCase));
+      // 🌟 移除 _originalId 避免寫入資料庫報錯
+      const dbItems = newItems.map(({ _originalId, ...rest }) => toSnakeCase(rest));
+      const { error } = await supabase.from('ui_inventory').upsert(dbItems);
       if (error) console.error("Error saving inventory:", error);
 
       // 🌟 同步更新盤收紀錄內的對應項目 (售價、狀態等)
