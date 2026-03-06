@@ -254,17 +254,17 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
     </div>
 
     {/* 🌟 裁切專用彈窗 (覆蓋全螢幕) */}
+    {/* 🌟 裁切專用彈窗 (覆蓋全螢幕，解決 Safari 點擊失效 Bug，並優化拇指操作) */}
     {currentCropImage && (
-        <div className="fixed inset-0 z-[350] bg-black/95 flex flex-col animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="px-4 py-4 flex justify-between items-center bg-black text-white z-10 pb-2">
-                <button onClick={cancelCrop} className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors">取消</button>
-                <div className="font-bold text-sm tracking-wider">
-                    {pendingCrops.length > 1 ? `裁剪 (還剩 ${pendingCrops.length - 1} 張)` : '移動並縮放'}
+        <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col animate-fade-in" style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+            {/* 頂部只留標題文字 */}
+            <div className="pt-12 pb-4 px-4 flex justify-center items-center bg-black text-white z-10">
+                <div className="font-bold text-sm tracking-wider text-gray-300">
+                    {pendingCrops.length > 1 ? `裁剪 (還剩 ${pendingCrops.length - 1} 張)` : '移動圖片並縮放'}
                 </div>
-                <button onClick={confirmCrop} className="bg-indigo-600 px-5 py-1.5 rounded-full font-bold text-sm text-white hover:bg-indigo-500 transition-colors">
-                    完成
-                </button>
             </div>
+            
+            {/* 裁切區塊 */}
             <div className="flex-1 relative">
                 <Cropper
                     image={currentCropImage}
@@ -276,7 +276,9 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
                     onZoomChange={setZoom}
                 />
             </div>
-            <div className="h-28 bg-black flex flex-col items-center justify-center px-8 pb-6">
+            
+            {/* 底部控制區塊 (按鈕移到這裡，完全避開頂部死角，且方便拇指點擊) */}
+            <div className="bg-black flex flex-col items-center justify-center px-6 pb-10 pt-4 z-10">
                 <input 
                     type="range" 
                     min={1} 
@@ -284,9 +286,24 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
                     step={0.05} 
                     value={zoom} 
                     onChange={(e) => setZoom(e.target.value)}
-                    className="w-full max-w-sm accent-indigo-500"
+                    className="w-full max-w-sm accent-indigo-500 mb-8"
                 />
-                <span className="text-gray-500 text-xs mt-2">滑動調整縮放</span>
+                <div className="flex justify-between w-full max-w-sm gap-4">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); cancelCrop(); }} 
+                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); cancelCrop(); }} 
+                        className="flex-1 py-3 rounded-full font-bold text-gray-300 bg-gray-800 hover:bg-gray-700 transition-colors"
+                    >
+                        取消
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); confirmCrop(); }} 
+                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); confirmCrop(); }} 
+                        className="flex-[2] py-3 rounded-full font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg"
+                    >
+                        完成
+                    </button>
+                </div>
             </div>
         </div>
     )}
