@@ -3988,7 +3988,35 @@ export default function App() {
   const [modalState, setModalState] = useState({ type: null, data: null });
   
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedCardIds, setSelectedCardIds] = useState([]);
+  // 🌟 升級版：支援重複卡片的選取狀態 (存陣列物件)
+    const [selectedItems, setSelectedItems] = useState([]);
+    const pressTimer = useRef(null);
+    const hasLongPressed = useRef(false);
+
+    const handleSelectAdd = (cardId) => {
+        setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random()}`, cardId }]);
+    };
+
+    const startPress = (cardId) => {
+        hasLongPressed.current = false;
+        pressTimer.current = setTimeout(() => {
+            hasLongPressed.current = true;
+            setSelectedItems(prev => {
+                let lastIdx = -1;
+                // 從後面找，找到最後一次加進來的該卡片
+                for (let i = prev.length - 1; i >= 0; i--) {
+                    if (prev[i].cardId === cardId) { lastIdx = i; break; }
+                }
+                if (lastIdx !== -1) {
+                    const next = [...prev];
+                    next.splice(lastIdx, 1); // 刪除它 (長按 -1)
+                    return next;
+                }
+                return prev;
+            });
+        }, 500); 
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
   const [batchCategorizeTarget, setBatchCategorizeTarget] = useState(null); 
 
   // 🌟 從 Supabase 抓取所有資料
