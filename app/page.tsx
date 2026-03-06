@@ -1,6 +1,5 @@
 // @ts-nocheck
 "use client";
-import React from 'react';
 import Image from 'next/image';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient'; // 🌟 引入資料庫連線
