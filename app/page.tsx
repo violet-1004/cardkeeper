@@ -2057,7 +2057,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         return map;
     }, [channels]);
 
-    // 🌟 升級版：支援重複卡片的選取狀態 (存陣列物件)
     const [selectedItems, setSelectedItems] = useState([]);
     const pressTimer = useRef(null);
     const hasLongPressed = useRef(false);
@@ -2077,7 +2076,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                 }
                 if (lastIdx !== -1) {
                     const next = [...prev];
-                    next.splice(lastIdx, 1); // 🌟 刪除最後一次加入的那一張
+                    next.splice(lastIdx, 1); 
                     return next;
                 }
                 return prev;
@@ -2268,10 +2267,11 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     <span className="text-sm text-gray-800 font-black leading-none mt-0.5">{dateObj.getDate()}</span>
                                 </div>
                                 <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
+                                    {/* 🌟 修復核心：精準判斷圖片來源，防止 undefined 錯誤 */}
                                     {item.isMisc ? (
                                         <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
                                     ) : item._isBulkHeader ? (
-                                        item.image ? <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />: <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                        item.image ? <img src={item.image} alt="包裹" className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
                                     ) : (card && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />)}
                                     {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
                                 </div>
@@ -2348,7 +2348,6 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
                 const name = mapName ? mapName(opt) : opt;
                 const isSelected = current === id;
                 return (
-                    // 🌟 換成最安全的原生 button，避免 FilterTagItem 遺失報錯
                     <button 
                         key={id}
                         onClick={() => {
@@ -2381,7 +2380,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
                 {filteredRecords.map(record => (
                     <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
                         <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
-                            {/* 🌟 限制包裹清單的縮圖檔案大小 */}
+                            {/* 🌟 安全防護版：包裹縮圖 */}
                             {record.image ? <img src={record.image} alt={record.name} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
                         </div>
                         <div className="px-1 flex flex-col flex-1 justify-between">
