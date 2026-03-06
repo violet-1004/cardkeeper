@@ -1157,7 +1157,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     );
 }
 
-function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedCardIds, setSelectedCardIds, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
+function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
   const [filterMemberId, setFilterMemberId] = useState('All');
   const [filterSubunit, setFilterSubunit] = useState('All'); 
   const [filterSeriesId, setFilterSeriesId] = useState('All');
@@ -1194,11 +1194,15 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       setIsSelectionMode(true);
       setBatchCategorizeTarget({ type, value, name });
       
-      const preSelectedIds = (allCards || [])
+      // 🌟 升級：把撈出來的卡片加上專屬的 uid，轉換成新的物件陣列格式
+      const preSelectedItems = (allCards || [])
         .filter(c => c.groupId === currentGroupId && c[type] === value)
-        .map(c => c.id);
+        .map(c => ({
+            uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            cardId: c.id
+        }));
       
-      setSelectedCardIds(preSelectedIds);
+      setSelectedItems(preSelectedItems); // 🌟 改用新的大腦
   };
 
   const handleOptionDoubleClick = (type, data) => {
@@ -1358,9 +1362,34 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 
   const getCardQuantity = (cardId) => inventoryMap[cardId] || 0;
   
-  const toggleSelection = (id) => {
-      setSelectedCardIds(prev => prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]);
+  // 🌟 升級版：支援重複卡片的選取大腦
+  const pressTimer = useRef(null);
+  const hasLongPressed = useRef(false);
+
+  const handleSelectAdd = (cardId) => {
+      setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, cardId }]);
   };
+
+  const startPress = (cardId) => {
+      hasLongPressed.current = false;
+      pressTimer.current = setTimeout(() => {
+          hasLongPressed.current = true;
+          setSelectedItems(prev => {
+              let lastIdx = -1;
+              for (let i = prev.length - 1; i >= 0; i--) {
+                  if (prev[i].cardId === cardId) { lastIdx = i; break; }
+              }
+              if (lastIdx !== -1) {
+                  const next = [...prev];
+                  next.splice(lastIdx, 1); // 長按移除最後一次加入的該卡片
+                  return next;
+              }
+              return prev;
+          });
+      }, 500); 
+  };
+  
+  const cancelPress = () => clearTimeout(pressTimer.current);
 
   const handleAddNewCard = () => {
     openModal('card', {
@@ -4508,8 +4537,8 @@ export default function App() {
           
           isSelectionMode={isSelectionMode}
           setIsSelectionMode={setIsSelectionMode}
-          selectedCardIds={selectedCardIds}
-          setSelectedCardIds={setSelectedCardIds}
+          selectedItems={selectedItems}
+          setSelectedItems={setSelectedItems}
           batchCategorizeTarget={batchCategorizeTarget}
           setBatchCategorizeTarget={setBatchCategorizeTarget}
           
