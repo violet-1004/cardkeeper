@@ -1317,7 +1317,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     );
 }
 
-function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
+function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, sales, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
   const [filterMemberId, setFilterMemberId] = useState('All');
   const [filterSubunit, setFilterSubunit] = useState('All'); 
   const [filterSeriesId, setFilterSeriesId] = useState('All');
