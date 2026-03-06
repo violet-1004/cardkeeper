@@ -1633,7 +1633,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       seriesId: filterSeriesId !== 'All' ? filterSeriesId : '',
       batchId: filterBatchId !== 'All' ? filterBatchId : '',
       type: filterType !== 'All' ? filterType : '',
-      channel: filterChannel !== 'All' ? filterChannel : ''
+      channel: filterChannel !== 'All' ? filterChannel : '',
+      _filterSubunit: filterSubunit // 🌟 傳遞當前分隊篩選狀態
     });
   };
 
@@ -2028,19 +2029,26 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   
   const availableSeriesList = useMemo(() => {
       let filtered = (series || []).filter(s => allOwnedCards.some(c => c.seriesId === s.id));
+      if (filterSubunit !== 'All') {
+          filtered = filtered.filter(s => s.subunit === filterSubunit);
+      }
       if (filterSeriesType !== 'All') {
           filtered = filtered.filter(s => s.type === filterSeriesType);
       }
       return filtered;
-  }, [allOwnedCards, series, filterSeriesType]);
+  }, [allOwnedCards, series, filterSeriesType, filterSubunit]);
 
   const availableBatchesList = useMemo(() => {
       let filtered = (batches || []).filter(b => allOwnedCards.some(c => c.batchId === b.id));
+      if (filterSubunit !== 'All') {
+          const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => s.id));
+          filtered = filtered.filter(b => validSeriesIds.has(b.seriesId));
+      }
       if (filterSeries !== 'All') {
           filtered = filtered.filter(b => b.seriesId === filterSeries);
       }
       return filtered;
-  }, [allOwnedCards, batches, filterSeries]);
+  }, [allOwnedCards, batches, filterSeries, filterSubunit, series]);
 
   const getSeriesSummary = () => {
       const parts = [];
@@ -2747,15 +2755,22 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     
     const availableSeriesList = useMemo(() => {
         let filtered = (series || []).filter(s => (cards || []).some(c => c.seriesId === s.id));
+        if (filterSubunit !== 'All') {
+            filtered = filtered.filter(s => s.subunit === filterSubunit);
+        }
         if (filterSeriesType !== 'All') filtered = filtered.filter(s => s.type === filterSeriesType);
         return filtered;
-    }, [cards, series, filterSeriesType]);
+    }, [cards, series, filterSeriesType, filterSubunit]);
 
     const availableBatchesList = useMemo(() => {
         let filtered = (batches || []).filter(b => (cards || []).some(c => c.batchId === b.id));
+        if (filterSubunit !== 'All') {
+             const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => s.id));
+             filtered = filtered.filter(b => validSeriesIds.has(b.seriesId));
+        }
         if (filterSeries !== 'All') filtered = filtered.filter(b => b.seriesId === filterSeries);
         return filtered;
-    }, [cards, batches, filterSeries]);
+    }, [cards, batches, filterSeries, filterSubunit, series]);
 
     const getSeriesSummary = () => {
         const parts = [];
@@ -5177,8 +5192,12 @@ export default function App() {
           type={modalState.type}
           initialData={{ groupId: currentGroupId, ...modalState.data }}
           extraOptions={{ 
-            members: (members || []).filter(m => m.groupId === currentGroupId),
-            series: (series || []).filter(s => s.groupId === currentGroupId),
+            members: (members || []).filter(m => m.groupId === currentGroupId && (
+                !modalState.data?._filterSubunit || modalState.data._filterSubunit === 'All' || m.subunit === modalState.data._filterSubunit
+            )),
+            series: (series || []).filter(s => s.groupId === currentGroupId && (
+                !modalState.data?._filterSubunit || modalState.data._filterSubunit === 'All' || s.subunit === modalState.data._filterSubunit
+            )),
             batches: (batches || []).filter(b => b.groupId === currentGroupId),
             channels: combinedChannels,
             types: combinedTypes,
