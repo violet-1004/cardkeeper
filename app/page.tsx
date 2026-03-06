@@ -4561,7 +4561,7 @@ export default function App() {
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
           card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist'],
-          subunit: ['id', 'groupId', 'name', 'sortOrder']
+          subunit: ['id', 'groupId', 'name', 'sortOrder', 'user_id']
       };
 
       const cleanData = (obj) => {
@@ -4659,7 +4659,11 @@ export default function App() {
       
       if (error) {
           console.error("資料庫儲存失敗:", error.message, dbPayload);
-          alert(`儲存失敗: ${error.message}`);
+          if (error.message.includes("row-level security")) {
+              alert(`儲存失敗：資料庫權限不足 (RLS)。\n請確認您已為 ${table} 資料表設定 RLS 政策。\n\n若為測試環境，可至 Supabase SQL Editor 執行：\ncreate policy "Enable all" on "${table}" for all using (true) with check (true);`);
+          } else {
+              alert(`儲存失敗: ${error.message}`);
+          }
       }
   };
 
