@@ -814,39 +814,33 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     // 4. 總金額 / 總張數 = 真實均價
     const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
 
-    const handleSaveInventory = async (invData, callback) => {
-        const idToUse = invData.id || Date.now().toString();
+    // 🌟 升級版：確保批量加入的重複卡片都會成為獨立紀錄
+  const handleSaveInventory = async (data) => {
+      const isArray = Array.isArray(data);
+      const items = isArray ? data : [data];
+      
+      const newItems = items.map(item => ({
+          ...item,
+          // 🌟 如果是剛選進來沒有實體 ID 的，強制給予全新獨立 ID
+          id: (!item.id || item.id.startsWith('temp_') || item.id.startsWith('sel_')) 
+              ? `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` 
+              : item.id,
+          quantity: 1 // 🌟 強制數量為 1，全部打平成獨立卡片
+      }));
 
-        if (invData.sellPrice > 0) {
-            const originalRecord = (inventory || []).find(i => i.id === idToUse);
-            const isNewSale = !originalRecord || (originalRecord.sellPrice <= 0 || !originalRecord.sellPrice);
-            
-            if (isNewSale) {
-                 setSales(prev => {
-                     const updated = prev.map(s => {
-                         if (s.cardId === card.id) {
-                             const newQty = Math.max(0, s.quantity - invData.quantity);
-                             supabase.from('ui_sales').update({ quantity: newQty }).eq('id', s.id);
-                             return { ...s, quantity: newQty };
-                         }
-                         return s;
-                     });
-                     return updated;
-                 });
-            }
-        }
+      setInventory(prev => {
+          let next = [...prev];
+          newItems.forEach(newItem => {
+              const idx = next.findIndex(i => i.id === newItem.id);
+              if (idx !== -1) next[idx] = newItem;
+              else next.push(newItem);
+          });
+          return next;
+      });
 
-        const payload = { ...invData, id: idToUse, cardId: card.id };
-        if (invData.id) {
-            setInventory(prev => prev.map(i => i.id === invData.id ? payload : i));
-        } else {
-            setInventory(prev => [...prev, payload]);
-            if (callback) callback(idToUse);
-        }
-        
-        // 💾 儲存到 Supabase
-        await supabase.from('ui_inventory').upsert(toSnakeCase(payload));
-    };
+      const { error } = await supabase.from('ui_inventory').upsert(newItems.map(toSnakeCase));
+      if (error) console.error("Error saving inventory:", error);
+  };
 
     const handleUpdateSale = async (key, value) => {
         let payloadToSave;
@@ -922,7 +916,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                 <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
                         {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
-                        <Image src={card.image} alt="卡片詳情" fill priority unoptimized className="object-cover" />
+                        <Image src={card.image} alt="卡片詳情" fill priority unoptimized className="object-cover" unoptimized={true}/>
                     </div>
                     <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
@@ -1490,7 +1484,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                        </select>
                     </div>
                      <button 
-                        onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedCardIds([]); setBatchCategorizeTarget(null); }}
+                        onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedItems([]); }}
                         className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-colors ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-white border hover:bg-gray-50'}`}
                      >
                         <CheckSquare className="w-3 h-3" /> 批量選取
@@ -1564,64 +1558,41 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
         >
             {filteredCards.map(card => {
-                const qty = getCardQuantity(card.id);
-                const isSelected = selectedCardIds.includes(card.id);
-                
-                const memberName = (members || []).find(m => m.id === card.memberId)?.name;
-                const cardSeries = (series || []).find(s => s.id === card.seriesId);
-                const seriesName = cardSeries?.shortName || cardSeries?.name;
-                const cardBatch = (batches || []).find(b => b.id === card.batchId);
-                
-                const effectiveType = card.type;
-                const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
-                const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-                
-                const effectiveChannelId = card.channel;
-                const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
-                const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-                
-                const batchNumber = cardBatch?.batchNumber;
-                const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
-                const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
-
-                return (
-                    <div 
-                        key={card.id} 
-                        onClick={() => isSelectionMode ? toggleSelection(card.id) : setViewingCard(card)} 
-                        className={`cursor-pointer group relative select-none ${isSelectionMode && isSelected ? 'ring-2 ring-indigo-500 rounded-lg p-1 -m-1' : ''}`}
-                    >
-                        <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-2 shadow-sm border border-gray-100">
-                            {/* 🌟 圖鑑列表：強制壓縮畫質至 30%，並加入 lazy 懶加載 */}
-                                <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 20vw" unoptimized={true} />
-                            {card.isWishlist && (
-                                <div className="absolute top-2 left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10">
-                                    <Heart className="w-3 h-3 fill-current" />
+                        const selCount = selectedItems.filter(i => i.cardId === card.id).length;
+                        const isSelected = selCount > 0;
+                        const qty = inventoryMap[card.id] || 0;
+                        return (
+                            <div key={card.id} 
+                                className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent hover:border-gray-200'} ${qty === 0 && !isSelectionMode ? 'opacity-50 grayscale hover:grayscale-0 hover:opacity-100' : ''}`}
+                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                onMouseDown={() => { if(isSelectionMode) startPress(card.id); }} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                                onTouchStart={() => { if(isSelectionMode) startPress(card.id); }} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+                                onContextMenu={(e) => { if(isSelectionMode) { e.preventDefault(); cancelPress(); } }}
+                                onClick={(e) => {
+                                    if (isSelectionMode) {
+                                        if (hasLongPressed.current) { e.preventDefault(); e.stopPropagation(); }
+                                        else { handleSelectAdd(card.id); }
+                                    } else {
+                                        setViewingCard(card);
+                                    }
+                                }}
+                            >
+                                <div className="aspect-[2/3] bg-gray-100 relative">
+                                    <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
                                 </div>
-                            )}
-
-                            {isSelectionMode && (
-                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white/50 border-gray-400'}`}
-                                >
-                                    {isSelected && <Check className="w-3 h-3 text-white" />}
-                                </div>
-                            )}
-                            {qty > 0 && (
-                                /* 🌟 解除隱藏限制，並在批量選取時自動將位置改為 right-8 避免重疊 */
-                                <div className={`absolute top-2 ${isSelectionMode ? 'right-8' : 'right-2'} bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow z-10 transition-all`}>
-                                    {qty}
-                                </div>
-                            )}
-                        </div>
-                        <div className="px-1">
-                            <div className="text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
-                            <div className="text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">
-                                {displayTitle || '未命名卡片'}
+                                {isSelectionMode && (
+                                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white text-[10px] font-bold' : 'bg-white/50 border-gray-400'}`}>
+                                        {isSelected && selCount}
+                                    </div>
+                                )}
+                                {qty > 0 && (
+                                    <div className={`absolute top-2 ${isSelectionMode ? 'right-8' : 'right-2'} bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow z-10 transition-all`}>
+                                        {qty}
+                                    </div>
+                                )}
                             </div>
-                            {cardBatch?.name && <div className="text-[10px] text-gray-400">{cardBatch.name}</div>}
-                        </div>
-                    </div>
-                )
-            })}
+                        )
+                    })}
         </div>
       </div>
     </div>
@@ -1960,7 +1931,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                     <div key={card.id} onClick={() => setViewingCard(card)} className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`}>
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
-                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" />
+                            <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
                             {card.isWishlist && <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                         {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
                         </div>
@@ -2029,19 +2000,34 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         return map;
     }, [channels]);
 
-    // 🌟 絕對安全的長按變數宣告區
+    // 🌟 升級版：支援重複卡片的選取狀態 (存陣列物件)
+    const [selectedItems, setSelectedItems] = useState([]);
     const pressTimer = useRef(null);
     const hasLongPressed = useRef(false);
 
-    const startPress = (item) => {
+    const handleSelectAdd = (cardId) => {
+        setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random()}`, cardId }]);
+    };
+
+    const startPress = (cardId) => {
         hasLongPressed.current = false;
         pressTimer.current = setTimeout(() => {
             hasLongPressed.current = true;
-            setItemToDelete(item); 
+            setSelectedItems(prev => {
+                let lastIdx = -1;
+                for (let i = prev.length - 1; i >= 0; i--) {
+                    if (prev[i].cardId === cardId) { lastIdx = i; break; }
+                }
+                if (lastIdx !== -1) {
+                    const next = [...prev];
+                    next.splice(lastIdx, 1); // 🌟 刪除最後一次加入的那一張
+                    return next;
+                }
+                return prev;
+            });
         }, 500); 
     };
     const cancelPress = () => clearTimeout(pressTimer.current);
-
     const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
     const handleTouchEnd = (e) => {
         touchEndX.current = e.changedTouches[0].clientX;
@@ -2601,7 +2587,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                 }}
                             >
                                 <div className="aspect-[2/3] bg-gray-100 relative">
-                                    <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" />
+                                    <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" unoptimized={true}/>
                                 </div>
                                 {count > 0 && (
                                     <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow z-10">
@@ -3777,7 +3763,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 return (
                     <div key={idx} onClick={() => !isEditMode && setViewingCard(card)} className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform">
                         <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0 overflow-hidden">
-                            <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" />
+                            <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" unoptimized={true}/>
                             <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
                                 {isEditMode ? (
                                     <CardMarkInput initialValue={cardMarks[card.id]} onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})} />
@@ -4305,17 +4291,30 @@ export default function App() {
 
   // 🌟 批量入庫
   const handleBulkOwn = async (items) => {
+      // 確保每一筆資料都有獨立的 ID 與預設數量 1
       const newRecords = items.map((item, idx) => ({
-          id: Date.now().toString() + idx,
-          ...item
+          ...item,
+          id: item.id || `inv_${Date.now()}_${idx}`, // 使用傳遞過來的獨立 ID，如果沒有才自動生成
+          quantity: 1
       }));
+      
+      // 更新前端畫面
       setInventory([...(inventory || []), ...newRecords]);
-      setSelectedCardIds([]);
+      
+      // 🌟 清空新版的選取大腦
+      setSelectedItems([]); 
       setIsSelectionMode(false);
       closeModal();
       
-      await supabase.from('ui_inventory').insert(newRecords.map(toSnakeCase));
-      alert(`已成功入庫 ${newRecords.length} 張卡片`);
+      // 寫入資料庫
+      const { error } = await supabase.from('ui_inventory').insert(newRecords.map(toSnakeCase));
+      
+      if (error) {
+          console.error("入庫失敗:", error);
+          alert("入庫時發生錯誤，請看控制台");
+      } else {
+          alert(`已成功入庫 ${newRecords.length} 張卡片！`);
+      }
   };
 
   // 🌟 批量歸類
@@ -4323,9 +4322,13 @@ export default function App() {
       if (!batchCategorizeTarget) return;
       const { type, value } = batchCategorizeTarget;
       
+      // 🌟 轉換：從 selectedItems 提取出所有不重複的 cardId
+      const uniqueSelectedCardIds = [...new Set(selectedItems.map(item => item.cardId))];
+      
       const cardsToUpdate = [];
       const updatedCards = (cards || []).map(c => {
-          const isSelected = selectedCardIds.includes(c.id);
+          // 🌟 這裡改用 uniqueSelectedCardIds 來判斷
+          const isSelected = uniqueSelectedCardIds.includes(c.id);
           const wasInBatch = c[type] === value;
           
           if (isSelected && !wasInBatch) {
@@ -4360,7 +4363,8 @@ export default function App() {
           await supabase.from('ui_cards').update(toSnakeCase(payload)).eq('id', c.id);
       }
 
-      setSelectedCardIds([]);
+      // 🌟 改為清空 selectedItems
+      setSelectedItems([]);
       setBatchCategorizeTarget(null);
       setIsSelectionMode(false);
       alert("歸類更新完成！");
@@ -4689,16 +4693,21 @@ export default function App() {
       )}
 
       {modalState.type === 'bulkOwn' && (
-          <BulkOwnModal 
-             cards={cards} // 🌟 補上這行：讓批量入庫也能拿到完整卡片資料！
-             selectedCards={(cards || []).filter(c => selectedCardIds.includes(c.id))}
-             onClose={closeModal}
-             onSave={handleBulkOwn}
+        <BulkOwnModal 
+            cards={cards} 
+            selectedItems={selectedItems} // 🌟 替換這裡：直接把我們帶有 uid 與重複點擊紀錄的陣列傳進去！
+            onClose={closeModal}
+            onSave={(items) => {
+             // 確保它存檔後會關閉視窗並清空選取
+             handleBulkOwn(items); 
+            setSelectedItems([]); 
+            setIsSelectionMode(false);
+            }}
              series={series}
-             batches={batches}
-             channels={channels}
-             types={types}
-          />
+            batches={batches}
+            channels={channels}
+            types={types}
+        />
       )}
 
       {viewingCard && (
@@ -4739,11 +4748,11 @@ export default function App() {
                   {batchCategorizeTarget ? (
                       <span className="text-indigo-600">管理「{batchCategorizeTarget.name}」的卡片</span>
                   ) : (
-                      <span>已選 {selectedCardIds.length} 張</span>
+                      <span>已選 {selectedItems.length} 張</span>
                   )}
               </div>
               <div className="flex gap-3">
-                  <button onClick={() => { setIsSelectionMode(false); setSelectedCardIds([]); setBatchCategorizeTarget(null); }} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 font-bold">取消</button>
+                  <button onClick={() => { setIsSelectionMode(false); setSelectedItems([]); setBatchCategorizeTarget(null); }} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 font-bold">取消</button>
                   {batchCategorizeTarget ? (
                       <button 
                         onClick={handleBatchCategorize} 
@@ -4755,31 +4764,33 @@ export default function App() {
                       <div className="flex gap-2">
                           <button 
                             onClick={async () => {
-                                const updatedCards = (cards || []).map(c => selectedCardIds.includes(c.id) ? { ...c, isWishlist: !c.isWishlist } : c);
+                                // 🌟 許願池不需要重複的卡片，這裡自動幫你過濾成唯一的 ID 名單
+                                const uniqueIds = [...new Set(selectedItems.map(item => item.cardId))];
+                                const updatedCards = (cards || []).map(c => uniqueIds.includes(c.id) ? { ...c, isWishlist: !c.isWishlist } : c);
                                 setCards(updatedCards);
-                                for(const id of selectedCardIds) {
+                                for(const id of uniqueIds) {
                                     const target = updatedCards.find(uc => uc.id === id);
                                     if(target) await supabase.from('ui_cards').update({ is_wishlist: target.isWishlist }).eq('id', id);
                                 }
                                 setIsSelectionMode(false);
-                                setSelectedCardIds([]);
+                                setSelectedItems([]);
                                 alert("已更新想要狀態");
                             }}
-                            disabled={selectedCardIds.length === 0}
+                            disabled={selectedItems.length === 0}
                             className="p-2 rounded-lg bg-pink-100 text-pink-600 disabled:opacity-50"
                           >
                               <Heart className="w-5 h-5 fill-current" />
                           </button>
                           <button 
                             onClick={() => setActiveModal('bulkList')} 
-                            disabled={selectedCardIds.length === 0}
+                            disabled={selectedItems.length === 0}
                             className="p-2 rounded-lg bg-gray-100 text-gray-600 disabled:opacity-50"
                           >
                               <FolderPlus className="w-5 h-5" />
                           </button>
                           <button 
                             onClick={() => openModal('bulkOwn')} 
-                            disabled={selectedCardIds.length === 0}
+                            disabled={selectedItems.length === 0}
                             className="px-4 py-2 rounded-lg bg-black text-white font-bold disabled:opacity-50 flex items-center gap-2"
                           >
                               <ShoppingBag className="w-4 h-4" /> 擁有
