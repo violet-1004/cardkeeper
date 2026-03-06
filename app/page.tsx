@@ -25,30 +25,207 @@ const toSnakeCase = (obj) => {
 };
 
 import Cropper from 'react-easy-crop';
-// --- 🌟 新增：圖片裁切處理工具 ---
+// 🌟 1. 內建裁切剪刀 (放在 ImageUploader 元件外面/上方，確保絕對找得到！)
 const getCroppedImg = async (imageSrc, pixelCrop) => {
-  const image = new Image();
-  image.src = imageSrc;
-  await new Promise((resolve) => { image.onload = resolve; });
+    const image = new Image();
+    image.src = imageSrc;
+    // 等待圖片載入
+    await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+    });
+    // 建立畫布來裁切
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(
+        image,
+        pixelCrop.x,
+        pixelCrop.y,
+        pixelCrop.width,
+        pixelCrop.height,
+        0,
+        0,
+        pixelCrop.width,
+        pixelCrop.height
+    );
+    // 壓縮成 JPG，品質 0.8，確保檔案夠小能存入資料庫
+    return canvas.toDataURL('image/jpeg', 0.8);
+};
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+// 🌟 2. 升級版圖片上傳元件
+const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", className = "h-32", multiple = false, aspect = 2/3, enableCrop = true }) => {
+  const ref = useRef(null);
+  
+  const [pendingCrops, setPendingCrops] = useState([]);
+  const [currentCropImage, setCurrentCropImage] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [processedImages, setProcessedImages] = useState([]);
 
-  ctx.drawImage(
-    image,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    pixelCrop.width,
-    pixelCrop.height
+  const handleUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+        Promise.all(files.map(file => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+            });
+        })).then(results => {
+            if (enableCrop) {
+                setPendingCrops(results);
+                setProcessedImages([]);
+                setCurrentCropImage(results[0]);
+                setCrop({ x: 0, y: 0 });
+                setZoom(1);
+            } else {
+                if (multiple) onChange([...images, ...results]);
+                else onChange(results[0]);
+            }
+        });
+    }
+    e.target.value = ''; 
+  };
+
+  const handleCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  // 🌟 升級防呆與錯誤捕捉的完成按鈕
+  const confirmCrop = async () => {
+     if (!currentCropImage) return;
+     
+     // 防呆：如果剛上傳還沒抓到裁切範圍，擋住並提示
+     if (!croppedAreaPixels) {
+         alert("圖片正在處理中，請稍微滑動一下圖片後再按完成。");
+         return;
+     }
+
+     try {
+         // 使用內建的剪刀裁切圖片
+         const croppedBase64 = await getCroppedImg(currentCropImage, croppedAreaPixels);
+
+         const nextProcessed = [...processedImages, croppedBase64];
+         const nextPending = pendingCrops.slice(1);
+
+         if (nextPending.length > 0) {
+             setProcessedImages(nextProcessed);
+             setPendingCrops(nextPending);
+             setCurrentCropImage(nextPending[0]);
+             setCrop({ x: 0, y: 0 });
+             setZoom(1);
+         } else {
+             if (multiple) onChange([...images, ...nextProcessed]);
+             else onChange(nextProcessed[0]);
+             
+             // 成功後關閉視窗
+             setPendingCrops([]);
+             setCurrentCropImage(null);
+             setProcessedImages([]);
+         }
+     } catch (error) {
+         console.error("圖片裁切失敗:", error);
+         alert("圖片處理發生錯誤，請換一張圖片試試看！");
+     }
+  };
+
+  const cancelCrop = () => {
+      setPendingCrops([]);
+      setCurrentCropImage(null);
+      setProcessedImages([]);
+  };
+
+  const removeImage = (e, index) => {
+      e.stopPropagation();
+      const newImages = [...images];
+      newImages.splice(index, 1);
+      onChange(newImages);
+  };
+
+  return (
+    <>
+    <div 
+      onClick={() => ref.current.click()}
+      className={`relative w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-indigo-400 transition-all bg-gray-50 overflow-hidden group ${className}`}
+    >
+      {multiple && images.length > 0 ? (
+          <div className="absolute inset-0 p-2 overflow-y-auto grid grid-cols-3 gap-2">
+              {images.map((img, idx) => (
+                  <div key={idx} className="relative aspect-[2/3] rounded overflow-hidden border">
+                      <img src={img} className="w-full h-full object-cover" />
+                      <button onClick={(e) => removeImage(e, idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl z-10"><X className="w-3 h-3" /></button>
+                  </div>
+              ))}
+              <div className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded aspect-[2/3] text-gray-400 bg-white">
+                  <Plus className="w-6 h-6" />
+              </div>
+          </div>
+      ) : image ? (
+        <>
+          <img src={image} className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <Camera className="text-white w-8 h-8" />
+          </div>
+        </>
+      ) : (
+        <div className="text-gray-400 flex flex-col items-center pointer-events-none">
+          <Camera className="w-8 h-8 mb-2" />
+          <span className="text-xs">{multiple ? "可選擇多張圖片" : label}</span>
+        </div>
+      )}
+      <input type="file" ref={ref} className="hidden" accept="image/*" multiple={multiple} onChange={handleUpload} />
+    </div>
+
+    {currentCropImage && (
+        <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col animate-fade-in" style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+            <div className="pt-12 pb-4 px-4 flex justify-center items-center bg-black text-white z-10">
+                <div className="font-bold text-sm tracking-wider text-gray-300">
+                    {pendingCrops.length > 1 ? `裁剪 (還剩 ${pendingCrops.length - 1} 張)` : '移動圖片並縮放'}
+                </div>
+            </div>
+            
+            <div className="flex-1 relative">
+                <Cropper
+                    image={currentCropImage}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={aspect}
+                    onCropChange={setCrop}
+                    onCropComplete={handleCropComplete}
+                    onZoomChange={setZoom}
+                />
+            </div>
+            
+            <div className="bg-black flex flex-col items-center justify-center px-6 pb-10 pt-4 z-10">
+                <input 
+                    type="range" min={1} max={3} step={0.05} 
+                    value={zoom} onChange={(e) => setZoom(e.target.value)}
+                    className="w-full max-w-sm accent-indigo-500 mb-8"
+                />
+                <div className="flex justify-between w-full max-w-sm gap-4">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); cancelCrop(); }} 
+                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); cancelCrop(); }} 
+                        className="flex-1 py-3 rounded-full font-bold text-gray-300 bg-gray-800 hover:bg-gray-700 transition-colors"
+                    >
+                        取消
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); confirmCrop(); }} 
+                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); confirmCrop(); }} 
+                        className="flex-[2] py-3 rounded-full font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg"
+                    >
+                        完成
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+    </>
   );
-
-  return canvas.toDataURL('image/jpeg', 0.6);
 };
 
 const toCamelCase = (obj) => {
