@@ -1285,7 +1285,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                     <div className="flex flex-col h-full">
                         <form id="invForm" className="flex-1" key={tempInvData?.id || 'new'} onSubmit={(e) => e.preventDefault()}>
                             <InventoryForm 
-                                initialData={tempInvData || {}} 
+                                initialData={tempInvData || { cardId: card.id }} 
                                 onSave={handleSaveInventory} 
                                 sourceOptions={uniqueSources}
                                 uniqueSources={uniqueSources}
