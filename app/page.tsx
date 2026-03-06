@@ -822,7 +822,7 @@ function SeriesFilterModal({
     );
 }
 
-function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource }) {
+function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords }) {
     const [activeModal, setActiveModal] = useState(null); 
     const [tempInvData, setTempInvData] = useState(null);
     const saleFocusRef = useRef(null);
@@ -942,6 +942,39 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
 
       const { error } = await supabase.from('ui_inventory').upsert(newItems.map(toSnakeCase));
       if (error) console.error("Error saving inventory:", error);
+
+      // 🌟 同步更新盤收紀錄內的對應項目 (售價、狀態等)
+      if (bulkRecords && setBulkRecords) {
+          const updatesByBulkId = {};
+          let hasBulkUpdates = false;
+
+          newItems.forEach(item => {
+              if (item.bulkRecordId) {
+                  if (!updatesByBulkId[item.bulkRecordId]) updatesByBulkId[item.bulkRecordId] = [];
+                  updatesByBulkId[item.bulkRecordId].push(item);
+                  hasBulkUpdates = true;
+              }
+          });
+
+          if (hasBulkUpdates) {
+              setBulkRecords(prev => prev.map(record => {
+                  if (updatesByBulkId[record.id]) {
+                      const itemsToUpdate = updatesByBulkId[record.id];
+                      const nextItems = (record.items || []).map(ri => {
+                          const updatedItem = itemsToUpdate.find(u => u.id === ri.id);
+                          if (updatedItem) {
+                              return { ...ri, sellPrice: updatedItem.sellPrice, sellDate: updatedItem.sellDate, condition: updatedItem.condition, status: updatedItem.status, note: updatedItem.note };
+                          }
+                          return ri;
+                      });
+                      // 背景同步更新資料庫
+                      supabase.from('bulk_records').update({ items: nextItems }).eq('id', record.id).then();
+                      return { ...record, items: nextItems };
+                  }
+                  return record;
+              }));
+          }
+      }
 
       // 🌟 回傳新產生的 ID 給表單
       if (callback && newItems.length > 0) {
@@ -4926,6 +4959,8 @@ export default function App() {
           uniqueSources={uniqueSources}
           onRenameSource={handleRenameSource}
           onDeleteSource={handleDeleteSource}
+          bulkRecords={bulkRecords}
+          setBulkRecords={setBulkRecords}
         />
       )}
 
