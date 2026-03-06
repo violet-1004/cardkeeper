@@ -1788,6 +1788,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                             >
                                 <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-600' : 'border-gray-100'}`}>
                                     <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
+                                    <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
+                                        {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                        {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                    </div>
                                     {isSelectionMode && (
                                     <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white text-[10px] font-bold' : 'bg-white/50 border-gray-400'}`}>
                                         {isSelected && selCount}
