@@ -462,7 +462,7 @@ const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick })
       className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
     >
         {/* 🌟 限制最大生成寬度為 120px，強制伺服器輸出極小 KB 數的縮圖 */}
-        {series.image && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
+            {series.image && <img src={series.image} alt={series.name} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
         <div className="absolute inset-0 flex flex-col justify-end p-2 bg-gradient-to-t from-black/70 to-transparent">
             <span className="text-white font-bold text-sm truncate w-full">{series.name}</span>
             {series.shortName && <span className="text-white/70 text-[10px]">{series.shortName}</span>}
@@ -481,7 +481,7 @@ const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) =
       className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
     >
         {/* 🌟 限制最大生成寬度為 100px */}
-        {batch.image && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
+            {batch.image && <img src={batch.image} alt={batch.name || 'batch'} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
        <div className="absolute inset-0 flex items-end p-1 bg-gradient-to-t from-black/60 via-transparent to-transparent">
             <span className="text-xs font-bold text-white line-clamp-2 w-full leading-tight">{batch.name}</span>
         </div>
@@ -2382,7 +2382,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
                     <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
                         <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
                             {/* 🌟 限制包裹清單的縮圖檔案大小 */}
-                            {record.image ? <img src={record.image} alt={record.name || 'bulk'} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
+                            {record.image ? <img src={record.image} alt={record.name} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
                         </div>
                         <div className="px-1 flex flex-col flex-1 justify-between">
                             <div>
