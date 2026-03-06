@@ -1750,6 +1750,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const selCount = selectedItems.filter(i => i.cardId === card.id).length;
                         const isSelected = selCount > 0;
                         const qty = inventoryMap[card.id] || 0;
+                        const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
 
                         const memberName = (members || []).find(m => m.id === card.memberId)?.name;
                         // 🌟 補回名稱顯示邏輯
@@ -2126,6 +2127,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
             {filteredCards.map(card => {
                 const qty = inventoryMap[card.id] || 0;
                 const isOwned = qty > 0;
+                const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
                 
                 const memberName = memberMap[card.memberId]?.name;
                 const cardSeries = seriesMap[card.seriesId];
@@ -2149,7 +2151,12 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
                             <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
-                            {card.isWishlist && <div className="absolute top-1 sm:top-2 left-1 sm:left-2 bg-pink-500 text-white p-1 rounded-full shadow z-10"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                            
+                            <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
+                                {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                            </div>
+
                         {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
                         </div>
                         {showDetails && (
@@ -4713,6 +4720,7 @@ export default function App() {
           types={types}
           setViewingCard={setViewingCard}
           inventory={inventory}
+          sales={sales}
           openModal={openModal}
           uniqueTypes={uniqueTypes}
           combinedTypes={combinedTypes}
