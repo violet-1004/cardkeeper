@@ -2241,6 +2241,304 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
     );
 }
 
+function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, batches, channels, types, onEditBulkRecord, onDeleteInventory, onDeleteBulkRecord }) {
+    const [dateFilterMode, setDateFilterMode] = useState('month');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [year, setYear] = useState(new Date().getFullYear());
+    const [month, setMonth] = useState(new Date().getMonth() + 1);
+    const [filterType, setFilterType] = useState('all'); 
+    const [itemToDelete, setItemToDelete] = useState(null);
+    
+    const touchStartX = useRef(0);
+    const touchEndX = useRef(0);
+
+    const cardMap = useMemo(() => {
+        const map = {};
+        (cards || []).forEach(c => map[c.id] = c);
+        return map;
+    }, [cards]);
+
+    const seriesMap = useMemo(() => {
+        const map = {};
+        (series || []).forEach(s => map[s.id] = s);
+        return map;
+    }, [series]);
+
+    const batchMap = useMemo(() => {
+        const map = {};
+        (batches || []).forEach(b => map[b.id] = b);
+        return map;
+    }, [batches]);
+
+    const typeMap = useMemo(() => {
+        const map = {};
+        (types || []).forEach(t => { map[t.id] = t; map[t.name] = t; });
+        return map;
+    }, [types]);
+
+    const channelMap = useMemo(() => {
+        const map = {};
+        (channels || []).forEach(c => { map[c.id] = c; map[c.name] = c; });
+        return map;
+    }, [channels]);
+
+    const [selectedItems, setSelectedItems] = useState([]);
+    const pressTimer = useRef(null);
+    const hasLongPressed = useRef(false);
+
+    const handleSelectAdd = (cardId) => {
+        setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random()}`, cardId }]);
+    };
+
+    const startPress = (cardId) => {
+        hasLongPressed.current = false;
+        pressTimer.current = setTimeout(() => {
+            hasLongPressed.current = true;
+            setSelectedItems(prev => {
+                let lastIdx = -1;
+                for (let i = prev.length - 1; i >= 0; i--) {
+                    if (prev[i].cardId === cardId) { lastIdx = i; break; }
+                }
+                if (lastIdx !== -1) {
+                    const next = [...prev];
+                    next.splice(lastIdx, 1); 
+                    return next;
+                }
+                return prev;
+            });
+        }, 500); 
+    };
+    const cancelPress = () => clearTimeout(pressTimer.current);
+    const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
+    const handleTouchEnd = (e) => {
+        touchEndX.current = e.changedTouches[0].clientX;
+        if (dateFilterMode !== 'range') {
+            const diff = touchStartX.current - touchEndX.current;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) handleNext();
+                else handlePrev();
+            }
+        }
+    };
+
+    const handlePrev = () => {
+        if (dateFilterMode === 'month') {
+            if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1);
+        } else if (dateFilterMode === 'year') { setYear(y => y - 1); }
+    };
+
+    const handleNext = () => {
+        if (dateFilterMode === 'month') {
+            if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1);
+        } else if (dateFilterMode === 'year') { setYear(y => y + 1); }
+    };
+
+    const availableYears = useMemo(() => {
+        const years = new Set([new Date().getFullYear(), year]);
+        (inventory || []).forEach(inv => { if (inv.buyDate) years.add(new Date(inv.buyDate).getFullYear()); });
+        return Array.from(years).sort((a, b) => b - a);
+    }, [inventory, year]);
+
+    const { displayItems, totalIncome, totalExpense } = useMemo(() => {
+        const items = [];
+        let income = 0; let expense = 0;
+        
+        const isDateInRange = (dateStr) => {
+            if (!dateStr) return false;
+            if (dateFilterMode === 'month') return dateStr.startsWith(`${year}-${String(month).padStart(2, '0')}`);
+            if (dateFilterMode === 'year') return dateStr.startsWith(`${year}`);
+            if (dateFilterMode === 'range') {
+                if (!startDate && !endDate) return true;
+                const targetDate = new Date(dateStr).getTime();
+                const start = startDate ? new Date(startDate).getTime() : 0;
+                const end = endDate ? new Date(endDate).getTime() + 86400000 - 1 : Infinity;
+                return targetDate >= start && targetDate <= end;
+            }
+            return true;
+        };
+
+        (inventory || []).forEach(inv => {
+            if (inv.buyDate && isDateInRange(inv.buyDate)) {
+                if (filterType === 'all' || filterType === 'expense') {
+                    items.push({ ...inv, _virtualId: `${inv.id}_buy`, _type: 'expense', _displayPrice: inv.buyPrice, _displayDate: inv.buyDate });
+                }
+                expense += (Number(inv.buyPrice) || 0);
+            }
+            if (inv.sellPrice > 0 && inv.sellDate && isDateInRange(inv.sellDate)) {
+                if (filterType === 'all' || filterType === 'income') {
+                    items.push({ ...inv, _virtualId: `${inv.id}_sell`, _type: 'income', _displayPrice: inv.sellPrice, _displayDate: inv.sellDate });
+                }
+                income += (Number(inv.sellPrice) || 0);
+            }
+        });
+
+        (bulkRecords || []).forEach(record => {
+            if (record.buyDate && isDateInRange(record.buyDate)) {
+                if (filterType === 'all' || filterType === 'expense') {
+                    items.push({
+                        id: `bulk_total_${record.id}`, _virtualId: `bulk_total_${record.id}`, _type: 'expense',
+                        _isBulkHeader: true, name: record.name, _displayPrice: record.totalAmount, _displayDate: record.buyDate,
+                        image: record.image, originalRecord: record
+                    });
+                }
+                expense += (Number(record.totalAmount) || 0);
+            }
+            
+            (record.items || []).forEach((item, idx) => {
+                const qty = Number(item.quantity) || 1;
+                const totalSellPrice = (Number(item.sellPrice) || 0) * qty;
+                if (item.isMisc && totalSellPrice > 0 && item.sellDate && isDateInRange(item.sellDate)) {
+                    if (filterType === 'all' || filterType === 'income') {
+                        items.push({
+                            id: `misc_${record.id}_${idx}`, _virtualId: `misc_${record.id}_${idx}`, _type: 'income',
+                            name: `[雜物] ${item.name} (${record.name})`, _displayPrice: totalSellPrice, _displayDate: item.sellDate,
+                            note: `數量: ${qty}`, isMisc: true, originalRecord: record
+                        });
+                    }
+                    income += totalSellPrice;
+                }
+            });
+        });
+
+        const filteredItems = items.filter(item => !(item.bulkRecordId && item._type === 'expense'));
+        filteredItems.sort((a, b) => new Date(b._displayDate) - new Date(a._displayDate));
+        return { displayItems: filteredItems, totalIncome: income, totalExpense: expense };
+    }, [inventory, year, month, filterType, bulkRecords, dateFilterMode, startDate, endDate]);
+
+    return (
+        <div className="bg-gray-50 min-h-screen pb-20" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+             <div className="bg-white border-b sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
+                 <div className="flex justify-center items-center relative">
+                     <div className="relative">
+                         <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm">
+                             <option value="month">篩選年月</option><option value="year">只篩選年</option><option value="range">自訂日期範圍</option>
+                         </select>
+                         <ChevronDown className="w-3 h-3 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                     </div>
+                     {dateFilterMode !== 'range' && (
+                         <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth() + 1); }} className="absolute right-0 p-1.5 bg-gray-100 hover:bg-gray-200 text-indigo-600 rounded-lg transition-colors"><Calendar className="w-4 h-4" /></button>
+                     )}
+                 </div>
+
+                 {dateFilterMode === 'range' ? (
+                     <div className="flex items-center gap-2">
+                         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                         <span className="text-gray-400 font-bold">-</span>
+                         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                     </div>
+                 ) : (
+                     <div className="flex justify-between items-center">
+                         <button onClick={handlePrev} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full"><ChevronLeft className="w-6 h-6" /></button>
+                         <div className="flex gap-2 items-center">
+                             <div className="relative">
+                                 <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="appearance-none bg-gray-100 border border-transparent text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg text-sm">
+                                     {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
+                                 </select>
+                                 <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                             </div>
+                             {dateFilterMode === 'month' && (
+                                 <div className="relative">
+                                     <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="appearance-none bg-gray-100 border border-transparent text-gray-700 font-bold py-1.5 pl-3 pr-7 rounded-lg text-sm">
+                                         {Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}月</option>)}
+                                     </select>
+                                     <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                 </div>
+                             )}
+                         </div>
+                         <button onClick={handleNext} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full"><ChevronRight className="w-6 h-6" /></button>
+                     </div>
+                 )}
+             </div>
+
+             <div className="grid grid-cols-2 gap-4 p-4">
+                 <button onClick={() => setFilterType(filterType === 'income' ? 'all' : 'income')} className={`bg-white p-4 rounded-2xl shadow-sm border transition-all ${filterType === 'income' ? 'border-green-500 ring-1 ring-green-500' : 'border-transparent'}`}>
+                     <div className="text-xs text-gray-400 font-bold mb-1">收入</div><div className="text-2xl font-black text-green-600">${totalIncome.toLocaleString()}</div>
+                 </button>
+                 <button onClick={() => setFilterType(filterType === 'expense' ? 'all' : 'expense')} className={`bg-white p-4 rounded-2xl shadow-sm border transition-all ${filterType === 'expense' ? 'border-red-500 ring-1 ring-red-500' : 'border-transparent'}`}>
+                     <div className="text-xs text-gray-400 font-bold mb-1">支出</div><div className="text-2xl font-black text-gray-800">${totalExpense.toLocaleString()}</div>
+                 </button>
+             </div>
+
+             <div className="px-4 space-y-3">
+                {displayItems.map(item => {
+                    const card = cardMap[item.cardId];
+                    const isIncome = item._type === 'income';
+                    const dateObj = new Date(item._displayDate);
+                    
+                    const cardSeries = card ? seriesMap[card.seriesId] : null;
+                    const cardBatch = card ? batchMap[card.batchId] : null;
+                    const typeObj = card?.type ? typeMap[card.type] : null;
+                    const channelObj = card?.channel ? channelMap[card.channel] : null;
+                    
+                    const displayTitle = card ? [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ') : '';
+                    const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片');
+
+                    return (
+                        <div key={item._virtualId} 
+                            onMouseDown={() => startPress(item)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                            onTouchStart={() => startPress(item)} onTouchEnd={cancelPress}
+                            onContextMenu={(e) => { e.preventDefault(); cancelPress(); hasLongPressed.current = true; setItemToDelete(item); }}
+                            onClick={(e) => {
+                                if (hasLongPressed.current) return e.preventDefault();
+                                if (item._isBulkHeader && item.originalRecord && onEditBulkRecord) onEditBulkRecord(item.originalRecord);
+                                else if (card) setViewingCard(card);
+                            }} 
+                            className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-indigo-300 border border-transparent select-none"
+                        >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
+                                    <span className="text-[8px] text-gray-400 font-bold leading-none">{dateObj.getFullYear()}</span>
+                                    <span className="text-[10px] text-gray-500 font-bold leading-none mt-0.5">{dateObj.getMonth() + 1}月</span>
+                                    <span className="text-sm text-gray-800 font-black leading-none mt-0.5">{dateObj.getDate()}</span>
+                                </div>
+                                <div className="w-9 aspect-[2/3] bg-gray-200 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 relative">
+                                    {item.isMisc ? (
+                                        <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
+                                    ) : item._isBulkHeader ? (
+                                        item.image ? <img src={item.image} alt="包裹" className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                    ) : (card && <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />)}
+                                    {isIncome && <div className="absolute inset-0 bg-green-900/30 flex items-center justify-center"><div className="bg-green-500 text-white text-[8px] font-bold px-1 rounded shadow-sm">SOLD</div></div>}
+                                </div>
+                                <div className="min-w-0 flex flex-col justify-center">
+                                    <div className="font-bold text-gray-800 text-xs truncate">{finalName}</div>
+                                    {!item._isBulkHeader && !item.isMisc && cardBatch?.name && <div className="text-[10px] text-gray-500 truncate mb-0.5">{cardBatch.name}</div>}
+                                    <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                                        {isIncome && <span className="text-[9px] bg-green-100 text-green-600 px-1 rounded-sm font-bold">售出</span>}
+                                        <span className="truncate">{item.note || (item._isBulkHeader ? '批量購入支出' : (isIncome ? '出售' : '購買'))}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={`text-sm font-black whitespace-nowrap ml-2 ${isIncome ? 'text-green-600' : 'text-gray-900'}`}>
+                                {isIncome ? '+' : '-'}${Number(item._displayPrice).toLocaleString()}
+                            </div>
+                        </div>
+                    )
+                })}
+             </div>
+
+             {itemToDelete && (
+                <Modal title="確認刪除" onClose={() => setItemToDelete(null)} className="max-w-sm" footer={
+                    <div className="flex gap-2 w-full">
+                        <button onClick={() => setItemToDelete(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                        <button onClick={() => {
+                            if (itemToDelete._isBulkHeader && onDeleteBulkRecord) onDeleteBulkRecord(itemToDelete.originalRecord.id);
+                            else if (onDeleteInventory) onDeleteInventory(itemToDelete.id);
+                            setItemToDelete(null);
+                        }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定刪除</button>
+                    </div>
+                }>
+                    <div className="p-6 text-center text-gray-600 text-sm">
+                        {itemToDelete._isBulkHeader 
+                            ? `確定要刪除包裹「${itemToDelete.name}」嗎？\n⚠️這將同時刪除內含的所有卡片庫存！` 
+                            : `確定要刪除這筆紀錄嗎？\n金額: $${itemToDelete._displayPrice}`}
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
 function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes }) {
     const [localItems, setLocalItems] = useState([...(selectedItems || [])]);
 
@@ -4352,7 +4650,7 @@ export default function App() {
                   onClick={() => {
                       setActiveTab(tab.id);
                       setIsSelectionMode(false);
-                      setSelectedCardIds([]);
+                      setSelectedItems([]);
                       setBatchCategorizeTarget(null);
                   }}
                   className={`px-3 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
@@ -4601,7 +4899,7 @@ export default function App() {
                               alert("已加入收藏冊");
                               setActiveModal(null);
                               setIsSelectionMode(false);
-                              setSelectedCardIds([]);
+                              setSelectedItems([]);
                           }}
                           className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
                       >
