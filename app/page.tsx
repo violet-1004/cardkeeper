@@ -1751,6 +1751,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const isSelected = selCount > 0;
                         const qty = inventoryMap[card.id] || 0;
 
+                        const memberName = (members || []).find(m => m.id === card.memberId)?.name;
                         // 🌟 補回名稱顯示邏輯
                         const cardSeries = (series || []).find(s => s.id === card.seriesId);
                         const seriesName = cardSeries?.shortName || cardSeries?.name;
@@ -1799,8 +1800,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                 )}
                                 
                                 {/* 🌟 顯示名稱 */}
-                                <div className="px-1 py-1.5 bg-white flex-1 flex items-start justify-center text-center">
-                                    <div className="text-[10px] font-bold text-gray-800 leading-tight line-clamp-2">{displayTitle || '未命名卡片'}</div>
+                                <div className="px-1 py-1.5 bg-white flex-1 flex flex-col items-center justify-start text-center">
+                                    <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 line-clamp-1">{memberName}</div>
+                                    <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
+                                    {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                                 </div>
                             </div>
                         )
