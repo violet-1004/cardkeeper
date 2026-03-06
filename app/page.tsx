@@ -542,7 +542,7 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
     const syncToParent = (nextForm) => {
         if (timerRef.current) clearTimeout(timerRef.current);
         
-        // 🌟 加入防抖 (Debounce)，避免每打一個字就觸發儲存
+        // 🌟 加入防抖 (Debounce) 0.5秒，避免每打一個字就觸發儲存
         timerRef.current = setTimeout(() => {
             onSave({
                 ...nextForm,
@@ -920,7 +920,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
           id: (!item.id || item.id.startsWith('temp_') || item.id.startsWith('sel_')) 
               ? `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` 
               : item.id,
-          quantity: 1 // 🌟 強制數量為 1，全部打平成獨立卡片
+          quantity: Number(item.quantity) || 1 // 🌟 允許修改數量，若無則預設為 1
       }));
 
       setInventory(prev => {
