@@ -1901,7 +1901,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   );
 }
 
-function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols }) {
+function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits }) {
   const [viewMode, setViewMode] = useState('all');
   const [showDetails, setShowDetails] = useState(true);
 
@@ -1966,13 +1966,31 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   // 🌟 連動過濾器邏輯
   const availableSubunits = useMemo(() => {
-      const ids = new Set(allOwnedCards.map(c => c.memberId));
-      return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
-  }, [allOwnedCards, members]);
+      const ids = new Set(allOwnedCards.map(c => c.memberId)); // 找出所有持有卡片的成員 ID
+      const usedNames = [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+      
+      // 🌟 排序邏輯：建立名稱到排序的對照表
+      const subunitSortMap = new Map();
+      (subunits || []).forEach(s => {
+          const current = subunitSortMap.get(s.name);
+          // 如果有多個同名分隊（不同團體），取最小的 sortOrder（最優先）
+          if (current === undefined || (s.sortOrder !== undefined && s.sortOrder < current)) {
+              subunitSortMap.set(s.name, s.sortOrder ?? 999);
+          }
+      });
+
+      return usedNames.map(name => ({
+          id: name,
+          name: name,
+          sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
+      })).sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [allOwnedCards, members, subunits]);
 
   useEffect(() => {
-      if (availableSubunits.length > 0 && (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit))) {
-          setFilterSubunit(availableSubunits[0]);
+      // 🌟 修正：availableSubunits 現在是物件陣列，檢查 id
+      const availableIds = availableSubunits.map(s => s.id);
+      if (availableIds.length > 0 && (filterSubunit === 'All' || !availableIds.includes(filterSubunit))) {
+          setFilterSubunit(availableIds[0]);
       }
   }, [availableSubunits, filterSubunit]);
 
@@ -2129,7 +2147,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
             {(options || []).map(opt => {
                 const id = typeof opt === 'object' ? opt.id : opt;
-                const name = mapName ? mapName(opt) : opt;
+                const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
                 const isSelected = current === id;
                 return (
                     <FilterTagItem 
@@ -2188,7 +2206,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} />}
+            {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} mapName={s => s.name} />}
             {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
             {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
             {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
@@ -2647,7 +2665,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit }) {
     );
 }
 
-function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes }) {
+function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, subunits }) {
     const [localItems, setLocalItems] = useState([...(selectedItems || [])]);
 
     const [filterSubunit, setFilterSubunit] = useState('All');
@@ -2661,12 +2679,28 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
 
     const availableSubunits = useMemo(() => {
         const ids = new Set((cards || []).map(c => c.memberId));
-        return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
-    }, [cards, members]);
+        const usedNames = [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+        
+        // 🌟 排序邏輯
+        const subunitSortMap = new Map();
+        (subunits || []).forEach(s => {
+            const current = subunitSortMap.get(s.name);
+            if (current === undefined || (s.sortOrder !== undefined && s.sortOrder < current)) {
+                subunitSortMap.set(s.name, s.sortOrder ?? 999);
+            }
+        });
+
+        return usedNames.map(name => ({
+            id: name,
+            name: name,
+            sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
+        })).sort((a, b) => a.sortOrder - b.sortOrder);
+    }, [cards, members, subunits]);
 
     useEffect(() => {
-        if (availableSubunits.length > 0 && (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit))) {
-            setFilterSubunit(availableSubunits[0]);
+        const availableIds = availableSubunits.map(s => s.id);
+        if (availableIds.length > 0 && (filterSubunit === 'All' || !availableIds.includes(filterSubunit))) {
+            setFilterSubunit(availableIds[0]);
         }
     }, [availableSubunits, filterSubunit]);
 
@@ -2803,7 +2837,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
                {(options || []).map(opt => {
                    const id = typeof opt === 'object' ? opt.id : opt;
-                   const name = mapName ? mapName(opt) : opt;
+                   const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
                    const isSelected = current === id;
                    return (
                        <button 
@@ -2858,7 +2892,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             </div>
 
             <div className="bg-white p-4 border-b border-gray-100 shadow-sm space-y-4 flex-shrink-0">
-                {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} />}
+                {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} mapName={s => s.name} />}
                 {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
                 {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
                 {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
@@ -2919,7 +2953,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     );
 }
 
-function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory }) {
+function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory, subunits }) {
     const isEdit = !!record;
     const [form, setForm] = useState({
         name: record?.name || '', image: record?.image || null, status: record?.status || '未發貨',
@@ -3309,7 +3343,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 </Modal>
             )}
 
-            {showCardSelector && <MiniCardSelector cards={cards} selectedItems={cardItems.map(c => ({ uid: c.uid, cardId: c.cardId }))} onConfirm={handleConfirmSelectCards} onClose={() => setShowCardSelector(false)} members={members} series={series} batches={batches} channels={channels} types={types} uniqueTypes={uniqueTypes} uniqueChannels={uniqueChannels} uniqueSeriesTypes={uniqueSeriesTypes} />}
+            {showCardSelector && <MiniCardSelector cards={cards} selectedItems={cardItems.map(c => ({ uid: c.uid, cardId: c.cardId }))} onConfirm={handleConfirmSelectCards} onClose={() => setShowCardSelector(false)} members={members} series={series} batches={batches} channels={channels} types={types} uniqueTypes={uniqueTypes} uniqueChannels={uniqueChannels} uniqueSeriesTypes={uniqueSeriesTypes} subunits={subunits} />}
         </div>
     );
 }
@@ -3810,7 +3844,7 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails }) {
+function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits }) {
     // ==========================================
     // 1. 狀態宣告 (確保順序與唯一性)
     // ==========================================
@@ -3874,12 +3908,28 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     // ==========================================
     const availableSubunits = useMemo(() => {
         const ids = new Set(poolCards.map(c => c.memberId));
-        return [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
-    }, [poolCards, members]);
+        const usedNames = [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+        
+        // 🌟 排序邏輯
+        const subunitSortMap = new Map();
+        (subunits || []).forEach(s => {
+            const current = subunitSortMap.get(s.name);
+            if (current === undefined || (s.sortOrder !== undefined && s.sortOrder < current)) {
+                subunitSortMap.set(s.name, s.sortOrder ?? 999);
+            }
+        });
+
+        return usedNames.map(name => ({
+            id: name,
+            name: name,
+            sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
+        })).sort((a, b) => a.sortOrder - b.sortOrder);
+    }, [poolCards, members, subunits]);
 
     useEffect(() => {
-        if (availableSubunits.length > 0 && (filterSubunit === 'All' || !availableSubunits.includes(filterSubunit))) {
-            setFilterSubunit(availableSubunits[0]);
+        const availableIds = availableSubunits.map(s => s.id);
+        if (availableIds.length > 0 && (filterSubunit === 'All' || !availableIds.includes(filterSubunit))) {
+            setFilterSubunit(availableIds[0]);
         }
     }, [availableSubunits, filterSubunit]);
 
@@ -4069,7 +4119,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
               {(options || []).map(opt => {
                   const id = typeof opt === 'object' ? opt.id : opt;
-                  const name = mapName ? mapName(opt) : opt;
+                  const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
                   const isSelected = current === id;
                   return (
                       <button 
@@ -4191,7 +4241,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   </div>
 
                   <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
-                      {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} />}
+                      {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} mapName={s => s.name} />}
                       {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
                       {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
                       {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
@@ -4931,6 +4981,7 @@ export default function App() {
           types={types} sales={sales} 
           cols={collectionCols}       // 🌟 致命錯誤修正：把 cols 換成 collectionCols
           setCols={setCollectionCols} // 🌟 致命錯誤修正：把 setCols 換成 setCollectionCols
+          subunits={subunits}         // 🌟 傳入 subunits
         />;
       case 'bulk':
         return <BulkTab 
@@ -4985,6 +5036,7 @@ export default function App() {
           setCols={setExportCols}               // 🌟 修正：把 setCols 換成 setExportCols
           showDetails={exportShowDetails}       // 🌟 順手修正：把 showDetails 換成 exportShowDetails
           setShowDetails={setExportShowDetails} // 🌟 順手修正
+          subunits={subunits}                   // 🌟 傳入 subunits
         />;
       default: return null;
     }
@@ -5115,6 +5167,7 @@ export default function App() {
               uniqueSources={uniqueSources}
               onRenameSource={handleRenameSource}
               onDeleteSource={handleDeleteSource}
+          subunits={subunits} // 🌟 傳入 subunits
           />
       )}
 
