@@ -474,7 +474,13 @@ const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick })
       className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
     >
         {/* 🌟 限制最大生成寬度為 120px，強制伺服器輸出極小 KB 數的縮圖 */}
-        {series.image && <Image src={series.image} alt={series.name} fill sizes="120px" className="object-cover brightness-75 group-hover:brightness-100 transition-all pointer-events-none" />}
+        {series.image ? (
+            <Image src={series.image} alt={series.name} fill sizes="120px" className="object-cover brightness-75 group-hover:brightness-100 transition-all pointer-events-none" unoptimized={true} />
+        ) : (
+            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                <ImageIcon className="w-8 h-8 text-gray-400" />
+            </div>
+        )}
         <div className="absolute inset-0 flex flex-col justify-end p-2 bg-gradient-to-t from-black/70 to-transparent">
             <span className="text-white font-bold text-sm truncate w-full">{series.name}</span>
             {series.shortName && <span className="text-white/70 text-[10px]">{series.shortName}</span>}
@@ -493,7 +499,13 @@ const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) =
       className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
     >
         {/* 🌟 限制最大生成寬度為 100px */}
-        {batch.image && <Image src={batch.image} alt={batch.name || 'batch'} fill sizes="100px" className="object-cover opacity-90 hover:opacity-100 pointer-events-none" />}
+        {batch.image ? (
+            <Image src={batch.image} alt={batch.name || 'batch'} fill sizes="100px" className="object-cover opacity-90 hover:opacity-100 pointer-events-none" unoptimized={true} />
+        ) : (
+             <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                <Package className="w-6 h-6 text-gray-300" />
+            </div>
+        )}
        <div className="absolute inset-0 flex items-end p-1 bg-gradient-to-t from-black/60 via-transparent to-transparent">
             <span className="text-xs font-bold text-white line-clamp-2 w-full leading-tight">{batch.name}</span>
         </div>
@@ -1581,7 +1593,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   const hasLongPressed = useRef(false);
 
   const handleSelectAdd = (cardId) => {
-      setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, cardId }]);
+      setSelectedItems(prev => {
+          const isSelected = prev.some(item => item.cardId === cardId);
+          if (isSelected) {
+              return prev.filter(item => item.cardId !== cardId);
+          } else {
+              return [...prev, { uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, cardId }];
+          }
+      });
   };
 
   const startPress = (cardId) => {
