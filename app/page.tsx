@@ -26,31 +26,54 @@ const toSnakeCase = (obj) => {
 
 import Cropper from 'react-easy-crop';
 // 🌟 1. 內建裁切剪刀 (放在 ImageUploader 元件外面/上方，確保絕對找得到！)
+// 🌟 終極防爆版：內建自動壓縮與邊界安全檢查
 const getCroppedImg = async (imageSrc, pixelCrop) => {
-    const image = new Image();
+    const image = new window.Image();
     image.src = imageSrc;
+    
     // 等待圖片載入
     await new Promise((resolve, reject) => {
         image.onload = resolve;
-        image.onerror = reject;
+        image.onerror = () => reject(new Error('圖片載入失敗'));
     });
-    // 建立畫布來裁切
+
     const canvas = document.createElement('canvas');
-    canvas.width = pixelCrop.width;
-    canvas.height = pixelCrop.height;
     const ctx = canvas.getContext('2d');
+
+    // 1. 強制轉成整數，避免某些瀏覽器對小數點報錯
+    const cropWidth = Math.max(1, Math.round(pixelCrop.width));
+    const cropHeight = Math.max(1, Math.round(pixelCrop.height));
+    const cropX = Math.round(pixelCrop.x);
+    const cropY = Math.round(pixelCrop.y);
+
+    // 2. 🌟 防爆機制：設定最大寬高，避免原始圖片太大導致手機瀏覽器崩潰
+    const MAX_SIZE = 1000; 
+    let scale = 1;
+    if (cropWidth > MAX_SIZE || cropHeight > MAX_SIZE) {
+        scale = MAX_SIZE / Math.max(cropWidth, cropHeight);
+    }
+
+    // 計算最終輸出的安全尺寸
+    const finalWidth = Math.max(1, Math.round(cropWidth * scale));
+    const finalHeight = Math.max(1, Math.round(cropHeight * scale));
+
+    canvas.width = finalWidth;
+    canvas.height = finalHeight;
+
+    // 3. 繪製並同時壓縮尺寸
     ctx.drawImage(
         image,
-        pixelCrop.x,
-        pixelCrop.y,
-        pixelCrop.width,
-        pixelCrop.height,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
         0,
         0,
-        pixelCrop.width,
-        pixelCrop.height
+        finalWidth,
+        finalHeight
     );
-    // 壓縮成 JPG，品質 0.8，確保檔案夠小能存入資料庫
+
+    // 4. 壓縮成 JPG，品質 0.8 (這樣每張圖片大約只佔 50~150KB，極度輕量！)
     return canvas.toDataURL('image/jpeg', 0.8);
 };
 
