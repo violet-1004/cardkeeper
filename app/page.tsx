@@ -3376,6 +3376,25 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
   const [bulkImages, setBulkImages] = useState([]);
   const [enableCrop, setEnableCrop] = useState(true);
 
+  // 🌟 新增：系列類型篩選狀態
+  const [filterSeriesType, setFilterSeriesType] = useState(() => {
+      if (initialData.seriesId && extraOptions.series) {
+          const s = extraOptions.series.find(s => s.id === initialData.seriesId);
+          return s?.type || 'All';
+      }
+      return 'All';
+  });
+
+  // 🌟 新增：根據類型篩選並排序後的系列列表
+  const filteredSeries = useMemo(() => {
+      let list = extraOptions.series || [];
+      if (filterSeriesType !== 'All') {
+          list = list.filter(s => s.type === filterSeriesType);
+      }
+      // 依日期排序，方便查找
+      return list.sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
+  }, [extraOptions.series, filterSeriesType]);
+
   const handleDuplicate = () => {
     const duplicatedForm = { ...form };
     delete duplicatedForm.id;
@@ -3640,9 +3659,18 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                 )}
              />
 
+             {/* 🌟 新增：系列類型篩選 */}
+             <FormCapsuleSelect 
+                label="系列類型篩選"
+                options={['All', ...(extraOptions.seriesTypes || [])]}
+                value={filterSeriesType}
+                onChange={val => setFilterSeriesType(val)}
+                renderOption={t => t === 'All' ? '全部' : t}
+             />
+
              <FormCapsuleSelect 
                 label="系列"
-                options={extraOptions.series || []}
+                options={filteredSeries} // 🌟 改用篩選後的列表
                 value={form.seriesId}
                 onChange={val => setForm({...form, seriesId: val, batchId: ''})} 
                 renderOption={s => s.name}
