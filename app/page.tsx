@@ -2189,32 +2189,15 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         return map;
     }, [channels]);
 
-    // 🌟 升級版：支援重複卡片的選取狀態 (存陣列物件)
-    const [selectedItems, setSelectedItems] = useState([]);
     const pressTimer = useRef(null);
     const hasLongPressed = useRef(false);
 
-    const handleSelectAdd = (cardId) => {
-        setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random()}`, cardId }]);
-    };
-
-    const startPress = (cardId) => {
+    const startPress = (item) => {
         hasLongPressed.current = false;
         pressTimer.current = setTimeout(() => {
             hasLongPressed.current = true;
-            setSelectedItems(prev => {
-                let lastIdx = -1;
-                for (let i = prev.length - 1; i >= 0; i--) {
-                    if (prev[i].cardId === cardId) { lastIdx = i; break; }
-                }
-                if (lastIdx !== -1) {
-                    const next = [...prev];
-                    next.splice(lastIdx, 1); // 🌟 刪除最後一次加入的那一張
-                    return next;
-                }
-                return prev;
-            });
-        }, 500); 
+            setItemToDelete(item); // 🌟 長按觸發刪除確認
+        }, 600); 
     };
     const cancelPress = () => clearTimeout(pressTimer.current);
     const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
