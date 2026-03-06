@@ -1974,6 +1974,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
      if (viewMode === 'selling' && !salesMap[card.id]) return false;
+     if (viewMode === 'owned' && (inventoryMap[card.id] || 0) <= 0) return false;
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
@@ -2094,6 +2095,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                     <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
                     <button onClick={() => setViewMode('wishlist')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'wishlist' ? 'bg-white text-pink-500 shadow-sm' : 'text-gray-400'}`}>想要</button>
                     <button onClick={() => setViewMode('selling')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'selling' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>販售</button>
+                    <button onClick={() => setViewMode('owned')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'owned' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}>擁有</button>
                 </div>
             </div>
         </div>
