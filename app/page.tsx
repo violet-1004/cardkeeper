@@ -1750,9 +1750,27 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const selCount = selectedItems.filter(i => i.cardId === card.id).length;
                         const isSelected = selCount > 0;
                         const qty = inventoryMap[card.id] || 0;
+
+                        // 🌟 補回名稱顯示邏輯
+                        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                        const seriesName = cardSeries?.shortName || cardSeries?.name;
+                        const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                        
+                        const effectiveType = card.type;
+                        const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                        const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                        
+                        const effectiveChannelId = card.channel;
+                        const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                        const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                        
+                        const batchNumber = cardBatch?.batchNumber;
+                        const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                        const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
                         return (
                             <div key={card.id} 
-                                className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent hover:border-gray-200'} ${qty === 0 && !isSelectionMode ? 'opacity-50 grayscale hover:grayscale-0 hover:opacity-100' : ''}`}
+                                className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all flex flex-col ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent hover:border-gray-200'} ${qty === 0 && !isSelectionMode ? 'opacity-50 grayscale hover:grayscale-0 hover:opacity-100' : ''}`}
                                 style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                 onMouseDown={() => { if(isSelectionMode) startPress(card.id); }} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                 onTouchStart={() => { if(isSelectionMode) startPress(card.id); }} onTouchEnd={cancelPress} onTouchMove={cancelPress}
@@ -1766,7 +1784,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                     }
                                 }}
                             >
-                                <div className="aspect-[2/3] bg-gray-100 relative">
+                                <div className="aspect-[2/3] bg-gray-100 relative flex-shrink-0">
                                     <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
                                 </div>
                                 {isSelectionMode && (
@@ -1779,6 +1797,11 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                         {qty}
                                     </div>
                                 )}
+                                
+                                {/* 🌟 顯示名稱 */}
+                                <div className="px-1 py-1.5 bg-white flex-1 flex items-start justify-center text-center">
+                                    <div className="text-[10px] font-bold text-gray-800 leading-tight line-clamp-2">{displayTitle || '未命名卡片'}</div>
+                                </div>
                             </div>
                         )
                     })}
