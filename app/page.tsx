@@ -24,6 +24,13 @@ const toSnakeCase = (obj) => {
     return res;
 };
 
+const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => (c === 'x' ? (Math.random() * 16 | 0) : ((Math.random() * 16 | 0) & 0x3 | 0x8)).toString(16));
+};
+
 import Cropper from 'react-easy-crop';
 // 🌟 1. 內建裁切剪刀 (放在 ImageUploader 元件外面/上方，確保絕對找得到！)
 // 🌟 終極防爆版：內建自動壓縮與邊界安全檢查
@@ -527,13 +534,13 @@ const FilterTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }
   );
 };
 
-const SubunitTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }) => {
-  const bind = useLongPress(() => onLongPress && onLongPress(text));
+const SubunitTagItem = ({ text, isSelected, onClick, onLongPress }) => {
+  // 🌟 修正：onLongPress 直接觸發，不需傳參數，因為父層已經用 closure 綁定好了
+  const bind = useLongPress(() => onLongPress && onLongPress());
   return (
     <button
         {...bind}
         onClick={onClick}
-        onDoubleClick={() => onDoubleClick && onDoubleClick(text)}
         className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
     >
         {text}
@@ -1363,7 +1370,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     );
 }
 
-function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, sales, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols }) {
+function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, sales, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols, subunits, setSubunits }) {
   const [filterMemberId, setFilterMemberId] = useState('All');
   const [filterSubunit, setFilterSubunit] = useState('All'); 
   const [filterSeriesId, setFilterSeriesId] = useState('All');
@@ -1426,17 +1433,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (type === 'seriesType') {
           setSeries(prev => prev.map(s => s.type === data.value ? { ...s, type: newName } : s));
           await supabase.from('series').update({ type: newName }).eq('type', data.value);
-      } else if (type === 'subunit') {
-          // 🌟 分隊重新命名邏輯
-          if (!newName || newName === data.value) return;
-          
-          setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === data.value) ? { ...m, subunit: newName } : m));
-          setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === data.value) ? { ...s, subunit: newName } : s));
-
-          await supabase.from('members').update({ subunit: newName }).eq('group_id', currentGroupId).eq('subunit', data.value);
-          await supabase.from('series').update({ subunit: newName }).eq('group_id', currentGroupId).eq('subunit', data.value);
-          
-          if (filterSubunit === data.value) setFilterSubunit(newName);
       }
   };
 
@@ -1447,20 +1443,27 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (type === 'seriesType') {
           setSeries(prev => prev.map(s => s.type === data.value ? { ...s, type: '' } : s));
           await supabase.from('series').update({ type: '' }).eq('type', data.value);
-      } else if (type === 'subunit') {
-          // 🌟 分隊刪除邏輯
-          setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === data.value) ? { ...m, subunit: null } : m));
-          setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === data.value) ? { ...s, subunit: null } : s));
-
-          await supabase.from('members').update({ subunit: null }).eq('group_id', currentGroupId).eq('subunit', data.value);
-          await supabase.from('series').update({ subunit: null }).eq('group_id', currentGroupId).eq('subunit', data.value);
-          
-          if (filterSubunit === data.value) setFilterSubunit('All');
       }
   };
 
   const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
-  const uniqueSubunits = useMemo(() => [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))], [currentMembers]);
+  
+  // 🌟 升級版 uniqueSubunits：結合資料庫中的 subunits 與成員中遺留的 subunit 字串
+  const uniqueSubunits = useMemo(() => {
+      const defined = (subunits || []).filter(s => s.groupId === currentGroupId);
+      const definedNames = new Set(defined.map(s => s.name));
+      
+      const used = [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))];
+      const missing = used.filter(name => !definedNames.has(name)).map(name => ({
+          id: `temp_${name}`,
+          name,
+          groupId: currentGroupId,
+          sortOrder: 999
+      }));
+      
+      return [...defined, ...missing].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
+  }, [subunits, currentMembers, currentGroupId]);
+
   const displayMembers = currentMembers.filter(m => filterSubunit === 'All' || m.subunit === filterSubunit);
 
   const currentSeries = (series || []).filter(s => {
@@ -1651,17 +1654,17 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 mb-3">
                 {uniqueSubunits.map(sub => (
                     <SubunitTagItem
-                        key={sub}
-                        text={sub}
-                        isSelected={filterSubunit === sub}
+                        key={sub.id || sub.name}
+                        text={sub.name}
+                        isSelected={filterSubunit === sub.name}
                         onClick={() => { 
-                            if (filterSubunit !== sub) {
-                                setFilterSubunit(sub); 
+                            if (filterSubunit !== sub.name) {
+                                setFilterSubunit(sub.name); 
                                 setFilterMemberId('All'); 
                                 setFilterSeriesId('All'); 
                             }
                         }}
-                        onDoubleClick={(val) => setEditingOption({ type: 'subunit', data: { value: val, name: val } })}
+                        onLongPress={() => openModal('subunit', sub.id.startsWith('temp_') ? { name: sub.name, groupId: currentGroupId } : sub)}
                     />
                 ))}
             </div>
@@ -3353,7 +3356,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
     <Modal title={title} onClose={onClose} footer={
       <div className="flex justify-between items-center w-full">
          <div className="flex gap-2">
-             {(isEdit && ['card', 'series', 'batch', 'group', 'member', 'channel', 'type'].includes(type)) && (
+             {(isEdit && ['card', 'series', 'batch', 'group', 'member', 'channel', 'type', 'subunit'].includes(type)) && (
                  <button 
                     onClick={() => { onDelete(type, initialData.id); onClose(); }} 
                     className="px-4 py-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center gap-1 text-sm font-bold"
@@ -3379,14 +3382,13 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
       </div>
     }>
       <div className="space-y-4">
-       {type !== 'card' && type !== 'channel' && type !== 'type' && (
+       {type !== 'card' && type !== 'channel' && type !== 'type' && type !== 'subunit' && (
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">名稱</label>
               <input className="w-full border p-2 rounded-lg" placeholder="請輸入名稱" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
             </div>
         )}
 
-        {/* 🌟 新增成員的專屬排序輸入框 */}
         {/* 🌟 新增成員的專屬排序與分隊輸入框 */}
         {type === 'member' && (
             <div className="space-y-3 bg-gray-50 p-3 rounded-xl border border-gray-100">
@@ -3409,6 +3411,20 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                   onChange={e => setForm({...form, sortOrder: Number(e.target.value)})} 
                 />
               </div>
+            </div>
+        )}
+
+        {/* 🌟 分隊編輯表單 */}
+        {type === 'subunit' && (
+            <div className="space-y-3">
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">分隊名稱</label>
+                    <input className="w-full border p-2 rounded-lg" placeholder="Ex. 舞蹈小分隊" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                </div>
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">排序 (數字越小排越前面)</label>
+                    <input type="number" className="w-full border p-2 rounded-lg" value={form.sortOrder ?? 999} onChange={e => setForm({...form, sortOrder: Number(e.target.value)})} />
+                </div>
             </div>
         )}
 
@@ -4306,6 +4322,7 @@ export default function App() {
   const [customLists, setCustomLists] = useState([]);
   const [sales, setSales] = useState([]);
   const [bulkRecords, setBulkRecords] = useState([]);
+  const [subunits, setSubunits] = useState([]); // 🌟 新增 subunits 狀態
   
   const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
 
@@ -4382,6 +4399,7 @@ export default function App() {
         setBulkRecords(await fetchTable('bulk_records'));
         setCustomLists(await fetchTable('custom_lists'));
         setSales(await fetchTable('ui_sales'));
+        setSubunits(await fetchTable('ui_subunits')); // 🌟 讀取 subunits
     }
     fetchAllData();
   }, []);
@@ -4532,7 +4550,7 @@ export default function App() {
 
   // 🌟 通用儲存功能
   const handleSaveData = async (data, type, isEdit = false) => {
-      const tableMap = { group: 'groups', member: 'members', series: 'series', batch: 'batches', channel: 'channels', type: 'types', card: 'ui_cards' };
+      const tableMap = { group: 'groups', member: 'members', series: 'series', batch: 'batches', channel: 'channels', type: 'types', card: 'ui_cards', subunit: 'ui_subunits' };
       const table = tableMap[type];
 
       const allowedKeys = {
@@ -4542,7 +4560,8 @@ export default function App() {
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
-          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist']
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist'],
+          subunit: ['id', 'groupId', 'name', 'sortOrder']
       };
 
       const cleanData = (obj) => {
@@ -4591,7 +4610,7 @@ export default function App() {
       }
 
       // 🌟 3. 處理單筆新增/編輯
-      const payload = { ...data, id: data.id || Date.now().toString() };
+      const payload = { ...data, id: data.id || (type === 'subunit' ? generateUUID() : Date.now().toString()) };
       
       const updateList = (list, setList) => {
            setList(prev => {
@@ -4609,6 +4628,7 @@ export default function App() {
                return newList;
            });
       };
+
       if (type === 'card') updateList(cards, setCards);
       else if (type === 'group') { updateList(groups, setGroups); if (!isEdit) setCurrentGroupId(payload.id); }
       else if (type === 'member') updateList(members, setMembers);
@@ -4616,6 +4636,23 @@ export default function App() {
       else if (type === 'batch') updateList(batches, setBatches);
       else if (type === 'channel') updateList(channels, setChannels);
       else if (type === 'type') updateList(types, setTypes);
+      else if (type === 'subunit') {
+          // 🌟 分隊特殊邏輯：如果是編輯且名稱改變，同步更新成員與系列
+          if (isEdit) {
+              const oldItem = subunits.find(s => s.id === payload.id);
+              if (oldItem && oldItem.name !== payload.name) {
+                  // Update members
+                  setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === oldItem.name) ? { ...m, subunit: payload.name } : m));
+                  await supabase.from('members').update({ subunit: payload.name }).eq('group_id', currentGroupId).eq('subunit', oldItem.name);
+                  
+                  // Update series
+                  setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === oldItem.name) ? { ...s, subunit: payload.name } : s));
+                  await supabase.from('series').update({ subunit: payload.name }).eq('group_id', currentGroupId).eq('subunit', oldItem.name);
+              }
+          }
+          // 🌟 排序
+          setSubunits(prev => { const next = prev.filter(s => s.id !== payload.id); return [...next, payload].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999)); });
+      }
 
       const dbPayload = toSnakeCase(cleanData(payload));
       const { error } = await supabase.from(table).upsert(dbPayload);
@@ -4628,7 +4665,7 @@ export default function App() {
 
   // 🌟 通用刪除功能
   const handleDeleteData = async (type, id) => {
-      const tableMap = { group: 'groups', member: 'members', series: 'series', batch: 'batches', channel: 'channels', type: 'types', card: 'ui_cards' };
+      const tableMap = { group: 'groups', member: 'members', series: 'series', batch: 'batches', channel: 'channels', type: 'types', card: 'ui_cards', subunit: 'ui_subunits' };
       
       if (type === 'card') {
           setCards(prev => prev.filter(c => c.id !== id));
@@ -4659,6 +4696,16 @@ export default function App() {
           setTypes(prev => prev.filter(t => t.id !== id));
           setCards(prev => prev.map(c => c.type === id ? { ...c, type: null } : c));
           setBatches(prev => prev.map(b => b.type === id ? { ...b, type: null } : b));
+      } else if (type === 'subunit') {
+          const item = subunits.find(s => s.id === id);
+          if (item) {
+              // Clear subunit from members and series
+              setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === item.name) ? { ...m, subunit: null } : m));
+              setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === item.name) ? { ...s, subunit: null } : s));
+              await supabase.from('members').update({ subunit: null }).eq('group_id', currentGroupId).eq('subunit', item.name);
+              await supabase.from('series').update({ subunit: null }).eq('group_id', currentGroupId).eq('subunit', item.name);
+          }
+          setSubunits(prev => prev.filter(s => s.id !== id));
       }
 
       await supabase.from(tableMap[type]).delete().eq('id', id);
@@ -4870,6 +4917,8 @@ export default function App() {
           setCards={setCards}
           cols={libraryCols}           // 🌟 修正：對應 libraryCols
           setCols={setLibraryCols}     // 🌟 修正：對應 setLibraryCols
+          subunits={subunits}          // 🌟 傳入 subunits
+          setSubunits={setSubunits}    // 🌟 傳入 setSubunits
         />;
       case 'collection': 
         return <CollectionTab 
