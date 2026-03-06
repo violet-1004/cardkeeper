@@ -515,6 +515,20 @@ const FilterTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }
   );
 };
 
+const SubunitTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }) => {
+  const bind = useLongPress(() => onLongPress && onLongPress(text));
+  return (
+    <button
+        {...bind}
+        onClick={onClick}
+        onDoubleClick={() => onDoubleClick && onDoubleClick(text)}
+        className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+    >
+        {text}
+    </button>
+  );
+};
+
 // --- 5. 表單與模態框 ---
 function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '韓拍', 'Mercari', '推特', '蝦皮'] , uniqueSources, onRenameSource, onDeleteSource}) {
     const isEdit = !!initialData.id;
@@ -715,16 +729,25 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
     );
 }
 
-function OptionManageModal({ type, data, onClose, onRename, onDelete }) {
+function OptionManageModal({ type, data, onClose, onRename, onDelete, onSortChange, initialSortOrder }) {
     const [newName, setNewName] = useState(data.name || data.value);
+    const [newSortOrder, setNewSortOrder] = useState(initialSortOrder);
+
+    const handleSave = () => {
+        if (onRename) onRename(newName);
+        if (onSortChange && newSortOrder !== initialSortOrder) onSortChange(newSortOrder);
+        onClose();
+    };
 
     return (
         <Modal title={`管理: ${data.name || data.value}`} onClose={onClose} className="max-w-sm" footer={
             <div className="flex justify-between items-center w-full">
                 <button 
                     onClick={() => { 
-                        onDelete();
-                        onClose();
+                        if(confirm('確定要刪除嗎？相關資料的關聯將會被移除。')) {
+                            onDelete();
+                            onClose();
+                        }
                     }}
                     className="px-4 py-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center gap-1 text-sm font-bold"
                 >
@@ -733,7 +756,7 @@ function OptionManageModal({ type, data, onClose, onRename, onDelete }) {
                 <div className="flex gap-2 justify-end ml-2 flex-1">
                     <button onClick={onClose} className="flex-1 py-2 rounded-lg border text-gray-500 hover:bg-gray-100">取消</button>
                     <button 
-                        onClick={() => { onRename(newName); onClose(); }}
+                        onClick={handleSave}
                         className="flex-1 py-2 rounded-lg bg-indigo-600 text-white font-bold"
                     >
                         儲存
@@ -751,6 +774,17 @@ function OptionManageModal({ type, data, onClose, onRename, onDelete }) {
                         className="w-full border p-3 rounded-lg"
                     />
                 </div>
+                {initialSortOrder !== undefined && (
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">排序 (數字越小越前面)</label>
+                        <input 
+                            type="number" 
+                            value={newSortOrder} 
+                            onChange={e => setNewSortOrder(Number(e.target.value))} 
+                            className="w-full border p-3 rounded-lg"
+                        />
+                    </div>
+                )}
             </div>
         </Modal>
     );
@@ -1380,6 +1414,17 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (type === 'seriesType') {
           setSeries(prev => prev.map(s => s.type === data.value ? { ...s, type: newName } : s));
           await supabase.from('series').update({ type: newName }).eq('type', data.value);
+      } else if (type === 'subunit') {
+          // 🌟 分隊重新命名邏輯
+          if (!newName || newName === data.value) return;
+          
+          setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === data.value) ? { ...m, subunit: newName } : m));
+          setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === data.value) ? { ...s, subunit: newName } : s));
+
+          await supabase.from('members').update({ subunit: newName }).eq('group_id', currentGroupId).eq('subunit', data.value);
+          await supabase.from('series').update({ subunit: newName }).eq('group_id', currentGroupId).eq('subunit', data.value);
+          
+          if (filterSubunit === data.value) setFilterSubunit(newName);
       }
   };
 
@@ -1390,7 +1435,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (type === 'seriesType') {
           setSeries(prev => prev.map(s => s.type === data.value ? { ...s, type: '' } : s));
           await supabase.from('series').update({ type: '' }).eq('type', data.value);
-      } 
+      } else if (type === 'subunit') {
+          // 🌟 分隊刪除邏輯
+          setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === data.value) ? { ...m, subunit: null } : m));
+          setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === data.value) ? { ...s, subunit: null } : s));
+
+          await supabase.from('members').update({ subunit: null }).eq('group_id', currentGroupId).eq('subunit', data.value);
+          await supabase.from('series').update({ subunit: null }).eq('group_id', currentGroupId).eq('subunit', data.value);
+          
+          if (filterSubunit === data.value) setFilterSubunit('All');
+      }
   };
 
   const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
@@ -1577,8 +1631,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         {uniqueSubunits.length > 0 && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 mb-3">
                 {uniqueSubunits.map(sub => (
-                    <button
+                    <SubunitTagItem
                         key={sub}
+                        text={sub}
+                        isSelected={filterSubunit === sub}
                         onClick={() => { 
                             if (filterSubunit !== sub) {
                                 setFilterSubunit(sub); 
@@ -1586,10 +1642,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                 setFilterSeriesId('All'); 
                             }
                         }}
-                        className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap ${filterSubunit === sub ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
-                    >
-                        {sub}
-                    </button>
+                        onDoubleClick={(val) => setEditingOption({ type: 'subunit', data: { value: val, name: val } })}
+                    />
                 ))}
             </div>
         )}
