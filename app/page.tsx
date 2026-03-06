@@ -791,397 +791,107 @@ function SeriesFilterModal({
     );
 }
 
-function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource }) {
-    const [activeModal, setActiveModal] = useState(null); 
-    const [tempInvData, setTempInvData] = useState(null);
-    const saleFocusRef = useRef(null);
+function CardDetailModal({ card, onClose, inventory, setInventory, onSaveInventory }) {
+    // 1. 緩衝售價與購入價，避免每打一個字就觸發存檔
+    const [localSellPrice, setLocalSellPrice] = useState('');
+    const [localBuyPrice, setLocalBuyPrice] = useState('');
+    const [localNote, setLocalNote] = useState('');
 
-    const SALE_COLORS = [
-        { id: 'black', class: 'bg-black/70', display: 'bg-gray-800' },
-        { id: 'red', class: 'bg-red-500/80', display: 'bg-red-500' },
-        { id: 'orange', class: 'bg-orange-500/80', display: 'bg-orange-500' },
-        { id: 'green', class: 'bg-green-600/80', display: 'bg-green-600' },
-        { id: 'blue', class: 'bg-blue-500/80', display: 'bg-blue-500' },
-        { id: 'purple', class: 'bg-purple-500/80', display: 'bg-purple-500' },
-    ];
+    // 找出這張卡片目前的庫存紀錄
+    const currentInv = useMemo(() => 
+        (inventory || []).find(i => i.cardId === card.id && (!i.sellPrice || i.sellPrice <= 0))
+    , [inventory, card.id]);
 
-    const card = cards.find(c => c.id === initialCard.id) || initialCard;
-
-    const memberName = members.find(m => m.id === card.memberId)?.name;
-    const groupName = groups.find(g => g.id === card.groupId)?.name;
-    
-    const cardSeries = (series || []).find(s => s.id === card.seriesId);
-    const seriesName = cardSeries?.shortName || cardSeries?.name;
-    const cardBatch = (batches || []).find(b => b.id === card.batchId);
-    
-    const effectiveType = card.type;
-    const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
-    const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-    
-    const effectiveChannelId = card.channel;
-    const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
-    const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-    
-    const batchNumber = cardBatch?.batchNumber;
-    const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
-    const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
-
-    const myInventory = (inventory || [])
-        .filter(i => i.cardId === card.id)
-        .sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
-        
-    const currentSale = sales.find(s => s.cardId === card.id); 
-
-    const totalQty = getOwnedQuantity(inventory, card.id); 
-    // 1. 先濾出還沒售出的庫存
-    const validInv = myInventory.filter(i => (!i.sellPrice || i.sellPrice <= 0));
-    // 2. 計算總花費金額
-    const totalAmount = validInv.reduce((acc, curr) => acc + Number(curr.buyPrice || 0), 0);
-    // 3. 計算總擁有張數
-    const totalValidQty = validInv.reduce((acc, curr) => acc + (Number(curr.quantity) || 1), 0);
-    // 4. 總金額 / 總張數 = 真實均價
-    const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
-
-    // 🌟 升級版：確保批量加入的重複卡片都會成為獨立紀錄
-  const handleSaveInventory = async (data) => {
-      const isArray = Array.isArray(data);
-      const items = isArray ? data : [data];
-      
-      const newItems = items.map(item => ({
-          ...item,
-          // 🌟 如果是剛選進來沒有實體 ID 的，強制給予全新獨立 ID
-          id: (!item.id || item.id.startsWith('temp_') || item.id.startsWith('sel_')) 
-              ? `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` 
-              : item.id,
-          quantity: 1 // 🌟 強制數量為 1，全部打平成獨立卡片
-      }));
-
-      setInventory(prev => {
-          let next = [...prev];
-          newItems.forEach(newItem => {
-              const idx = next.findIndex(i => i.id === newItem.id);
-              if (idx !== -1) next[idx] = newItem;
-              else next.push(newItem);
-          });
-          return next;
-      });
-
-      const { error } = await supabase.from('ui_inventory').upsert(newItems.map(toSnakeCase));
-      if (error) console.error("Error saving inventory:", error);
-  };
-
-    const handleUpdateSale = async (key, value) => {
-        let payloadToSave;
-        setSales(prev => {
-            const existing = prev.find(s => s.cardId === card.id);
-            if (existing) {
-                payloadToSave = { ...existing, [key]: value };
-                return prev.map(s => s.cardId === card.id ? payloadToSave : s);
-            } else {
-                payloadToSave = { id: Date.now().toString(), cardId: card.id, [key]: value, date: new Date().toISOString().split('T')[0], quantity: 1, price: 0, color: 'bg-black/70' };
-                return [...prev, payloadToSave];
-            }
-        });
-        
-        // 💾 儲存到 Supabase
-        setTimeout(async () => {
-            if(payloadToSave) await supabase.from('ui_sales').upsert(toSnakeCase(payloadToSave));
-        }, 0);
-    };
-    
-    const adjustSalePrice = (amount) => {
-        const currentPrice = Number(currentSale?.price) || 0;
-        const newPrice = Math.max(0, currentPrice + amount);
-        handleUpdateSale('price', newPrice);
-    };
-
-    const handleDeleteInventory = async (invId) => {
-        setInventory(prev => prev.filter(i => i.id !== invId));
-        setActiveModal(null);
-        setTempInvData(null);
-        // 💾 刪除 Supabase 紀錄
-        await supabase.from('ui_inventory').delete().eq('id', invId);
-    };
-
-    const handleAddToList = async (listId, note) => {
-        const targetList = customLists.find(l => l.id === listId);
-        const newItems = [...(targetList.items || []), { cardId: card.id, note }];
-        setCustomLists(prev => prev.map(l => l.id === listId ? { ...l, items: newItems } : l));
-        setActiveModal(null);
-        alert("已加入收藏冊");
-        // 💾 儲存到 Supabase
-        await supabase.from('custom_lists').update({ items: newItems }).eq('id', listId);
-    };
-
-    const toggleWishlist = async () => {
-        const newVal = !card.isWishlist;
-        setCards(prev => prev.map(c => c.id === card.id ? { ...c, isWishlist: newVal } : c));
-        // 💾 儲存到 Supabase
-        await supabase.from('ui_cards').update({ is_wishlist: newVal }).eq('id', card.id);
-    };
-
-    const openEditInv = (inv) => {
-        setTempInvData(inv);
-        setActiveModal('editInv');
-    };
-    
     useEffect(() => {
-        if(activeModal === 'focusSell' && saleFocusRef.current) {
-            saleFocusRef.current.focus();
-            setActiveModal(null);
+        if (currentInv) {
+            setLocalBuyPrice(currentInv.buyPrice || '');
+            setLocalNote(currentInv.note || '');
         }
-    }, [activeModal]);
+    }, [currentInv]);
+
+    // 🌟 修正後的儲存函式
+    const handleConfirmSave = async () => {
+        try {
+            const payload = {
+                cardId: card.id,
+                buyPrice: Number(localBuyPrice) || 0,
+                sellPrice: Number(localSellPrice) || 0,
+                note: localNote,
+                buyDate: new Date().toISOString().split('T')[0],
+                quantity: 1
+            };
+
+            // 呼叫父層的儲存邏輯（確保這部分對應到你的 supabase.upsert）
+            await onSaveInventory(payload);
+            alert("儲存成功");
+            onClose();
+        } catch (error) {
+            console.error("儲存失敗:", error);
+            alert("儲存失敗，請檢查網路連線");
+        }
+    };
 
     return (
-        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in">
-            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0">
-                <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
-                <div className="font-bold text-lg">卡片詳情</div>
-                <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-indigo-600"><Edit2 className="w-5 h-5" /></button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto bg-gray-50">
-                <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
-                    <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
-                        {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
-                        <Image src={card.image} alt="卡片詳情" fill priority unoptimized className="object-cover" unoptimized={true}/>
-                    </div>
-                    <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
-                    <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
-                    {cardBatch?.name && <div className="text-sm text-gray-400">{cardBatch.name}</div>}
-                    
-                    <div className="flex justify-center gap-3 mt-4">
-                        {totalQty > 0 ? (
-                            <span className="text-sm font-bold text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-100">
-                                持有 {totalQty} 張
-                            </span>
-                        ) : (
-                            <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">未擁有</span>
-                        )}
-                        {card.isWishlist && (
-                            <span className="text-sm font-bold text-pink-600 bg-pink-50 px-3 py-1 rounded-full border border-pink-100 flex items-center gap-1">
-                                <Heart className="w-3 h-3 fill-current" /> 許願中
-                            </span>
-                        )}
-                        {currentSale && currentSale.quantity >= 1 && (
-                             <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1">
-                                <Coins className="w-3 h-3 fill-current" /> 販售中
-                            </span>
-                        )}
-                    </div>
+        <Modal title="卡片詳情" onClose={onClose}>
+            <div className="p-6 space-y-6">
+                {/* 卡片預覽 */}
+                <div className="w-48 aspect-[2/3] mx-auto rounded-xl overflow-hidden shadow-2xl border-4 border-white relative">
+                    <img src={card.image} alt="卡片" className="absolute inset-0 w-full h-full object-cover" />
                 </div>
 
-                <div className="p-4 pb-24">
-                    <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                        <div className="flex justify-between items-center mb-2">
-                             <div className="flex items-center gap-2">
-                                <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600">
-                                    <TrendingUp className="w-4 h-4" />
-                                </div>
-                                <div className="font-bold text-gray-800 text-sm">販售</div>
-                            </div>
-                            <div className="flex gap-1.5">
-                                {SALE_COLORS.map(c => (
-                                    <button
-                                        key={c.id}
-                                        onClick={() => handleUpdateSale('color', c.class)}
-                                        className={`w-4 h-4 rounded-full ${c.display} border-2 ${currentSale?.color === c.class || (!currentSale?.color && c.id === 'black') ? 'border-gray-400 scale-110' : 'border-transparent opacity-40 hover:opacity-100'} transition-all`}
-                                        title="設定標籤顏色"
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1">
-                                <label className="text-[10px] text-gray-400 font-bold ml-1 mb-0.5 block">數量</label>
+                {/* 編輯區域 */}
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-500 uppercase">購入價格</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                                 <input 
-                                    type="number"
-                                    min="0"
+                                    type="number" 
+                                    value={localBuyPrice}
+                                    onChange={(e) => setLocalBuyPrice(e.target.value)}
                                     placeholder="0"
-                                    value={currentSale?.quantity || ''}
-                                    onChange={(e) => handleUpdateSale('quantity', e.target.value)}
-                                    className="w-full bg-gray-50 border-none rounded-lg py-2 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100 transition-all text-center"
+                                    className="w-full pl-7 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
                             </div>
-                            <div className="flex-[2]">
-                                <label className="text-[10px] text-green-500 font-bold ml-1 mb-0.5 block">價格</label>
-                                <div className="flex items-center gap-1">
-                                     <button onClick={() => adjustSalePrice(-50)} className="w-8 h-8 flex items-center justify-center bg-green-50 rounded-lg text-green-600 hover:bg-green-100 transition-colors flex-shrink-0">
-                                         <Minus className="w-4 h-4" />
-                                     </button>
-                                     <div className="relative flex-1">
-                                        <span className="absolute left-2 top-2 text-green-600 font-bold">$</span>
-                                        <input 
-                                            ref={saleFocusRef}
-                                            type="number"
-                                            min="0"
-                                            placeholder="0"
-                                            value={currentSale?.price || ''}
-                                            onChange={(e) => handleUpdateSale('price', e.target.value)}
-                                            className="w-full bg-white border-2 border-green-100 rounded-lg py-1.5 pl-5 pr-1 text-xl font-black text-green-600 outline-none focus:border-green-300 transition-all text-center placeholder-green-100"
-                                        />
-                                    </div>
-                                    <button onClick={() => adjustSalePrice(50)} className="w-8 h-8 flex items-center justify-center bg-green-50 rounded-lg text-green-600 hover:bg-green-100 transition-colors flex-shrink-0">
-                                         <Plus className="w-4 h-4" />
-                                    </button>
-                                </div>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-green-600 uppercase">預計售價</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-400">$</span>
+                                <input 
+                                    type="number" 
+                                    value={localSellPrice}
+                                    onChange={(e) => setLocalSellPrice(e.target.value)}
+                                    placeholder="0"
+                                    className="w-full pl-7 pr-3 py-2 bg-green-50 border border-green-100 rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-green-700"
+                                />
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex justify-between items-end mb-3 px-1">
-                        <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider">交易紀錄</h3>
-                        {avgPrice > 0 && <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded border">均價 ${avgPrice}</span>}
-                    </div>
-                    
-                    <div className="space-y-3">
-                        {myInventory.map(inv => (
-                            <div 
-                                key={inv.id} 
-                                onClick={() => openEditInv(inv)}
-                                className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-indigo-300 group"
-                            >
-                                <div>
-                                    <div className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                        {inv.buyDate}
-                                        {inv.sellPrice > 0 
-                                            ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">已售 x{inv.quantity}</span>
-                                            : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">x{inv.quantity}</span>
-                                        }
-                                    </div>
-                                    <div className="flex gap-2 mt-1 flex-wrap">
-                                        {inv.status && (
-                                            <span className={`text-[10px] px-1.5 rounded ${
-                                                inv.status === '到貨' ? 'bg-green-50 text-green-600' :
-                                                inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' :
-                                                inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' :
-                                                'bg-gray-50 text-gray-600'
-                                            }`}>
-                                                {inv.status}
-                                            </span>
-                                        )}
-                                        {inv.source && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded">{inv.source}</span>}
-                                        {inv.condition && <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 rounded">{inv.condition}</span>}
-                                        <span className="text-xs text-gray-500">{inv.note || '無備註'}</span>
-                                    </div>
-                                </div>
-                                <div className="text-right flex flex-col items-end gap-0.5">
-                                    <div className="text-sm font-bold text-red-600">
-                                        <span className="text-[10px] text-red-400 font-bold mr-1">買</span>
-                                        ${inv.buyPrice}
-                                    </div>
-                                    {inv.sellPrice > 0 && (
-                                        <div className="text-sm font-bold text-green-600">
-                                            <span className="text-[10px] text-green-400 font-bold mr-1">賣</span>
-                                            ${inv.sellPrice}
-                                        </div>
-                                    )}
-                                </div>
-                                <Edit2 className="w-4 h-4 text-gray-300 absolute right-2 top-2 opacity-0 group-hover:opacity-100" />
-                            </div>
-                        ))}
-                        {myInventory.length === 0 && (
-                            <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-                                尚未登錄任何庫存
-                            </div>
-                        )}
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500 uppercase">備註</label>
+                        <textarea 
+                            value={localNote}
+                            onChange={(e) => setLocalNote(e.target.value)}
+                            placeholder="輸入交易細節或卡況..."
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 h-20 text-sm"
+                        />
                     </div>
                 </div>
+
+                {/* 儲存按鈕 */}
+                <div className="pt-2">
+                    <button 
+                        onClick={handleConfirmSave}
+                        className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 active:scale-[0.98] transition-all"
+                    >
+                        確認擁有此卡
+                    </button>
+                </div>
             </div>
-
-            <div className="border-t bg-white p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] grid grid-cols-3 gap-3 z-20">
-                <button 
-                    onClick={toggleWishlist}
-                    className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all active:scale-95 ${card.isWishlist ? 'bg-pink-50 text-pink-600 ring-1 ring-pink-200' : 'hover:bg-gray-50 text-gray-600'}`}
-                >
-                    <Heart className={`w-5 h-5 ${card.isWishlist ? 'fill-current' : ''}`} />
-                    <span className="text-[10px] font-bold">想要</span>
-                </button>
-                
-                <button 
-                    onClick={() => setActiveModal('own')}
-                    className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl hover:bg-gray-50 text-gray-600 active:scale-95"
-                >
-                    <ShoppingBag className="w-5 h-5" />
-                    <span className="text-[10px] font-bold">擁有</span>
-                </button>
-                
-                <button 
-                     onClick={() => setActiveModal('list')}
-                    className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl hover:bg-gray-50 text-gray-600 active:scale-95"
-                >
-                    <FolderPlus className="w-5 h-5" />
-                    <span className="text-[10px] font-bold">收藏冊</span>
-                </button>
-            </div>
-
-            {(activeModal === 'own' || activeModal === 'editInv') && (
-                <Modal 
-                    title={
-                        <span className="flex items-center gap-2">
-                            {activeModal === 'own' ? "新增購買紀錄" : "編輯紀錄"}
-                            {tempInvData?.bulkRecordId && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
-                                    }}
-                                    className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
-                                >
-                                    <Package className="w-3 h-3" />
-                                    編輯盤收
-                                </button>
-                            )}
-                        </span>
-                    } 
-                    headerAction={
-                        activeModal === 'editInv' && !tempInvData?.bulkRecordId && (
-                            <button 
-                                onClick={() => handleDeleteInventory(tempInvData.id)}
-                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                                title="刪除紀錄"
-                            >
-                                <Trash2 className="w-5 h-5" />
-                            </button>
-                        )
-                    }
-                    onClose={() => { setActiveModal(null); setTempInvData(null); }} 
-                    className="max-w-sm"
-                    footer={null} 
-                >
-                    <div className="flex flex-col h-full">
-                        <form id="invForm" className="flex-1" key={tempInvData?.id || 'new'} onSubmit={(e) => e.preventDefault()}>
-                            <InventoryForm 
-                                initialData={tempInvData || {}} 
-                                onSave={handleSaveInventory} 
-                                sourceOptions={uniqueSources}
-                                uniqueSources={uniqueSources}
-                                onRenameSource={onRenameSource}
-                                onDeleteSource={onDeleteSource}
-                            />
-                        </form>
-                    </div>
-                </Modal>
-            )}
-
-            {activeModal === 'list' && (
-                <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
-                    <div className="space-y-2">
-                        {(customLists || []).map(list => (
-                            <button 
-                                key={list.id}
-                                onClick={() => handleAddToList(list.id, prompt("備註文字"))}
-                                className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
-                            >
-                                <span className="font-bold text-gray-700">{list.title}</span>
-                                <Plus className="w-5 h-5 text-gray-300 group-hover:text-indigo-600" />
-                            </button>
-                        ))}
-                    </div>
-                </Modal>
-            )}
-        </div>
+        </Modal>
     );
 }
 
