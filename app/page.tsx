@@ -3370,7 +3370,9 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
     name: '', shortName: '', batchNumber: '', image: null, type: '', date: '', 
     seriesId: '', batchId: '', memberId: '', channel: '', memberIds: [], 
     sortOrder: 0, // 🌟 補上這個
-    ...initialData 
+    ...initialData,
+    // 🌟 強制修正日期格式，避免 ISO String 導致 input date 顯示空白
+    date: initialData.date ? String(initialData.date).split('T')[0] : ''
   });
   
   const [bulkImages, setBulkImages] = useState([]);
@@ -3604,7 +3606,10 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                 allowCustom={true}
                 placeholder="輸入新類型..."
               />
-              <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+              <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">發行日期</label>
+                  <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+              </div>
            </div>
         )}
 
@@ -3639,7 +3644,10 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                 placeholder="輸入..."
                 renderOption={c => typeof c === 'object' ? c.name : c}
               />
-              <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+              <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">發行日期</label>
+                  <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+              </div>
            </div>
         )}
 
