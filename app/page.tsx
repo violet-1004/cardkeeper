@@ -1743,7 +1743,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         </div>
 
         <div 
-            className="grid gap-x-4 gap-y-6 transition-all duration-300 ease-in-out mt-4"
+            className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2"
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
         >
             {filteredCards.map(card => {
@@ -1771,7 +1771,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 
                         return (
                             <div key={card.id} 
-                                className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all flex flex-col ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent hover:border-gray-200'} ${qty === 0 && !isSelectionMode ? 'opacity-50 grayscale hover:grayscale-0 hover:opacity-100' : ''}`}
+                                className={`cursor-pointer group relative select-none ${isSelected ? 'scale-95' : ''} ${qty === 0 && !isSelectionMode ? 'opacity-50 grayscale hover:grayscale-0 hover:opacity-100' : ''}`}
                                 style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                 onMouseDown={() => { if(isSelectionMode) startPress(card.id); }} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                 onTouchStart={() => { if(isSelectionMode) startPress(card.id); }} onTouchEnd={cancelPress} onTouchMove={cancelPress}
@@ -1785,23 +1785,23 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                     }
                                 }}
                             >
-                                <div className="aspect-[2/3] bg-gray-100 relative flex-shrink-0">
+                                <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-600' : 'border-gray-100'}`}>
                                     <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
-                                </div>
-                                {isSelectionMode && (
+                                    {isSelectionMode && (
                                     <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white text-[10px] font-bold' : 'bg-white/50 border-gray-400'}`}>
                                         {isSelected && selCount}
                                     </div>
                                 )}
                                 {qty > 0 && (
-                                    <div className={`absolute top-2 ${isSelectionMode ? 'right-8' : 'right-2'} bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow z-10 transition-all`}>
+                                    <div className={`absolute top-1 sm:top-2 ${isSelectionMode ? 'right-8' : 'right-1 sm:right-2'} bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow z-10 transition-all`}>
                                         {qty}
                                     </div>
                                 )}
+                                </div>
                                 
-                                {/* 🌟 顯示名稱 */}
-                                <div className="px-1 py-1.5 bg-white flex-1 flex flex-col items-center justify-start text-center">
-                                    <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 line-clamp-1">{memberName}</div>
+                                {/* 🌟 顯示名稱 (與收藏頁籤一致) */}
+                                <div className="px-0.5 sm:px-1">
+                                    <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
                                     <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
                                     {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                                 </div>
