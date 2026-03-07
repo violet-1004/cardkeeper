@@ -2650,6 +2650,15 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
     const [albumPrices, setAlbumPrices] = useState({});
+    const [activeAlbumStatus, setActiveAlbumStatus] = useState({}); // 🌟 新增狀態：記錄每個專輯目前顯示的是「未拆」還是「空專」
+
+    // 🌟 讀取記憶的售價
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('album_prices');
+            if (saved) setAlbumPrices(JSON.parse(saved));
+        } catch (e) { console.error(e); }
+    }, []);
 
     const availableStatuses = ['未發貨', '囤貨', '到貨'];
     const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r.source).filter(Boolean))], [allRecords, records]);
@@ -2705,9 +2714,13 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
         const map = {};
         (inventory || []).forEach(inv => {
             if (inv.albumQuantity > 0 && inv.albumId) {
-                if (!map[inv.albumId]) map[inv.albumId] = { count: 0, items: [] };
-                map[inv.albumId].count += inv.albumQuantity;
-                map[inv.albumId].items.push(inv);
+                if (!map[inv.albumId]) map[inv.albumId] = { 
+                    '未拆': { count: 0, items: [] },
+                    '空專': { count: 0, items: [] }
+                };
+                const status = inv.albumStatus === '空專' ? '空專' : '未拆';
+                map[inv.albumId][status].count += inv.albumQuantity;
+                map[inv.albumId][status].items.push(inv);
             }
         });
         return map;
@@ -2721,18 +2734,20 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                 name: s?.name || '未知專輯',
                 date: s?.date || '9999-12-31',
                 image: s?.image,
-                count: albumInventory[albumId].count,
-                items: albumInventory[albumId].items
+                stats: albumInventory[albumId]
             };
         }).sort((a, b) => new Date(a.date) - new Date(b.date));
     }, [albumInventory, series]);
 
     const handleSellAlbum = async (albumId) => {
-        const price = Number(albumPrices[albumId]) || 0;
-        const targetItems = albumInventory[albumId]?.items || [];
+        const status = activeAlbumStatus[albumId] || '未拆'; // 🌟 取得當前狀態
+        const priceKey = `${albumId}_${status}`;
+        const price = Number(albumPrices[priceKey]) || 0;
+        
+        const targetItems = albumInventory[albumId]?.[status]?.items || [];
         const targetItem = targetItems.find(i => i.albumQuantity > 0);
         
-        if (!targetItem) return alert("庫存不足！");
+        if (!targetItem) return alert(`「${status}」庫存不足！`);
 
         const newQuantity = targetItem.albumQuantity - 1;
         const updatedItem = { ...targetItem, albumQuantity: newQuantity };
@@ -2746,11 +2761,16 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
             price: price,
             quantity: 1,
             date: new Date().toISOString().split('T')[0],
-            note: `售出專輯: ${(series || []).find(s => s.id === albumId)?.name || '未知'}`,
+            note: `售出專輯 (${status}): ${(series || []).find(s => s.id === albumId)?.name || '未知'}`,
             color: 'bg-purple-500'
         };
         setSales(prev => [...prev, newSale]);
         await supabase.from('ui_sales').insert(toSnakeCase(newSale));
+        
+        // 🌟 記憶售價
+        const newPrices = { ...albumPrices, [priceKey]: price };
+        setAlbumPrices(newPrices);
+        localStorage.setItem('album_prices', JSON.stringify(newPrices));
     };
 
     return (
@@ -2795,14 +2815,38 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                 </>
             ) : (
                 <div className="space-y-3 px-2">
-                    {albumList.map(album => (
+                    {albumList.map(album => {
+                        const currentStatus = activeAlbumStatus[album.id] || '未拆';
+                        const count = album.stats[currentStatus].count;
+                        const priceKey = `${album.id}_${currentStatus}`;
+
+                        return (
                         <div key={album.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
                             <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
                                 {album.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
                             </div>
+                            
+                            {/* 🌟 左側狀態切換按鈕 */}
+                            <div className="flex flex-col gap-1">
+                                <button 
+                                    onClick={() => setActiveAlbumStatus(prev => ({ ...prev, [album.id]: '未拆' }))}
+                                    className={`text-[10px] px-2 py-0.5 rounded-full border font-bold transition-colors ${currentStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'text-gray-400 border-transparent hover:bg-gray-50'}`}
+                                >
+                                    未拆
+                                </button>
+                                <button 
+                                    onClick={() => setActiveAlbumStatus(prev => ({ ...prev, [album.id]: '空專' }))}
+                                    className={`text-[10px] px-2 py-0.5 rounded-full border font-bold transition-colors ${currentStatus === '空專' ? 'bg-gray-100 text-gray-600 border-gray-300' : 'text-gray-400 border-transparent hover:bg-gray-50'}`}
+                                >
+                                    空專
+                                </button>
+                            </div>
+
                             <div className="flex-1 min-w-0">
                                 <div className="font-bold text-gray-800 text-sm truncate">{album.name}</div>
-                                <div className="text-xs text-gray-500">庫存: <span className="font-bold text-indigo-600">{album.count}</span></div>
+                                <div className="text-xs text-gray-500">
+                                    {currentStatus}庫存: <span className={`font-bold ${count > 0 ? 'text-indigo-600' : 'text-red-400'}`}>{count}</span>
+                                </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="flex items-center border rounded-lg overflow-hidden bg-gray-50">
@@ -2810,15 +2854,19 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                                     <input 
                                         type="number" 
                                         placeholder="售價" 
-                                        value={albumPrices[album.id] || ''} 
-                                        onChange={e => setAlbumPrices({...albumPrices, [album.id]: e.target.value})}
+                                        value={albumPrices[priceKey] || ''} 
+                                        onChange={e => {
+                                            const newPrices = {...albumPrices, [priceKey]: e.target.value};
+                                            setAlbumPrices(newPrices);
+                                            localStorage.setItem('album_prices', JSON.stringify(newPrices));
+                                        }}
                                         className="w-16 bg-transparent text-sm font-bold text-gray-800 outline-none py-1.5"
                                     />
                                 </div>
                                 <button onClick={() => handleSellAlbum(album.id)} className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">售出</button>
                             </div>
                         </div>
-                    ))}
+                    )})}
                     {albumList.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有專輯庫存</div>}
                 </div>
             )}
