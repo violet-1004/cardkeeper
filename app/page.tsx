@@ -3182,11 +3182,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     
     // 🌟 將舊有的歸戶物件，攤平成純陣列，每張卡都是獨立的物件 (包含 uid, buyPrice, sellPrice)
     const [cardItems, setCardItems] = useState(() => {
-        const items = (record?.items || []).filter(i => !i.isMisc);
-        let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === record?.id)];
+        // 🌟 修正：過濾掉雜物與純專輯項目
+        const items = (record?.items || []).filter(i => !i.isMisc && !i.isAlbum);
+        let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === record?.id && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
         
         return items.flatMap(item => {
-            const qty = Number(item.quantity) || 1; // 為了相容舊資料，如果是數量 2，就拆成兩行
+            const qty = Number(item.quantity) || 1; 
             return Array.from({ length: qty }).map(() => {
                 let invIdx = availableInv.findIndex(inv => inv.cardId === item.cardId);
                 let matchedInv = null;
@@ -3201,36 +3202,45 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     sellPrice: matchedInv?.sellPrice || '',
                     sellDate: matchedInv?.sellDate || '', // 🌟 初始化售出日期
                     isManual: item.isManual,
-                    albumId: matchedInv?.albumId || '',
-                    albumStatus: matchedInv?.albumStatus || '未拆',
-                    albumQuantity: matchedInv?.albumQuantity || 0
+                    // 🌟 移除卡片綁定專輯的欄位初始化
                 };
             });
         });
     });
     
+    // 🌟 新增：獨立的專輯列表狀態
+    const [albumItems, setAlbumItems] = useState(() => {
+        return (record?.items || []).filter(i => i.isAlbum).map(i => ({
+            ...i,
+            uid: i.uid || i.id || `album_${Date.now()}_${Math.random()}`,
+            sellDate: i.sellDate || ''
+        }));
+    });
+
     const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ ...i, id: i.id || Date.now().toString() + Math.random() })));
     const [showCardSelector, setShowCardSelector] = useState(false);
     const [cardToRemove, setCardToRemove] = useState(null);
     const [miscToRemove, setMiscToRemove] = useState(null);
+    const [albumToRemove, setAlbumToRemove] = useState(null); // 🌟 新增刪除專輯確認
 
     const totalSoldPrice = useMemo(() => {
         const cardSellSum = cardItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
         const miscSellSum = miscItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
-        return cardSellSum + miscSellSum;
-    }, [cardItems, miscItems]);
+        const albumSellSum = albumItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0); // 🌟 加入專輯售價
+        return cardSellSum + miscSellSum + albumSellSum;
+    }, [cardItems, miscItems, albumItems]);
 
     const recordIdRef = useRef(record?.id);
     useEffect(() => { recordIdRef.current = record?.id; }, [record?.id]);
 
-    const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems) => {
+    const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems, updatedAlbumItems) => {
         if (!updatedForm.name.trim() && !recordIdRef.current) return;
         
         const finalCardItems = updatedCardItems.map(item => ({
             id: item.uid, // 回傳 inventory ID 給 App
             cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate, // 🌟 傳遞售出日期
             isManual: item.isManual, isMisc: false,
-            albumId: item.albumId, albumStatus: item.albumStatus, albumQuantity: item.albumQuantity
+            // 🌟 移除卡片綁定專輯的欄位
         }));
 
         const finalMiscItems = updatedMiscItems.map(m => ({
@@ -3238,11 +3248,24 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             sellDate: m.sellDate, isMisc: true, isManual: true
         }));
 
-        onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems] });
+        // 🌟 處理專輯項目
+        const finalAlbumItems = updatedAlbumItems.map(a => ({
+            id: a.id || a.uid,
+            albumId: a.albumId,
+            albumStatus: a.albumStatus || '未拆',
+            albumQuantity: Number(a.albumQuantity) || 0,
+            buyPrice: Number(a.buyPrice) || 0,
+            sellPrice: Number(a.sellPrice) || 0,
+            sellDate: a.sellDate,
+            isAlbum: true,
+            isManual: true // 專輯視為手動定價
+        }));
+
+        onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
     };
 
-    // 🌟 新版均價計算
-    const recalculatePrices = (totalVal, currentCardItems, currentMiscItems) => {
+    // 🌟 新版均價計算 (加入專輯成本扣除)
+    const recalculatePrices = (totalVal, currentCardItems, currentMiscItems, currentAlbumItems) => {
         if (totalVal === '' || totalVal === undefined) {
             return currentCardItems.map(c => c.isManual ? c : { ...c, buyPrice: '' });
         }
@@ -3255,7 +3278,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         let miscSum = 0;
         currentMiscItems.forEach(m => { miscSum += (Number(m.buyPrice) || 0); });
         
-        const remaining = Math.max(0, total - manualSum - miscSum);
+        let albumSum = 0; // 🌟 計算專輯總成本
+        currentAlbumItems.forEach(a => { albumSum += (Number(a.buyPrice) || 0); });
+        
+        const remaining = Math.max(0, total - manualSum - miscSum - albumSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : '';
         
         let hasChanges = false;
@@ -3271,13 +3297,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     const handleFormChange = (key, value) => {
         const nextForm = { ...form, [key]: value };
-        setForm(nextForm); syncToParent(nextForm, totalAmount, cardItems, miscItems);
+        setForm(nextForm); syncToParent(nextForm, totalAmount, cardItems, miscItems, albumItems);
     };
 
     const handleTotalAmountChange = (e) => {
         const val = e.target.value; setTotalAmount(val);
-        const nextCardItems = recalculatePrices(val, cardItems, miscItems);
-        setCardItems(nextCardItems); syncToParent(form, val, nextCardItems, miscItems);
+        const nextCardItems = recalculatePrices(val, cardItems, miscItems, albumItems);
+        setCardItems(nextCardItems); syncToParent(form, val, nextCardItems, miscItems, albumItems);
     };
 
     const handleCardChange = (uid, field, value) => {
@@ -3289,30 +3315,53 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             }
             return c;
         });
-        if (field === 'buyPrice') nextItems = recalculatePrices(totalAmount, nextItems, miscItems);
-        setCardItems(nextItems); syncToParent(form, totalAmount, nextItems, miscItems);
-    };
-
-    const handleCardAlbumChange = (uid, field, value) => {
-        const nextItems = cardItems.map(c => c.uid === uid ? { ...c, [field]: value } : c);
-        setCardItems(nextItems);
-        syncToParent(form, totalAmount, nextItems, miscItems);
+        if (field === 'buyPrice') nextItems = recalculatePrices(totalAmount, nextItems, miscItems, albumItems);
+        setCardItems(nextItems); syncToParent(form, totalAmount, nextItems, miscItems, albumItems);
     };
 
     const handleAddMisc = () => {
         const newMisc = [...miscItems, { id: Date.now().toString(), name: '', buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0] }];
-        setMiscItems(newMisc); syncToParent(form, totalAmount, cardItems, newMisc);
+        setMiscItems(newMisc); syncToParent(form, totalAmount, cardItems, newMisc, albumItems);
     };
 
     const handleMiscChange = (id, field, value) => {
         let nextMisc = miscItems.map(m => m.id === id ? { ...m, [field]: value } : m);
         setMiscItems(nextMisc);
         if (field === 'buyPrice') {
-            const nextCardItems = recalculatePrices(totalAmount, cardItems, nextMisc);
+            const nextCardItems = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
             setCardItems(nextCardItems);
-            syncToParent(form, totalAmount, nextCardItems, nextMisc);
+            syncToParent(form, totalAmount, nextCardItems, nextMisc, albumItems);
         } else {
-            syncToParent(form, totalAmount, cardItems, nextMisc);
+            syncToParent(form, totalAmount, cardItems, nextMisc, albumItems);
+        }
+    };
+
+    // 🌟 專輯操作函式
+    const handleAddAlbum = () => {
+        const newAlbum = { 
+            uid: `album_${Date.now()}_${Math.random()}`, 
+            albumId: '', 
+            albumStatus: '未拆', 
+            albumQuantity: 1, 
+            buyPrice: '', 
+            sellPrice: '', 
+            sellDate: new Date().toISOString().split('T')[0],
+            isAlbum: true 
+        };
+        const nextAlbums = [...albumItems, newAlbum];
+        setAlbumItems(nextAlbums);
+        syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
+    };
+
+    const handleAlbumChange = (uid, field, value) => {
+        let nextAlbums = albumItems.map(a => a.uid === uid ? { ...a, [field]: value } : a);
+        setAlbumItems(nextAlbums);
+        if (field === 'buyPrice') {
+            const nextCardItems = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+            setCardItems(nextCardItems);
+            syncToParent(form, totalAmount, nextCardItems, miscItems, nextAlbums);
+        } else {
+            syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
         }
     };
 
@@ -3320,10 +3369,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         const nextCardItems = newSelectedItems.map(newItem => {
             const existing = cardItems.find(c => c.uid === newItem.uid);
             if (existing) return existing;
-            return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false, albumId: '', albumStatus: '未拆', albumQuantity: 0 }; // 🌟 初始化新卡片的日期與專輯
+            return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false };
         });
-        const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems);
-        setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems);
+        const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+        setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems, albumItems);
         setShowCardSelector(false);
     };
 
@@ -3342,15 +3391,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         miscPressTimer.current = setTimeout(() => { hasMiscLongPressed.current = true; setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
     };
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
-
-    const handleAddAlbumPairing = () => {
-        const target = cardItems.find(c => !c.albumQuantity);
-        if (target) {
-            handleCardAlbumChange(target.uid, 'albumQuantity', 1);
-        } else {
-            alert("所有卡片都已搭配專輯！");
-        }
-    };
 
     return (
         <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
@@ -3401,6 +3441,107 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             <span className="text-xl text-red-600 font-bold mr-1">$</span>
                             <input type="number" placeholder="0" step="50" min="0" value={totalAmount} onChange={handleTotalAmountChange} className="w-full bg-transparent text-3xl sm:text-4xl font-black text-red-600 outline-none placeholder-red-200" />
                         </div>
+                    </div>
+                </div>
+
+                {/* 🌟 專輯內容區塊 */}
+                <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
+                    <div className="flex justify-between items-end mb-3 px-1">
+                        <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                            <Disc className="w-4 h-4 text-purple-500"/>
+                            專輯內容
+                            <span className="text-gray-400 text-[10px] font-normal ml-1">(計入總金額與售價)</span>
+                        </div>
+                        <button onClick={handleAddAlbum} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                            <Plus className="w-3 h-3"/> 新增專輯
+                        </button>
+                    </div>
+                    
+                    <div className="space-y-3 px-1 pb-4">
+                        {albumItems.map((item) => {
+                            const album = (series || []).find(s => s.id === item.albumId);
+                            return (
+                                <div key={item.uid} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3 relative">
+                                    <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
+                                        {album?.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0 space-y-2">
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <select 
+                                                    value={item.albumId || ''} 
+                                                    onChange={e => handleAlbumChange(item.uid, 'albumId', e.target.value)}
+                                                    className="w-full border p-1.5 rounded-lg bg-gray-50 text-xs font-bold outline-none appearance-none"
+                                                >
+                                                    <option value="">選擇專輯...</option>
+                                                    {albumOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                                </select>
+                                                <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                            </div>
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleAlbumChange(item.uid, 'albumStatus', item.albumStatus === '未拆' ? '空專' : '未拆')}
+                                                className={`px-2 py-1.5 rounded-lg border text-xs font-bold whitespace-nowrap ${item.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                                            >
+                                                {item.albumStatus}
+                                            </button>
+                                            <div className="flex items-center border rounded-lg bg-white overflow-hidden w-16 flex-shrink-0">
+                                                <input 
+                                                    type="number" 
+                                                    value={item.albumQuantity} 
+                                                    onChange={e => handleAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
+                                                    className="w-full text-center text-xs font-bold outline-none appearance-none h-full py-1.5" 
+                                                    placeholder="數量"
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex flex-col items-start">
+                                                    <label className="text-[9px] text-red-400 font-bold uppercase">購入</label>
+                                                    <div className="flex items-baseline">
+                                                        <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                        <input 
+                                                            type="number" placeholder="0" step="50" min="0"
+                                                            value={item.buyPrice} 
+                                                            onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
+                                                            className="w-12 text-left border-b border-gray-200 outline-none font-bold text-xs py-0.5 bg-transparent text-red-600 placeholder-red-200" 
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-start">
+                                                    <label className="text-[9px] text-green-500 font-bold uppercase">售出</label>
+                                                    <div className="flex items-baseline">
+                                                        <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
+                                                        <input 
+                                                            type="number" placeholder="0" step="50" min="0"
+                                                            value={item.sellPrice} 
+                                                            onChange={e => handleAlbumChange(item.uid, 'sellPrice', e.target.value)} 
+                                                            className="w-12 text-left border-b border-gray-200 outline-none font-bold text-xs py-0.5 bg-transparent text-green-600 placeholder-green-200" 
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {Number(item.sellPrice) > 0 && (
+                                                    <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded self-end mb-0.5">
+                                                       <Calendar className="w-3 h-3 text-green-500" />
+                                                       <input 
+                                                           type="date" 
+                                                           value={item.sellDate || ''} 
+                                                           onChange={e => handleAlbumChange(item.uid, 'sellDate', e.target.value)} 
+                                                           className="bg-transparent text-[9px] font-bold text-green-600 outline-none w-[65px] p-0" 
+                                                       />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button onClick={() => setAlbumToRemove(item)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                        {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未包含專輯。</div>}
                     </div>
                 </div>
 
@@ -3492,67 +3633,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
-                                <Disc className="w-4 h-4 text-purple-500"/>
-                                搭配專輯
-                            </div>
-                            <button onClick={handleAddAlbumPairing} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
-                                <Plus className="w-3 h-3"/> 新增搭配
-                            </button>
-                        </div>
-                        
-                        <div className="space-y-3 px-1 pb-4">
-                            {cardItems.filter(c => c.albumQuantity > 0).map(item => {
-                                const card = (cards || []).find(c => c.id === item.cardId);
-                                const cardName = card ? `${(series||[]).find(s=>s.id===card.seriesId)?.name || ''} ${card.memberId}` : '未知卡片';
-                                return (
-                                    <div key={item.uid} className="bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm space-y-2">
-                                        <div className="flex items-center gap-2 mb-1">
-                                             <div className="w-6 aspect-[2/3] bg-gray-200 rounded overflow-hidden flex-shrink-0 border relative">
-                                                 {card?.image && <Image src={card.image} alt="card" fill className="object-cover" sizes="30px" unoptimized={true} />}
-                                             </div>
-                                             <div className="text-xs font-bold text-gray-700 truncate flex-1">{cardName}</div>
-                                             <button onClick={() => handleCardAlbumChange(item.uid, 'albumQuantity', 0)} className="p-1 hover:bg-gray-200 rounded-full"><X className="w-3 h-3 text-gray-400" /></button>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                                             <div className="relative">
-                                                 <select 
-                                                    value={item.albumId || ''} 
-                                                    onChange={e => handleCardAlbumChange(item.uid, 'albumId', e.target.value)}
-                                                    className="w-full border p-2 rounded-lg bg-white text-xs outline-none appearance-none"
-                                                 >
-                                                    <option value="">選擇專輯...</option>
-                                                    {albumOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                                 </select>
-                                                 <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                             </div>
-                                             <button 
-                                                type="button"
-                                                onClick={() => handleCardAlbumChange(item.uid, 'albumStatus', item.albumStatus === '未拆' ? '空專' : '未拆')}
-                                                className={`px-2 py-1 rounded-lg border text-xs font-bold whitespace-nowrap ${item.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
-                                             >
-                                                {item.albumStatus}
-                                             </button>
-                                             <div className="flex items-center border rounded-lg bg-white overflow-hidden">
-                                                <input 
-                                                    type="number" 
-                                                    value={item.albumQuantity} 
-                                                    onChange={e => handleCardAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
-                                                    className="w-8 text-center text-xs font-bold outline-none appearance-none border-x h-full" 
-                                                />
-                                                <button type="button" onClick={() => handleCardAlbumChange(item.uid, 'albumQuantity', (Number(item.albumQuantity)||0) + 1)} className="px-2 hover:bg-gray-50 text-gray-500 h-full flex items-center"><Plus className="w-3 h-3" /></button>
-                                             </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                            {cardItems.filter(c => c.albumQuantity > 0).length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未設定搭配專輯。</div>}
-                        </div>
-                    </div>
-
-                    <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
-                        <div className="flex justify-between items-end mb-3 px-1">
-                            <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
                                 <Tag className="w-4 h-4 text-orange-500"/>
                                 雜物記錄 
                                 <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
@@ -3614,8 +3694,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
                             const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);
-                            const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems);
-                            setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems);
+                            const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                            setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems, albumItems);
                             setCardToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -3631,13 +3711,30 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => {
                             const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);
                             setMiscItems(nextMisc);
-                            const nextCardItems = recalculatePrices(totalAmount, cardItems, nextMisc);
-                            setCardItems(nextCardItems); syncToParent(form, totalAmount, nextCardItems, nextMisc);
+                            const nextCardItems = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                            setCardItems(nextCardItems); syncToParent(form, totalAmount, nextCardItems, nextMisc, albumItems);
                             setMiscToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
                 }>
                     <div className="p-6 text-center text-gray-600 text-sm">確定要刪除雜物「{miscToRemove.name}」嗎？</div>
+                </Modal>
+            )}
+
+            {albumToRemove && (
+                <Modal title="移除專輯" onClose={() => setAlbumToRemove(null)} className="max-w-sm" footer={
+                    <div className="flex gap-2 w-full">
+                        <button onClick={() => setAlbumToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                        <button onClick={() => {
+                            const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);
+                            setAlbumItems(nextAlbums);
+                            const nextCardItems = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                            setCardItems(nextCardItems); syncToParent(form, totalAmount, nextCardItems, miscItems, nextAlbums);
+                            setAlbumToRemove(null);
+                        }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                    </div>
+                }>
+                    <div className="p-6 text-center text-gray-600 text-sm">確定要移除這個專輯項目嗎？</div>
                 </Modal>
             )}
 
@@ -5213,9 +5310,16 @@ export default function App() {
       let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === savedRecordId)];
 
       // 🌟 過濾雜物，並精準對應每一張獨立卡片的庫存 ID 與售價
+      // 🌟 修正：同時處理卡片 (!isMisc && !isAlbum) 與 專輯 (isAlbum)
       const newBulkInvItems = (dataToSave.items || []).filter(item => !item.isMisc).map((item, idx) => {
-          let invIdx = availableInv.findIndex(i => i.id === item.id);
-          if (invIdx === -1) invIdx = availableInv.findIndex(i => i.cardId === item.cardId);
+          let invIdx = -1;
+          if (item.isAlbum) {
+              // 專輯對應邏輯：找同 bulkRecordId 且有 albumId 的項目
+              invIdx = availableInv.findIndex(i => i.id === item.id || (i.albumId === item.albumId && i.albumStatus === item.albumStatus));
+          } else {
+              // 卡片對應邏輯
+              invIdx = availableInv.findIndex(i => i.id === item.id || i.cardId === item.cardId);
+          }
           
           let existing = null;
           if (invIdx !== -1) {
@@ -5228,11 +5332,11 @@ export default function App() {
 
           return {
               id: item.id || existing?.id || `bulk_inv_${savedRecordId}_${idx}_${Date.now()}`,
-              cardId: item.cardId,
+              cardId: item.isAlbum ? null : item.cardId, // 🌟 專輯沒有 cardId
               bulkRecordId: savedRecordId,
               buyDate: dataToSave.buyDate,
               buyPrice: item.buyPrice,
-              quantity: 1, // 🌟 每筆都是獨立資料，數量固定為 1
+              quantity: item.isAlbum ? 0 : 1, // 🌟 專輯不計入卡片數量，但計入庫存項目
               source: dataToSave.source,
               status: dataToSave.status,
               sellPrice: item.sellPrice !== undefined && item.sellPrice !== '' ? Number(item.sellPrice) : (existing?.sellPrice || 0),
