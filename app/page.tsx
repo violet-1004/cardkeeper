@@ -3188,7 +3188,1281 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         
         return items.flatMap(item => {
             const qty = Number(item.quantity) || 1; 
-            return Array.from({ length: qty }).map(() => {
+            return Array.fro// ... existing code ...
+            function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory, subunits }) {
+                const isEdit = !!record;
+                const albumOptions = useMemo(() => (series || []).filter(s => s.type === '專輯'), [series]);
+            
+                const [form, setForm] = useState({
+                    name: record?.name || '', image: record?.image || null, status: record?.status || '未發貨',
+                    buyDate: record?.buyDate || new Date().toISOString().split('T')[0], source: record?.source || '',
+                });
+            
+                const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
+                
+                // 🌟 將舊有的歸戶物件，攤平成純陣列，每張卡都是獨立的物件 (包含 uid, buyPrice, sellPrice)
+                const [cardItems, setCardItems] = useState(() => {
+                    // 🌟 修正：過濾掉雜物與純專輯項目
+                    const items = (record?.items || []).filter(i => !i.isMisc && !i.isAlbum);
+                    let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === record?.id && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
+                    
+                    return items.flatMap(item => {
+                        const qty = Number(item.quantity) || 1; 
+                        return Array.from({ length: qty }).map(() => {
+                            let invIdx = availableInv.findIndex(inv => inv.cardId === item.cardId);
+                            let matchedInv = null;
+                            if (invIdx !== -1) {
+                                matchedInv = availableInv[invIdx];
+                                availableInv.splice(invIdx, 1);
+                            }
+                            return {
+                                uid: matchedInv?.id || `temp_${Date.now()}_${Math.random()}`,
+                                cardId: item.cardId,
+                                buyPrice: item.buyPrice,
+                                sellPrice: matchedInv?.sellPrice || '',
+                                sellDate: matchedInv?.sellDate || '', // 🌟 初始化售出日期
+                                isManual: item.isManual,
+                                // 🌟 移除卡片綁定專輯的欄位初始化
+                            };
+                        });
+                    });
+                });
+                
+                // 🌟 新增：獨立的專輯列表狀態
+                const [albumItems, setAlbumItems] = useState(() => {
+                    return (record?.items || []).filter(i => i.isAlbum).map(i => ({
+                        ...i,
+                        uid: i.uid || i.id || `album_${Date.now()}_${Math.random()}`,
+                        sellDate: i.sellDate || '',
+                        soldCount: i.soldCount || 0,
+                        lastSoldDate: i.lastSoldDate || ''
+                    }));
+                });
+            
+                const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ 
+                    ...i, 
+                    id: i.id || Date.now().toString() + Math.random(),
+                    isManual: i.isManual !== undefined ? i.isManual : (i.buyPrice !== '' && Number(i.buyPrice) > 0)
+                })));
+                const [showCardSelector, setShowCardSelector] = useState(false);
+                const [cardToRemove, setCardToRemove] = useState(null);
+                const [miscToRemove, setMiscToRemove] = useState(null);
+                const [albumToRemove, setAlbumToRemove] = useState(null); // 🌟 新增刪除專輯確認
+            
+                const totalSoldPrice = useMemo(() => {
+                    const cardSellSum = cardItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
+                    const miscSellSum = miscItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
+                    // 專輯售出不計入此處的總售價顯示，因為專輯是庫存扣除邏輯？或者如果需要計入，可自行加回
+                    // 依照需求：專輯內容刪除售出、購入(顯示)，新增價格與售出按鍵。
+                    // 這裡暫時不計入專輯售價，因為專輯售出是「扣庫存」操作，可能不直接對應這裡的「預期售價總和」
+                    return cardSellSum + miscSellSum;
+                }, [cardItems, miscItems]);
+            
+                const recordIdRef = useRef(record?.id);
+                useEffect(() => { recordIdRef.current = record?.id; }, [record?.id]);
+            
+                const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems, updatedAlbumItems) => {
+                    if (!updatedForm.name.trim() && !recordIdRef.current) return;
+                    
+                    const finalCardItems = updatedCardItems.map(item => ({
+                        id: item.uid, // 回傳 inventory ID 給 App
+                        cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate, // 🌟 傳遞售出日期
+                        isManual: item.isManual, isMisc: false,
+                        // 🌟 移除卡片綁定專輯的欄位
+                    }));
+            
+                    const finalMiscItems = updatedMiscItems.map(m => ({
+                        id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
+                        sellDate: m.sellDate, isMisc: true, isManual: m.isManual
+                    }));
+            
+                    // 🌟 處理專輯項目
+                    const finalAlbumItems = updatedAlbumItems.map(a => ({
+                        id: a.id || a.uid,
+                        albumId: a.albumId,
+                        albumStatus: a.albumStatus || '未拆',
+                        albumQuantity: Number(a.albumQuantity) || 0,
+                        buyPrice: Number(a.buyPrice) || 0,
+                        // sellPrice 移除，改為記錄售出資訊
+                        soldCount: a.soldCount || 0,
+                        lastSoldDate: a.lastSoldDate || '',
+                        isAlbum: true,
+                        isManual: true // 專輯視為手動定價
+                    }));
+            
+                    onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
+                };
+            
+                // 🌟 新版均價計算 (加入專輯成本扣除，雜物可均分)
+                const recalculatePrices = (totalVal, currentCardItems, currentMiscItems, currentAlbumItems) => {
+                    if (totalVal === '' || totalVal === undefined) {
+                        return {
+                            cards: currentCardItems.map(c => c.isManual ? c : { ...c, buyPrice: '' }),
+                            misc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' })
+                        };
+                    }
+                    const total = Number(totalVal) || 0;
+                    let manualSum = 0; let autoQty = 0;
+                    
+                    currentCardItems.forEach(c => {
+                        if (c.isManual) manualSum += Number(c.buyPrice) || 0;
+                        else autoQty += 1;
+                    });
+                    
+                    currentMiscItems.forEach(m => { 
+                        if (m.isManual) manualSum += Number(m.buyPrice) || 0;
+                        else autoQty += 1;
+                    });
+                    
+                    let albumSum = 0; // 🌟 計算專輯總成本 (數量 x 單價)
+                    currentAlbumItems.forEach(a => { albumSum += (Number(a.buyPrice) || 0) * (Number(a.albumQuantity) || 0); });
+                    
+                    const remaining = Math.max(0, total - manualSum - albumSum);
+                    const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : 0;
+                    
+                    const nextCards = currentCardItems.map(c => {
+                        if (!c.isManual) return { ...c, buyPrice: autoPrice };
+                        return c;
+                    });
+            
+                    const nextMisc = currentMiscItems.map(m => {
+                        if (!m.isManual) return { ...m, buyPrice: autoPrice };
+                        return m;
+                    });
+            
+                    return { cards: nextCards, misc: nextMisc };
+                };
+            
+                const handleFormChange = (key, value) => {
+                    const nextForm = { ...form, [key]: value };
+                    setForm(nextForm); syncToParent(nextForm, totalAmount, cardItems, miscItems, albumItems);
+                };
+            
+                const handleTotalAmountChange = (e) => {
+                    const val = e.target.value; setTotalAmount(val);
+                    const { cards, misc } = recalculatePrices(val, cardItems, miscItems, albumItems);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, val, cards, misc, albumItems);
+                };
+            
+                const handleCardChange = (uid, field, value) => {
+                    let nextItems = cardItems.map(c => {
+                        if (c.uid === uid) {
+                            const updated = { ...c, [field]: value };
+                            if (field === 'buyPrice') updated.isManual = (value !== '' && Number(value) !== 0);
+                            return updated;
+                        }
+                        return c;
+                    });
+                    if (field === 'buyPrice') {
+                        const { cards, misc } = recalculatePrices(totalAmount, nextItems, miscItems, albumItems);
+                        setCardItems(cards); setMiscItems(misc);
+                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                    } else {
+                        setCardItems(nextItems);
+                        syncToParent(form, totalAmount, nextItems, miscItems, albumItems);
+                    }
+                };
+            
+                const handleAddMisc = () => {
+                    const newMisc = [...miscItems, { id: Date.now().toString(), name: '', buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0], isManual: false }];
+                    const { cards, misc } = recalculatePrices(totalAmount, cardItems, newMisc, albumItems);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, totalAmount, cards, misc, albumItems);
+                };
+            
+                const handleMiscChange = (id, field, value) => {
+                    let nextMisc = miscItems.map(m => {
+                        if (m.id === id) {
+                            const updated = { ...m, [field]: value };
+                            if (field === 'buyPrice') updated.isManual = (value !== '' && Number(value) !== 0);
+                            return updated;
+                        }
+                        return m;
+                    });
+                    
+                    if (field === 'buyPrice') {
+                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                        setCardItems(cards); setMiscItems(misc);
+                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                    } else {
+                        setMiscItems(nextMisc);
+                        syncToParent(form, totalAmount, cardItems, nextMisc, albumItems);
+                    }
+                };
+            
+                // 🌟 專輯操作函式
+                const handleAddAlbum = () => {
+                    const newAlbum = { 
+                        uid: `album_${Date.now()}_${Math.random()}`, 
+                        albumId: '', 
+                        albumStatus: '未拆', 
+                        albumQuantity: 1, 
+                        buyPrice: '', 
+                        soldCount: 0,
+                        isAlbum: true 
+                    };
+                    const nextAlbums = [...albumItems, newAlbum];
+                    setAlbumItems(nextAlbums);
+                    // 新增專輯會影響總金額計算 (因為專輯成本是優先扣除)
+                    const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                };
+            
+                const handleAlbumChange = (uid, field, value) => {
+                    let nextAlbums = albumItems.map(a => a.uid === uid ? { ...a, [field]: value } : a);
+                    setAlbumItems(nextAlbums);
+                    if (field === 'buyPrice' || field === 'albumQuantity') {
+                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                        setCardItems(cards); setMiscItems(misc);
+                        syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                    } else {
+                        syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
+                    }
+                };
+            
+                const handleAlbumSell = (uid) => {
+                    const target = albumItems.find(a => a.uid === uid);
+                    if (!target || target.albumQuantity <= 0) return;
+            
+                    const newQty = target.albumQuantity - 1;
+                    const nextAlbums = albumItems.map(a => a.uid === uid ? { 
+                        ...a, 
+                        albumQuantity: newQty,
+                        soldCount: (a.soldCount || 0) + 1,
+                        lastSoldDate: new Date().toISOString().split('T')[0]
+                    } : a);
+                    
+                    setAlbumItems(nextAlbums);
+                    
+                    const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                    setCardItems(cards);
+                    setMiscItems(misc);
+                    
+                    syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                };
+            
+                const handleConfirmSelectCards = (newSelectedItems) => {
+                    const nextCardItems = newSelectedItems.map(newItem => {
+                        const existing = cardItems.find(c => c.uid === newItem.uid);
+                        if (existing) return existing;
+                        return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false };
+                    });
+                    const { cards, misc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, totalAmount, cards, misc, albumItems);
+                    setShowCardSelector(false);
+                };
+            
+                const pressTimer = useRef(null);
+                const hasCardLongPressed = useRef(false);
+                const startPress = (uid, title) => {
+                    hasCardLongPressed.current = false;
+                    pressTimer.current = setTimeout(() => { hasCardLongPressed.current = true; setCardToRemove({ uid, title }); }, 500);
+                };
+                const cancelPress = () => clearTimeout(pressTimer.current);
+            
+                const miscPressTimer = useRef(null);
+                const hasMiscLongPressed = useRef(false);
+                const startMiscPress = (miscId, name) => {
+                    hasMiscLongPressed.current = false;
+                    miscPressTimer.current = setTimeout(() => { hasMiscLongPressed.current = true; setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
+                };
+                const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
+            
+                return (
+                    <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
+                        <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0 shadow-sm">
+                            <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
+                            <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
+                            <div className="flex gap-1 items-center">
+                                {isEdit && <button onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }} className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>}
+                            </div>
+                        </div>
+            
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+                            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
+                                <div className="w-28 h-28 flex-shrink-0">
+                                    <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
+                                </div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                    <input type="text" placeholder="輸入盤收名稱" value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300" />
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                         <div className="relative">
+                                            <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200">
+                                                <option value="未發貨">未發貨</option><option value="囤貨">囤貨</option><option value="到貨">到貨</option>
+                                            </select>
+                                            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                        </div>
+                                        <input type="date" value={form.buyDate} onChange={e => handleFormChange('buyDate', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                                    </div>
+                                    <div className="mt-3">
+                                        <FormCapsuleSelect label="來源" options={uniqueSources || []} value={form.source} onChange={val => handleFormChange('source', val)} allowCustom={true} placeholder="自訂來源..." onOptionEdit={onRenameSource} onDelete={onDeleteSource} onOptionDelete={onDeleteSource} />
+                                    </div>
+                                </div>
+                            </div>
+            
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-green-50/50 p-4 rounded-2xl flex flex-col justify-between border border-green-100/50 relative shadow-sm min-h-[100px]">
+                                    <label className="text-xs font-bold text-green-600 uppercase tracking-widest flex items-center gap-2">總售價</label>
+                                    <div className="flex items-baseline mt-2">
+                                        <span className="text-xl text-green-600 font-bold mr-1">$</span>
+                                        <span className="text-3xl sm:text-4xl font-black text-green-600 truncate">{totalSoldPrice.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-red-50/50 p-4 rounded-2xl flex flex-col justify-between border border-red-100/50 hover:border-red-200 transition-colors relative shadow-sm min-h-[100px]">
+                                    <div className="flex justify-between items-start">
+                                        <label className="text-[10px] sm:text-xs font-bold text-red-600 uppercase tracking-widest">批量總金額</label>
+                                        {(cardItems.filter(c=>c.isManual).length + miscItems.filter(m=>m.isManual).length) > 0 && <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold shadow-sm whitespace-nowrap">{(cardItems.filter(c=>c.isManual).length + miscItems.filter(m=>m.isManual).length)} 自訂</span>}
+                                    </div>
+                                    <div className="flex items-baseline mt-2">
+                                        <span className="text-xl text-red-600 font-bold mr-1">$</span>
+                                        <input type="number" placeholder="0" step="50" min="0" value={totalAmount} onChange={handleTotalAmountChange} className="w-full bg-transparent text-3xl sm:text-4xl font-black text-red-600 outline-none placeholder-red-200" />
+                                    </div>
+                                </div>
+                            </div>
+            
+                            <div>
+                                <div className="flex justify-between items-end mb-3 px-1">
+                                    <div className="font-bold text-gray-800 text-sm">盤收內容清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
+                                    <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
+                                </div>
+                                
+                                <div className="space-y-3 max-h-[40vh] overflow-y-auto px-1 pb-4">
+                                    {cardItems.map((item, idx) => {
+                                        const card = (cards || []).find(c => c.id === item.cardId);
+                                        if (!card) return null;
+                                        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                                        const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                                        const typeObj = (types || []).find(t => t.id === card.type || t.name === card.type);
+                                        const channelObj = (channels || []).find(c => c.id === card.channel || c.name === card.channel);
+                                        const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
+            
+                                        return (
+                                            <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
+                                                <div 
+                                                    className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
+                                                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                                    onMouseDown={() => startPress(item.uid, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                                                    onTouchStart={() => startPress(item.uid, displayTitle)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+                                                    onContextMenu={(e) => { e.preventDefault(); cancelPress(); setCardToRemove({ uid: item.uid, title: displayTitle }); }}
+                                                    onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
+                                                >
+                                                    <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
+                                                        {card.image ? (
+                                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-4 h-4" /></div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
+                                                        {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
+                                                        {/* 🌟 售出日期移到名稱下方 */}
+                                                        {Number(item.sellPrice) > 0 && (
+                                                            <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded w-fit mt-1">
+                                                               <Calendar className="w-3 h-3 text-green-500" />
+                                                               <input 
+                                                                   type="date" 
+                                                                   value={item.sellDate || ''} 
+                                                                   onChange={e => handleCardChange(item.uid, 'sellDate', e.target.value)} 
+                                                                   onClick={e => e.stopPropagation()}
+                                                                   className="bg-transparent text-[9px] font-bold text-green-600 outline-none w-[65px] p-0" 
+                                                               />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
+                                                        <div className="flex items-baseline">
+                                                            <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
+                                                            <input 
+                                                                type="number" placeholder="0" step="50" min="0"
+                                                                value={item.sellPrice} 
+                                                                onChange={e => handleCardChange(item.uid, 'sellPrice', e.target.value)} 
+                                                                className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                                            {item.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                        </label>
+                                                        <div className="flex items-baseline">
+                                                            <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                            <input 
+                                                                type="number" placeholder="0" step="50" min="0"
+                                                                value={item.buyPrice} 
+                                                                onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} 
+                                                                className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {cardItems.length === 0 && <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">點擊右上角「+ 新增卡片」加入這筆盤收的內容</div>}
+                                </div>
+                            </div>
+            
+                            {/* 🌟 專輯內容區塊 (移到下方) */}
+                            <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
+                                <div className="flex justify-between items-end mb-3 px-1">
+                                    <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                                        <Disc className="w-4 h-4 text-purple-500"/>
+                                        專輯內容
+                                        <span className="text-gray-400 text-[10px] font-normal ml-1">(計入總金額扣除)</span>
+                                    </div>
+                                    <button onClick={handleAddAlbum} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                                        <Plus className="w-3 h-3"/> 新增專輯
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3 px-1 pb-4">
+                                    {albumItems.map((item) => {
+                                        const album = (series || []).find(s => s.id === item.albumId);
+                                        return (
+                                            <div key={item.uid} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3 relative">
+                                                <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
+                                                    {album?.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
+                                                </div>
+                                                
+                                                <div className="flex-1 min-w-0 space-y-2">
+                                                    <div className="flex gap-2">
+                                                        <div className="relative flex-1">
+                                                            <select 
+                                                                value={item.albumId || ''} 
+                                                                onChange={e => handleAlbumChange(item.uid, 'albumId', e.target.value)}
+                                                                className="w-full border p-1.5 rounded-lg bg-gray-50 text-xs font-bold outline-none appearance-none"
+                                                            >
+                                                                <option value="">選擇專輯...</option>
+                                                                {albumOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                                            </select>
+                                                            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                                        </div>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handleAlbumChange(item.uid, 'albumStatus', item.albumStatus === '未拆' ? '空專' : '未拆')}
+                                                            className={`px-2 py-1.5 rounded-lg border text-xs font-bold whitespace-nowrap ${item.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                                                        >
+                                                            {item.albumStatus}
+                                                        </button>
+                                                        <div className="flex items-center border rounded-lg bg-white overflow-hidden w-16 flex-shrink-0">
+                                                            <input 
+                                                                type="number" 
+                                                                value={item.albumQuantity} 
+                                                                onChange={e => handleAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
+                                                                className="w-full text-center text-xs font-bold outline-none appearance-none h-full py-1.5" 
+                                                                placeholder="數量"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* 🌟 顯示售出紀錄 */}
+                                                    {item.soldCount > 0 && (
+                                                        <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">已售出 {item.soldCount} 張</span>
+                                                            {item.lastSoldDate && <span className="text-gray-400">({item.lastSoldDate})</span>}
+                                                        </div>
+                                                    )}
+            
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex flex-col items-start">
+                                                                <label className="text-[9px] text-red-400 font-bold uppercase">單價(成本)</label>
+                                                                <div className="flex items-baseline">
+                                                                    <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                                    <input 
+                                                                        type="number" placeholder="0" step="50" min="0"
+                                                                        value={item.buyPrice} 
+                                                                        onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
+                                                                        className="w-16 text-left border-b border-gray-200 outline-none font-bold text-xs py-0.5 bg-transparent text-red-600 placeholder-red-200" 
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            {/* 🌟 售出按鈕 */}
+                                                            <button 
+                                                                onClick={() => handleAlbumSell(item.uid)}
+                                                                disabled={item.albumQuantity <= 0}
+                                                                className="bg-black text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                                            >
+                                                                <ShoppingBag className="w-3 h-3" /> 售出
+                                                            </button>
+                                                        </div>
+                                                        <button onClick={() => setAlbumToRemove(item)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                    {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未包含專輯。</div>}
+                                </div>
+                            </div>
+            
+                            <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
+                                    <div className="flex justify-between items-end mb-3 px-1">
+                                        <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                                            <Tag className="w-4 h-4 text-orange-500"/>
+                                            雜物記錄 
+                                            <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
+                                        </div>
+                                        <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                                            <Plus className="w-3 h-3"/> 新增雜物
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="space-y-3 px-1 pb-4">
+                                        {miscItems.map((misc, idx) => (
+                                            <div key={misc.id} className={`flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-colors relative ${misc.isManual ? 'bg-orange-50/30' : ''}`}>
+                                                <div 
+                                                    className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto cursor-pointer select-none"
+                                                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                                    onMouseDown={() => startMiscPress(misc.id, misc.name)} onMouseUp={cancelMiscPress} onMouseLeave={cancelMiscPress}
+                                                    onTouchStart={() => startMiscPress(misc.id, misc.name)} onTouchEnd={cancelMiscPress} onTouchMove={cancelMiscPress}
+                                                    onContextMenu={(e) => { e.preventDefault(); cancelMiscPress(); setMiscToRemove({ id: misc.id, name: misc.name || '未命名雜物' }); }}
+                                                    onClick={(e) => { if (hasMiscLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
+                                                >
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 aspect-square flex-shrink-0 bg-orange-50 rounded-lg border border-orange-100 flex items-center justify-center"><Tag className="w-5 h-5 text-orange-400" /></div>
+                                                    <div className="flex-1 min-w-0 flex flex-col justify-center items-start">
+                                                        <input type="text" placeholder={`雜物名稱 ${idx + 1} (例: 專卡/海報)`} value={misc.name} onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="w-full text-sm font-bold text-gray-800 bg-transparent border-b border-transparent focus:border-orange-400 outline-none pb-0.5 placeholder-gray-300 mb-1 transition-colors" />
+                                                        {Number(misc.sellPrice) > 0 && (
+                                                            <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded w-fit">
+                                                               <Calendar className="w-3 h-3 text-green-500" />
+                                                               <input type="date" value={misc.sellDate} onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="bg-transparent text-[10px] font-bold text-green-600 outline-none cursor-pointer" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
+                                                        <div className="flex items-baseline">
+                                                            <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
+                                                            <input type="number" placeholder="0" step="50" min="0" value={misc.sellPrice} onChange={e => handleMiscChange(misc.id, 'sellPrice', e.target.value)} className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                                            {misc.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                        </label>
+                                                        <div className="flex items-baseline">
+                                                            <span className={`text-[10px] font-bold mr-0.5 ${misc.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                            <input 
+                                                                type="number" placeholder="0" step="50" min="0" 
+                                                                value={misc.buyPrice} 
+                                                                onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
+                                                                className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${misc.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {miscItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未新增任何雜物。</div>}
+                                    </div>
+                                </div>
+                        </div>
+            
+                        {cardToRemove && (
+                            <Modal title="移除卡片" onClose={() => setCardToRemove(null)} className="max-w-sm" footer={
+                                <div className="flex gap-2 w-full">
+                                    <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                                    <button onClick={() => {
+                                        const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);
+                                        const { cards, misc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                                        setCardItems(cards); setMiscItems(misc);
+                                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                                        setCardToRemove(null);
+                                    }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                                </div>
+                            }>
+                                <div className="p-6 text-center text-gray-600 text-sm">確定要從這筆盤收中移除「{cardToRemove.title}」嗎？<br/>這不會刪除卡片圖鑑本身。</div>
+                            </Modal>
+                        )}
+            
+                        {miscToRemove && (
+                            <Modal title="移除雜物" onClose={() => setMiscToRemove(null)} className="max-w-sm" footer={
+                                <div className="flex gap-2 w-full">
+                                    <button onClick={() => setMiscToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                                    <button onClick={() => {
+                                        const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);
+                                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                                        setCardItems(cards); setMiscItems(misc);
+                                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                                        setMiscToRemove(null);
+                                    }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                                </div>
+                            }>
+                                <div className="p-6 text-center text-gray-600 text-sm">確定要刪除雜物「{miscToRemove.name}」嗎？</div>
+                            </Modal>
+                        )}
+            
+                        {albumToRemove && (
+                            <Modal title="移除專輯" onClose={() => setAlbumToRemove(null)} className="max-w-sm" footer={
+                                <div className="flex gap-2 w-full">
+                                    <button onClick={() => setAlbumToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                                    <button onClick={() => {
+                                        const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);
+                                        setAlbumItems(nextAlbums);
+                                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                                        setCardItems(cards); setMiscItems(misc);
+                                        syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                                        setAlbumToRemove(null);
+                                    }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                                </div>
+                            }>
+                                <div className="p-6 text-center text-gray-600 text-sm">確定要移除這個專輯項目嗎？</div>
+                            </Modal>
+                        )}
+            
+                        {showCardSelector && <MiniCardSelector cards={cards} selectedItems={cardItems.map(c => ({ uid: c.uid, cardId: c.cardId }))} onConfirm={handleConfirmSelectCards} onClose={() => setShowCardSelector(false)} members={members} series={series} batches={batches} channels={channels} types={types} uniqueTypes={uniqueTypes} uniqueChannels={uniqueChannels} uniqueSeriesTypes={uniqueSeriesTypes} subunits={subunits} />}
+                    </div>
+                );
+            }
+            // ... existing code ...
+            function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory, subunits }) {
+                const isEdit = !!record;
+                const albumOptions = useMemo(() => (series || []).filter(s => s.type === '專輯'), [series]);
+            
+                const [form, setForm] = useState({
+                    name: record?.name || '', image: record?.image || null, status: record?.status || '未發貨',
+                    buyDate: record?.buyDate || new Date().toISOString().split('T')[0], source: record?.source || '',
+                });
+            
+                const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
+                
+                // 🌟 將舊有的歸戶物件，攤平成純陣列，每張卡都是獨立的物件 (包含 uid, buyPrice, sellPrice)
+                const [cardItems, setCardItems] = useState(() => {
+                    // 🌟 修正：過濾掉雜物與純專輯項目
+                    const items = (record?.items || []).filter(i => !i.isMisc && !i.isAlbum);
+                    let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === record?.id && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
+                    
+                    return items.flatMap(item => {
+                        const qty = Number(item.quantity) || 1; 
+                        return Array.from({ length: qty }).map(() => {
+                            let invIdx = availableInv.findIndex(inv => inv.cardId === item.cardId);
+                            let matchedInv = null;
+                            if (invIdx !== -1) {
+                                matchedInv = availableInv[invIdx];
+                                availableInv.splice(invIdx, 1);
+                            }
+                            return {
+                                uid: matchedInv?.id || `temp_${Date.now()}_${Math.random()}`,
+                                cardId: item.cardId,
+                                buyPrice: item.buyPrice,
+                                sellPrice: matchedInv?.sellPrice || '',
+                                sellDate: matchedInv?.sellDate || '', // 🌟 初始化售出日期
+                                isManual: item.isManual,
+                                // 🌟 移除卡片綁定專輯的欄位初始化
+                            };
+                        });
+                    });
+                });
+                
+                // 🌟 新增：獨立的專輯列表狀態
+                const [albumItems, setAlbumItems] = useState(() => {
+                    return (record?.items || []).filter(i => i.isAlbum).map(i => ({
+                        ...i,
+                        uid: i.uid || i.id || `album_${Date.now()}_${Math.random()}`,
+                        sellDate: i.sellDate || '',
+                        soldCount: i.soldCount || 0,
+                        lastSoldDate: i.lastSoldDate || ''
+                    }));
+                });
+            
+                const [miscItems, setMiscItems] = useState((record?.items || []).filter(i => i.isMisc).map(i => ({ 
+                    ...i, 
+                    id: i.id || Date.now().toString() + Math.random(),
+                    isManual: i.isManual !== undefined ? i.isManual : (i.buyPrice !== '' && Number(i.buyPrice) > 0)
+                })));
+                const [showCardSelector, setShowCardSelector] = useState(false);
+                const [cardToRemove, setCardToRemove] = useState(null);
+                const [miscToRemove, setMiscToRemove] = useState(null);
+                const [albumToRemove, setAlbumToRemove] = useState(null); // 🌟 新增刪除專輯確認
+            
+                const totalSoldPrice = useMemo(() => {
+                    const cardSellSum = cardItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
+                    const miscSellSum = miscItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
+                    // 專輯售出不計入此處的總售價顯示，因為專輯是庫存扣除邏輯？或者如果需要計入，可自行加回
+                    // 依照需求：專輯內容刪除售出、購入(顯示)，新增價格與售出按鍵。
+                    // 這裡暫時不計入專輯售價，因為專輯售出是「扣庫存」操作，可能不直接對應這裡的「預期售價總和」
+                    return cardSellSum + miscSellSum;
+                }, [cardItems, miscItems]);
+            
+                const recordIdRef = useRef(record?.id);
+                useEffect(() => { recordIdRef.current = record?.id; }, [record?.id]);
+            
+                const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems, updatedAlbumItems) => {
+                    if (!updatedForm.name.trim() && !recordIdRef.current) return;
+                    
+                    const finalCardItems = updatedCardItems.map(item => ({
+                        id: item.uid, // 回傳 inventory ID 給 App
+                        cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate, // 🌟 傳遞售出日期
+                        isManual: item.isManual, isMisc: false,
+                        // 🌟 移除卡片綁定專輯的欄位
+                    }));
+            
+                    const finalMiscItems = updatedMiscItems.map(m => ({
+                        id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
+                        sellDate: m.sellDate, isMisc: true, isManual: m.isManual
+                    }));
+            
+                    // 🌟 處理專輯項目
+                    const finalAlbumItems = updatedAlbumItems.map(a => ({
+                        id: a.id || a.uid,
+                        albumId: a.albumId,
+                        albumStatus: a.albumStatus || '未拆',
+                        albumQuantity: Number(a.albumQuantity) || 0,
+                        buyPrice: Number(a.buyPrice) || 0,
+                        // sellPrice 移除，改為記錄售出資訊
+                        soldCount: a.soldCount || 0,
+                        lastSoldDate: a.lastSoldDate || '',
+                        isAlbum: true,
+                        isManual: true // 專輯視為手動定價
+                    }));
+            
+                    onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
+                };
+            
+                // 🌟 新版均價計算 (加入專輯成本扣除，雜物可均分)
+                const recalculatePrices = (totalVal, currentCardItems, currentMiscItems, currentAlbumItems) => {
+                    if (totalVal === '' || totalVal === undefined) {
+                        return {
+                            cards: currentCardItems.map(c => c.isManual ? c : { ...c, buyPrice: '' }),
+                            misc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' })
+                        };
+                    }
+                    const total = Number(totalVal) || 0;
+                    let manualSum = 0; let autoQty = 0;
+                    
+                    currentCardItems.forEach(c => {
+                        if (c.isManual) manualSum += Number(c.buyPrice) || 0;
+                        else autoQty += 1;
+                    });
+                    
+                    currentMiscItems.forEach(m => { 
+                        if (m.isManual) manualSum += Number(m.buyPrice) || 0;
+                        else autoQty += 1;
+                    });
+                    
+                    let albumSum = 0; // 🌟 計算專輯總成本 (數量 x 單價)
+                    currentAlbumItems.forEach(a => { albumSum += (Number(a.buyPrice) || 0) * (Number(a.albumQuantity) || 0); });
+                    
+                    const remaining = Math.max(0, total - manualSum - albumSum);
+                    const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : 0;
+                    
+                    const nextCards = currentCardItems.map(c => {
+                        if (!c.isManual) return { ...c, buyPrice: autoPrice };
+                        return c;
+                    });
+            
+                    const nextMisc = currentMiscItems.map(m => {
+                        if (!m.isManual) return { ...m, buyPrice: autoPrice };
+                        return m;
+                    });
+            
+                    return { cards: nextCards, misc: nextMisc };
+                };
+            
+                const handleFormChange = (key, value) => {
+                    const nextForm = { ...form, [key]: value };
+                    setForm(nextForm); syncToParent(nextForm, totalAmount, cardItems, miscItems, albumItems);
+                };
+            
+                const handleTotalAmountChange = (e) => {
+                    const val = e.target.value; setTotalAmount(val);
+                    const { cards, misc } = recalculatePrices(val, cardItems, miscItems, albumItems);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, val, cards, misc, albumItems);
+                };
+            
+                const handleCardChange = (uid, field, value) => {
+                    let nextItems = cardItems.map(c => {
+                        if (c.uid === uid) {
+                            const updated = { ...c, [field]: value };
+                            if (field === 'buyPrice') updated.isManual = (value !== '' && Number(value) !== 0);
+                            return updated;
+                        }
+                        return c;
+                    });
+                    if (field === 'buyPrice') {
+                        const { cards, misc } = recalculatePrices(totalAmount, nextItems, miscItems, albumItems);
+                        setCardItems(cards); setMiscItems(misc);
+                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                    } else {
+                        setCardItems(nextItems);
+                        syncToParent(form, totalAmount, nextItems, miscItems, albumItems);
+                    }
+                };
+            
+                const handleAddMisc = () => {
+                    const newMisc = [...miscItems, { id: Date.now().toString(), name: '', buyPrice: '', sellPrice: '', sellDate: new Date().toISOString().split('T')[0], isManual: false }];
+                    const { cards, misc } = recalculatePrices(totalAmount, cardItems, newMisc, albumItems);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, totalAmount, cards, misc, albumItems);
+                };
+            
+                const handleMiscChange = (id, field, value) => {
+                    let nextMisc = miscItems.map(m => {
+                        if (m.id === id) {
+                            const updated = { ...m, [field]: value };
+                            if (field === 'buyPrice') updated.isManual = (value !== '' && Number(value) !== 0);
+                            return updated;
+                        }
+                        return m;
+                    });
+                    
+                    if (field === 'buyPrice') {
+                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                        setCardItems(cards); setMiscItems(misc);
+                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                    } else {
+                        setMiscItems(nextMisc);
+                        syncToParent(form, totalAmount, cardItems, nextMisc, albumItems);
+                    }
+                };
+            
+                // 🌟 專輯操作函式
+                const handleAddAlbum = () => {
+                    const newAlbum = { 
+                        uid: `album_${Date.now()}_${Math.random()}`, 
+                        albumId: '', 
+                        albumStatus: '未拆', 
+                        albumQuantity: 1, 
+                        buyPrice: '', 
+                        soldCount: 0,
+                        isAlbum: true 
+                    };
+                    const nextAlbums = [...albumItems, newAlbum];
+                    setAlbumItems(nextAlbums);
+                    // 新增專輯會影響總金額計算 (因為專輯成本是優先扣除)
+                    const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                };
+            
+                const handleAlbumChange = (uid, field, value) => {
+                    let nextAlbums = albumItems.map(a => a.uid === uid ? { ...a, [field]: value } : a);
+                    setAlbumItems(nextAlbums);
+                    if (field === 'buyPrice' || field === 'albumQuantity') {
+                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                        setCardItems(cards); setMiscItems(misc);
+                        syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                    } else {
+                        syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
+                    }
+                };
+            
+                const handleAlbumSell = (uid) => {
+                    const target = albumItems.find(a => a.uid === uid);
+                    if (!target || target.albumQuantity <= 0) return;
+            
+                    const newQty = target.albumQuantity - 1;
+                    const nextAlbums = albumItems.map(a => a.uid === uid ? { 
+                        ...a, 
+                        albumQuantity: newQty,
+                        soldCount: (a.soldCount || 0) + 1,
+                        lastSoldDate: new Date().toISOString().split('T')[0]
+                    } : a);
+                    
+                    setAlbumItems(nextAlbums);
+                    
+                    const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                    setCardItems(cards);
+                    setMiscItems(misc);
+                    
+                    syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                };
+            
+                const handleConfirmSelectCards = (newSelectedItems) => {
+                    const nextCardItems = newSelectedItems.map(newItem => {
+                        const existing = cardItems.find(c => c.uid === newItem.uid);
+                        if (existing) return existing;
+                        return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false };
+                    });
+                    const { cards, misc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                    setCardItems(cards); setMiscItems(misc);
+                    syncToParent(form, totalAmount, cards, misc, albumItems);
+                    setShowCardSelector(false);
+                };
+            
+                const pressTimer = useRef(null);
+                const hasCardLongPressed = useRef(false);
+                const startPress = (uid, title) => {
+                    hasCardLongPressed.current = false;
+                    pressTimer.current = setTimeout(() => { hasCardLongPressed.current = true; setCardToRemove({ uid, title }); }, 500);
+                };
+                const cancelPress = () => clearTimeout(pressTimer.current);
+            
+                const miscPressTimer = useRef(null);
+                const hasMiscLongPressed = useRef(false);
+                const startMiscPress = (miscId, name) => {
+                    hasMiscLongPressed.current = false;
+                    miscPressTimer.current = setTimeout(() => { hasMiscLongPressed.current = true; setMiscToRemove({ id: miscId, name: name || '未命名雜物' }); }, 500);
+                };
+                const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
+            
+                return (
+                    <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
+                        <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0 shadow-sm">
+                            <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
+                            <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
+                            <div className="flex gap-1 items-center">
+                                {isEdit && <button onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }} className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>}
+                            </div>
+                        </div>
+            
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+                            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
+                                <div className="w-28 h-28 flex-shrink-0">
+                                    <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
+                                </div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                    <input type="text" placeholder="輸入盤收名稱" value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300" />
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                         <div className="relative">
+                                            <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200">
+                                                <option value="未發貨">未發貨</option><option value="囤貨">囤貨</option><option value="到貨">到貨</option>
+                                            </select>
+                                            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                        </div>
+                                        <input type="date" value={form.buyDate} onChange={e => handleFormChange('buyDate', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                                    </div>
+                                    <div className="mt-3">
+                                        <FormCapsuleSelect label="來源" options={uniqueSources || []} value={form.source} onChange={val => handleFormChange('source', val)} allowCustom={true} placeholder="自訂來源..." onOptionEdit={onRenameSource} onDelete={onDeleteSource} onOptionDelete={onDeleteSource} />
+                                    </div>
+                                </div>
+                            </div>
+            
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-green-50/50 p-4 rounded-2xl flex flex-col justify-between border border-green-100/50 relative shadow-sm min-h-[100px]">
+                                    <label className="text-xs font-bold text-green-600 uppercase tracking-widest flex items-center gap-2">總售價</label>
+                                    <div className="flex items-baseline mt-2">
+                                        <span className="text-xl text-green-600 font-bold mr-1">$</span>
+                                        <span className="text-3xl sm:text-4xl font-black text-green-600 truncate">{totalSoldPrice.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-red-50/50 p-4 rounded-2xl flex flex-col justify-between border border-red-100/50 hover:border-red-200 transition-colors relative shadow-sm min-h-[100px]">
+                                    <div className="flex justify-between items-start">
+                                        <label className="text-[10px] sm:text-xs font-bold text-red-600 uppercase tracking-widest">批量總金額</label>
+                                        {(cardItems.filter(c=>c.isManual).length + miscItems.filter(m=>m.isManual).length) > 0 && <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold shadow-sm whitespace-nowrap">{(cardItems.filter(c=>c.isManual).length + miscItems.filter(m=>m.isManual).length)} 自訂</span>}
+                                    </div>
+                                    <div className="flex items-baseline mt-2">
+                                        <span className="text-xl text-red-600 font-bold mr-1">$</span>
+                                        <input type="number" placeholder="0" step="50" min="0" value={totalAmount} onChange={handleTotalAmountChange} className="w-full bg-transparent text-3xl sm:text-4xl font-black text-red-600 outline-none placeholder-red-200" />
+                                    </div>
+                                </div>
+                            </div>
+            
+                            <div>
+                                <div className="flex justify-between items-end mb-3 px-1">
+                                    <div className="font-bold text-gray-800 text-sm">盤收內容清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
+                                    <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
+                                </div>
+                                
+                                <div className="space-y-3 max-h-[40vh] overflow-y-auto px-1 pb-4">
+                                    {cardItems.map((item, idx) => {
+                                        const card = (cards || []).find(c => c.id === item.cardId);
+                                        if (!card) return null;
+                                        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                                        const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                                        const typeObj = (types || []).find(t => t.id === card.type || t.name === card.type);
+                                        const channelObj = (channels || []).find(c => c.id === card.channel || c.name === card.channel);
+                                        const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
+            
+                                        return (
+                                            <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
+                                                <div 
+                                                    className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
+                                                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                                    onMouseDown={() => startPress(item.uid, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                                                    onTouchStart={() => startPress(item.uid, displayTitle)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+                                                    onContextMenu={(e) => { e.preventDefault(); cancelPress(); setCardToRemove({ uid: item.uid, title: displayTitle }); }}
+                                                    onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
+                                                >
+                                                    <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
+                                                        {card.image ? (
+                                                            <Image src={card.image} alt="卡片圖片" fill className="object-cover pointer-events-none" sizes="15vw" unoptimized={true} />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-4 h-4" /></div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-xs font-bold text-gray-800 truncate">{displayTitle || '未命名卡片'}</div>
+                                                        {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
+                                                        {/* 🌟 售出日期移到名稱下方 */}
+                                                        {Number(item.sellPrice) > 0 && (
+                                                            <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded w-fit mt-1">
+                                                               <Calendar className="w-3 h-3 text-green-500" />
+                                                               <input 
+                                                                   type="date" 
+                                                                   value={item.sellDate || ''} 
+                                                                   onChange={e => handleCardChange(item.uid, 'sellDate', e.target.value)} 
+                                                                   onClick={e => e.stopPropagation()}
+                                                                   className="bg-transparent text-[9px] font-bold text-green-600 outline-none w-[65px] p-0" 
+                                                               />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
+                                                        <div className="flex items-baseline">
+                                                            <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
+                                                            <input 
+                                                                type="number" placeholder="0" step="50" min="0"
+                                                                value={item.sellPrice} 
+                                                                onChange={e => handleCardChange(item.uid, 'sellPrice', e.target.value)} 
+                                                                className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                                            {item.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                        </label>
+                                                        <div className="flex items-baseline">
+                                                            <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                            <input 
+                                                                type="number" placeholder="0" step="50" min="0"
+                                                                value={item.buyPrice} 
+                                                                onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} 
+                                                                className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {cardItems.length === 0 && <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">點擊右上角「+ 新增卡片」加入這筆盤收的內容</div>}
+                                </div>
+                            </div>
+            
+                            {/* 🌟 專輯內容區塊 (移到下方) */}
+                            <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
+                                <div className="flex justify-between items-end mb-3 px-1">
+                                    <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                                        <Disc className="w-4 h-4 text-purple-500"/>
+                                        專輯內容
+                                        <span className="text-gray-400 text-[10px] font-normal ml-1">(計入總金額扣除)</span>
+                                    </div>
+                                    <button onClick={handleAddAlbum} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                                        <Plus className="w-3 h-3"/> 新增專輯
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3 px-1 pb-4">
+                                    {albumItems.map((item) => {
+                                        const album = (series || []).find(s => s.id === item.albumId);
+                                        return (
+                                            <div key={item.uid} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3 relative">
+                                                <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
+                                                    {album?.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
+                                                </div>
+                                                
+                                                <div className="flex-1 min-w-0 space-y-2">
+                                                    <div className="flex gap-2">
+                                                        <div className="relative flex-1">
+                                                            <select 
+                                                                value={item.albumId || ''} 
+                                                                onChange={e => handleAlbumChange(item.uid, 'albumId', e.target.value)}
+                                                                className="w-full border p-1.5 rounded-lg bg-gray-50 text-xs font-bold outline-none appearance-none"
+                                                            >
+                                                                <option value="">選擇專輯...</option>
+                                                                {albumOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                                            </select>
+                                                            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                                        </div>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handleAlbumChange(item.uid, 'albumStatus', item.albumStatus === '未拆' ? '空專' : '未拆')}
+                                                            className={`px-2 py-1.5 rounded-lg border text-xs font-bold whitespace-nowrap ${item.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                                                        >
+                                                            {item.albumStatus}
+                                                        </button>
+                                                        <div className="flex items-center border rounded-lg bg-white overflow-hidden w-16 flex-shrink-0">
+                                                            <input 
+                                                                type="number" 
+                                                                value={item.albumQuantity} 
+                                                                onChange={e => handleAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
+                                                                className="w-full text-center text-xs font-bold outline-none appearance-none h-full py-1.5" 
+                                                                placeholder="數量"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* 🌟 顯示售出紀錄 */}
+                                                    {item.soldCount > 0 && (
+                                                        <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">已售出 {item.soldCount} 張</span>
+                                                            {item.lastSoldDate && <span className="text-gray-400">({item.lastSoldDate})</span>}
+                                                        </div>
+                                                    )}
+            
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex flex-col items-start">
+                                                                <label className="text-[9px] text-red-400 font-bold uppercase">單價(成本)</label>
+                                                                <div className="flex items-baseline">
+                                                                    <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                                    <input 
+                                                                        type="number" placeholder="0" step="50" min="0"
+                                                                        value={item.buyPrice} 
+                                                                        onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
+                                                                        className="w-16 text-left border-b border-gray-200 outline-none font-bold text-xs py-0.5 bg-transparent text-red-600 placeholder-red-200" 
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            {/* 🌟 售出按鈕 */}
+                                                            <button 
+                                                                onClick={() => handleAlbumSell(item.uid)}
+                                                                disabled={item.albumQuantity <= 0}
+                                                                className="bg-black text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                                            >
+                                                                <ShoppingBag className="w-3 h-3" /> 售出
+                                                            </button>
+                                                        </div>
+                                                        <button onClick={() => setAlbumToRemove(item)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                    {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未包含專輯。</div>}
+                                </div>
+                            </div>
+            
+                            <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
+                                    <div className="flex justify-between items-end mb-3 px-1">
+                                        <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                                            <Tag className="w-4 h-4 text-orange-500"/>
+                                            雜物記錄 
+                                            <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
+                                        </div>
+                                        <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
+                                            <Plus className="w-3 h-3"/> 新增雜物
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="space-y-3 px-1 pb-4">
+                                        {miscItems.map((misc, idx) => (
+                                            <div key={misc.id} className={`flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-colors relative ${misc.isManual ? 'bg-orange-50/30' : ''}`}>
+                                                <div 
+                                                    className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto cursor-pointer select-none"
+                                                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                                    onMouseDown={() => startMiscPress(misc.id, misc.name)} onMouseUp={cancelMiscPress} onMouseLeave={cancelMiscPress}
+                                                    onTouchStart={() => startMiscPress(misc.id, misc.name)} onTouchEnd={cancelMiscPress} onTouchMove={cancelMiscPress}
+                                                    onContextMenu={(e) => { e.preventDefault(); cancelMiscPress(); setMiscToRemove({ id: misc.id, name: misc.name || '未命名雜物' }); }}
+                                                    onClick={(e) => { if (hasMiscLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
+                                                >
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 aspect-square flex-shrink-0 bg-orange-50 rounded-lg border border-orange-100 flex items-center justify-center"><Tag className="w-5 h-5 text-orange-400" /></div>
+                                                    <div className="flex-1 min-w-0 flex flex-col justify-center items-start">
+                                                        <input type="text" placeholder={`雜物名稱 ${idx + 1} (例: 專卡/海報)`} value={misc.name} onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="w-full text-sm font-bold text-gray-800 bg-transparent border-b border-transparent focus:border-orange-400 outline-none pb-0.5 placeholder-gray-300 mb-1 transition-colors" />
+                                                        {Number(misc.sellPrice) > 0 && (
+                                                            <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded w-fit">
+                                                               <Calendar className="w-3 h-3 text-green-500" />
+                                                               <input type="date" value={misc.sellDate} onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="bg-transparent text-[10px] font-bold text-green-600 outline-none cursor-pointer" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
+                                                        <div className="flex items-baseline">
+                                                            <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
+                                                            <input type="number" placeholder="0" step="50" min="0" value={misc.sellPrice} onChange={e => handleMiscChange(misc.id, 'sellPrice', e.target.value)} className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                                            {misc.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                        </label>
+                                                        <div className="flex items-baseline">
+                                                            <span className={`text-[10px] font-bold mr-0.5 ${misc.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                            <input 
+                                                                type="number" placeholder="0" step="50" min="0" 
+                                                                value={misc.buyPrice} 
+                                                                onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
+                                                                className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${misc.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {miscItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未新增任何雜物。</div>}
+                                    </div>
+                                </div>
+                        </div>
+            
+                        {cardToRemove && (
+                            <Modal title="移除卡片" onClose={() => setCardToRemove(null)} className="max-w-sm" footer={
+                                <div className="flex gap-2 w-full">
+                                    <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                                    <button onClick={() => {
+                                        const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);
+                                        const { cards, misc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                                        setCardItems(cards); setMiscItems(misc);
+                                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                                        setCardToRemove(null);
+                                    }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                                </div>
+                            }>
+                                <div className="p-6 text-center text-gray-600 text-sm">確定要從這筆盤收中移除「{cardToRemove.title}」嗎？<br/>這不會刪除卡片圖鑑本身。</div>
+                            </Modal>
+                        )}
+            
+                        {miscToRemove && (
+                            <Modal title="移除雜物" onClose={() => setMiscToRemove(null)} className="max-w-sm" footer={
+                                <div className="flex gap-2 w-full">
+                                    <button onClick={() => setMiscToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                                    <button onClick={() => {
+                                        const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);
+                                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                                        setCardItems(cards); setMiscItems(misc);
+                                        syncToParent(form, totalAmount, cards, misc, albumItems);
+                                        setMiscToRemove(null);
+                                    }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                                </div>
+                            }>
+                                <div className="p-6 text-center text-gray-600 text-sm">確定要刪除雜物「{miscToRemove.name}」嗎？</div>
+                            </Modal>
+                        )}
+            
+                        {albumToRemove && (
+                            <Modal title="移除專輯" onClose={() => setAlbumToRemove(null)} className="max-w-sm" footer={
+                                <div className="flex gap-2 w-full">
+                                    <button onClick={() => setAlbumToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                                    <button onClick={() => {
+                                        const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);
+                                        setAlbumItems(nextAlbums);
+                                        const { cards, misc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                                        setCardItems(cards); setMiscItems(misc);
+                                        syncToParent(form, totalAmount, cards, misc, nextAlbums);
+                                        setAlbumToRemove(null);
+                                    }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
+                                </div>
+                            }>
+                                <div className="p-6 text-center text-gray-600 text-sm">確定要移除這個專輯項目嗎？</div>
+                            </Modal>
+                        )}
+            
+                        {showCardSelector && <MiniCardSelector cards={cards} selectedItems={cardItems.map(c => ({ uid: c.uid, cardId: c.cardId }))} onConfirm={handleConfirmSelectCards} onClose={() => setShowCardSelector(false)} members={members} series={series} batches={batches} channels={channels} types={types} uniqueTypes={uniqueTypes} uniqueChannels={uniqueChannels} uniqueSeriesTypes={uniqueSeriesTypes} subunits={subunits} />}
+                    </div>
+                );
+            }
+            m({ length: qty }).map(() => {
                 let invIdx = availableInv.findIndex(inv => inv.cardId === item.cardId);
                 let matchedInv = null;
                 if (invIdx !== -1) {
