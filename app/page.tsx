@@ -4648,7 +4648,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const dataUrl = await htmlToImage.toPng(element, {
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
-                // cacheBust: true, // 🌟 移除：避免 library 再次附加 timestamp 導致請求新的未載入圖片
+                cacheBust: true, // 🌟 啟用：強制 html-to-image 重新抓取圖片，避開瀏覽器快取問題
                 skipAutoScale: true,
                 width: targetWidth,
                 height: targetHeight, 
@@ -4795,10 +4795,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             {card.image ? (
                                 /* 🌟 修正：匯出時改用原生 img 標籤並開啟 CORS，解決 html-to-image 抓不到圖片變成灰底的問題 */
                                 <img 
-                                    src={card.image.startsWith('http') ? `${card.image}${card.image.includes('?') ? '&' : '?'}export=true` : card.image} 
+                                    src={card.image} 
                                     alt="卡片圖片" 
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none" 
-                                    crossOrigin="anonymous" loading="eager"
+                                    crossOrigin="anonymous"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
