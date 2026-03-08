@@ -4644,36 +4644,39 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
 
-            // 🌟 終極殺招：強制破壞快取 (Cache-Busting)，確保 100% 成功下載並轉為 Base64
+            // 🌟 🍎 專剋 Safari：隱形 Canvas 繪布偷渡法
             for (let img of imgElements) {
                 // 確保只處理 http 開頭的網址，且避開已經是 base64 (data:) 的圖片
                 if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:')) {
                     originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset });
                     try {
-                        // 1. 🌟 關鍵：在網址後面塞入隨機時間戳記，強迫瀏覽器「不准拿舊快取」，一定要重新下載！
-                        const bypassCacheUrl = img.src + (img.src.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+                        // 1. 給 Safari 專用的破壞快取網址
+                        const safariBypassUrl = img.src + (img.src.includes('?') ? '&' : '?') + 'mac_bypass=' + Date.now();
                         
-                        // 2. 🌟 強制宣告這是一個跨域請求
-                        const response = await fetch(bypassCacheUrl, { 
-                            mode: 'cors',
-                            cache: 'no-cache'
-                        });
-                        
-                        if (!response.ok) throw new Error(`HTTP 錯誤狀態: ${response.status}`);
-                        
-                        const blob = await response.blob();
+                        // 2. 放棄容易被 Safari 擋下的 fetch，改用原生 Image 物件 + Canvas 繪圖
                         const base64 = await new Promise((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(blob);
+                            const tempImg = new window.Image();
+                            tempImg.crossOrigin = 'anonymous'; // 關鍵：宣告跨域
+                            tempImg.onload = () => {
+                                // 圖片載入後，在背景畫一塊一樣大的隱形畫布
+                                const canvas = document.createElement('canvas');
+                                canvas.width = tempImg.width || 200;
+                                canvas.height = tempImg.height || 300;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
+                                // 將畫布轉成 Base64 密碼
+                                resolve(canvas.toDataURL('image/jpeg', 0.8));
+                            };
+                            tempImg.onerror = () => reject(new Error('Safari Canvas 繪圖遭拒'));
+                            tempImg.src = safariBypassUrl; // 觸發載入
                         });
                         
-                        // 3. 替換成安全的 Base64，並拔除可能干擾的 srcset
+                        // 3. 完美替換，拔除 srcset
                         img.src = base64; 
                         img.removeAttribute('srcset'); 
+
                     } catch (e) {
-                        console.warn("圖片轉 Base64 失敗，跳過此圖:", img.src, e);
+                        console.warn("🍎 Safari 圖片轉 Base64 失敗，跳過此圖:", img.src, e);
                     }
                 }
             }
