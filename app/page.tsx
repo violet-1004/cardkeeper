@@ -4644,21 +4644,36 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
 
-            // 🌟 終極殺招：在截圖前，將所有外部圖片強制轉換為 Base64，繞過 CORS 限制！
+            // 🌟 終極殺招：強制破壞快取 (Cache-Busting)，確保 100% 成功下載並轉為 Base64
             for (let img of imgElements) {
-                if (img.src && img.src.startsWith('http')) {
-                    originalImageSrcs.push({ el: img, src: img.src });
+                // 確保只處理 http 開頭的網址，且避開已經是 base64 (data:) 的圖片
+                if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:')) {
+                    originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset });
                     try {
-                        const response = await fetch(img.src);
+                        // 1. 🌟 關鍵：在網址後面塞入隨機時間戳記，強迫瀏覽器「不准拿舊快取」，一定要重新下載！
+                        const bypassCacheUrl = img.src + (img.src.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+                        
+                        // 2. 🌟 強制宣告這是一個跨域請求
+                        const response = await fetch(bypassCacheUrl, { 
+                            mode: 'cors',
+                            cache: 'no-cache'
+                        });
+                        
+                        if (!response.ok) throw new Error(`HTTP 錯誤狀態: ${response.status}`);
+                        
                         const blob = await response.blob();
-                        const base64 = await new Promise((resolve) => {
+                        const base64 = await new Promise((resolve, reject) => {
                             const reader = new FileReader();
                             reader.onloadend = () => resolve(reader.result);
+                            reader.onerror = reject;
                             reader.readAsDataURL(blob);
                         });
-                        img.src = base64; // 把網址替換成 Base64 編碼
+                        
+                        // 3. 替換成安全的 Base64，並拔除可能干擾的 srcset
+                        img.src = base64; 
+                        img.removeAttribute('srcset'); 
                     } catch (e) {
-                        console.warn("圖片轉 Base64 失敗，跳過此圖:", e);
+                        console.warn("圖片轉 Base64 失敗，跳過此圖:", img.src, e);
                     }
                 }
             }
@@ -4695,9 +4710,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             }
             alert(`匯出圖片失敗: ${msg}`);
         } finally {
-            // 🌟 無論成功失敗，最後把卡片的圖片網址復原，以免影響後續操作
+            // 🌟 截圖完成後，完美還原所有圖片狀態
             originalImageSrcs.forEach(item => {
                 item.el.src = item.src;
+                if (item.srcset) {
+                    item.el.srcset = item.srcset;
+                }
             });
             
             if (overlay && element) {
