@@ -1793,7 +1793,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                           onChange={(e) => setCols(Number(e.target.value))}
                           className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
                        >
-                          {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                    {[6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                        </select>
                     </div>
                      <button 
@@ -4497,7 +4497,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             try {
                 const saved = JSON.parse(localStorage.getItem(key));
                 setCustomOrder(Array.isArray(saved) ? saved : []);
-            } catch (e) { setCustomOrder([]); }
+            } catch (e) { 
+                setCustomOrder([]); 
+            }
         }
         setIsReorderMode(false);
         setReorderSelectedId(null);
@@ -4662,6 +4664,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             if (error) {
                  if (typeof error === 'string') msg = error;
                  else if (error.message) msg = error.message;
+                 // 🌟 針對 [object Event] 的特殊處理 (通常是圖片載入失敗)
+                 else if (error.type && error.type === 'error') msg = '圖片載入失敗，請檢查網路連線或圖片來源';
                  else msg = String(error);
             }
             alert(`匯出圖片失敗: ${msg}`);
@@ -4863,7 +4867,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     onChange={(e) => setCols(Number(e.target.value))}
                                     className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
                                  >
-                                    {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                    {[6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
                               </div>
                               <button 
@@ -5032,7 +5036,7 @@ export default function App() {
 
   const [libraryCols, setLibraryCols] = useState(6);
   const [collectionCols, setCollectionCols] = useState(6);
-  const [exportCols, setExportCols] = useState(6);
+  const [exportCols, setExportCols] = useState(8);
   const [exportShowDetails, setExportShowDetails] = useState(true);
 
   const [viewingCard, setViewingCard] = useState(null);
