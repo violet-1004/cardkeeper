@@ -4650,6 +4650,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 backgroundColor: '#ffffff',
                 cacheBust: true, // 🌟 啟用：強制 html-to-image 重新抓取圖片，避開瀏覽器快取問題
                 skipAutoScale: true,
+                // 🌟 依照指示加入 CORS 相關設定 (確保跨域圖片能正確渲染)
+                useCORS: true, 
+                allowTaint: true,
                 width: targetWidth,
                 height: targetHeight, 
                 style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
@@ -4797,7 +4800,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                 <img 
                                     src={card.image} 
                                     alt="卡片圖片" 
-                                    className="absolute inset-0 w-full h-full object-cover pointer-events-none" 
+                                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                                     crossOrigin="anonymous"
                                 />
                             ) : (
