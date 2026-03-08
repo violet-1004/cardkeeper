@@ -12,7 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-TW">
-      <body className="antialiased">
+      <body className="antialiased no-scrollbar">
         {children}
       </body>
     </html>

@@ -182,7 +182,7 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
       className={`relative w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-indigo-400 transition-all bg-gray-50 overflow-hidden group ${className}`}
     >
       {multiple && images.length > 0 ? (
-          <div className="absolute inset-0 p-2 overflow-y-auto grid grid-cols-3 gap-2">
+          <div className="absolute inset-0 p-2 overflow-y-auto no-scrollbar grid grid-cols-3 gap-2">
               {images.map((img, idx) => (
                   <div key={idx} className="relative aspect-[2/3] rounded overflow-hidden border">
                       <img src={img} className="w-full h-full object-cover" />
@@ -314,10 +314,10 @@ const getOwnedQuantity = (invList, cardId) => {
 };
 
 // --- 3. 基礎 UI 組件 ---
-const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction }) => (
-  <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false }) => (
+  <div className={`fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose}>
     <div 
-      className={`bg-white w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : `rounded-xl max-h-[90vh] ${className}`}`} 
+      className={`bg-white w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-xl ${className}` : `rounded-xl max-h-[90vh] ${className}`}`} 
       onClick={e => e.stopPropagation()}
     >
       <div className="px-4 py-3 border-b flex justify-between items-center bg-white flex-shrink-0 z-10">
@@ -329,7 +329,7 @@ const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullS
             <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors"><X className="w-6 h-6 text-gray-500" /></button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto relative bg-gray-50">
+      <div className="flex-1 overflow-y-auto no-scrollbar relative bg-gray-50">
         {children}
       </div>
       {footer && (
@@ -628,14 +628,6 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
 
     return (
         <div className="space-y-6 px-1 py-2 pb-6">
-            {isBulk && (
-                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl flex items-start gap-3 -mt-2">
-                    <AlertCircle className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
-                    <div className="text-xs text-indigo-700 leading-relaxed font-medium">
-                        此紀錄來自盤收包裹。您可以編輯售價與卡況，若需修改購入資訊請前往「盤收」管理修改。
-                    </div>
-                </div>
-            )}
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-gray-500 mb-1.5 block">購買日期</label>
@@ -1168,7 +1160,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                 <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-indigo-600"><Edit2 className="w-5 h-5" /></button>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-gray-50">
+            <div className="flex-1 overflow-y-auto no-scrollbar bg-gray-50">
                 <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
                         {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
@@ -1382,6 +1374,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                     onClose={() => { setActiveModal(null); setTempInvData(null); }} 
                     className="max-w-sm"
                     footer={null} 
+                    mobileFullScreen={true}
                 >
                     <div className="flex flex-col h-full">
                         <form id="invForm" className="flex-1" key={tempInvData?.id || 'new'} onSubmit={(e) => e.preventDefault()}>
@@ -2778,13 +2771,13 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
 
     return (
         <div className="space-y-6 pb-24">
-            <div className="flex justify-between items-center px-2">
-                <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收包裹管理</h2>
-                <div className="flex gap-2">
-                    <div className="bg-gray-100 p-1 rounded-lg flex items-center">
-                        <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>包裹</button>
-                        <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
-                    </div>
+            <div className="px-2 space-y-2">
+                <div className="bg-gray-100 p-1 rounded-lg flex items-center w-fit">
+                    <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>包裹</button>
+                    <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
+                </div>
+                <div className="flex justify-between items-center">
+                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收包裹管理</h2>
                     {viewMode === 'bulk' && <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>}
                 </div>
             </div>
@@ -3125,7 +3118,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto no-scrollbar p-4">
                 <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-3 pb-20">
                     {filteredCards.map(card => {
                         const count = localItems.filter(i => i.cardId === card.id).length;
@@ -3488,7 +3481,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+            <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-24">
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
                     <div className="w-28 h-28 flex-shrink-0">
                         <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
@@ -3536,7 +3529,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
                     </div>
                     
-                    <div className="space-y-3 max-h-[40vh] overflow-y-auto px-1 pb-4">
+                    <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar px-1 pb-4">
                         {cardItems.map((item, idx) => {
                             const card = (cards || []).find(c => c.id === item.cardId);
                             if (!card) return null;
@@ -4290,7 +4283,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                     </div>
                 </div>
 
-                <div className="space-y-3 max-h-[45vh] overflow-y-auto px-1 pb-4">
+                <div className="space-y-3 max-h-[45vh] overflow-y-auto no-scrollbar px-1 pb-4">
                     {cardItems.map((item, idx) => {
                         const card = (cards || []).find(c => c.id === item.cardId);
                         if (!card) return null;
@@ -4367,7 +4360,7 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits }) {
+function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting }) {
     // ==========================================
     // 1. 狀態宣告 (確保順序與唯一性)
     // ==========================================
@@ -4501,11 +4494,24 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         // 🌟 切換視圖時讀取自訂排序
         if (activeView) {
             const key = `custom_sort_${activeView.id || activeView}`;
-            try {
-                const saved = JSON.parse(localStorage.getItem(key));
-                setCustomOrder(Array.isArray(saved) ? saved : []);
-            } catch (e) { 
-                setCustomOrder([]); 
+            // 🌟 優先從資料庫設定讀取
+            const remoteSetting = (appSettings || []).find(s => s.key === key);
+            
+            if (remoteSetting && Array.isArray(remoteSetting.value)) {
+                setCustomOrder(remoteSetting.value);
+            } else {
+                // 🌟 如果資料庫沒資料，嘗試從 localStorage 遷移舊資料
+                try {
+                    const local = JSON.parse(localStorage.getItem(key));
+                    if (Array.isArray(local) && local.length > 0) {
+                        setCustomOrder(local);
+                        onUpdateSetting(key, local); // 自動同步到資料庫
+                    } else {
+                        setCustomOrder([]);
+                    }
+                } catch (e) { 
+                    setCustomOrder([]); 
+                }
             }
         }
         setIsReorderMode(false);
@@ -4756,7 +4762,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 
                 setCustomOrder(newList);
                 const key = `custom_sort_${activeView.id || activeView}`;
-                localStorage.setItem(key, JSON.stringify(newList));
+                onUpdateSetting(key, newList); // 🌟 儲存到資料庫
             }
             setReorderSelectedId(null);
         }
@@ -4766,7 +4772,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         if (confirm('確定要重置此頁面的自訂排序嗎？')) {
             setCustomOrder([]);
             const key = `custom_sort_${activeView.id || activeView}`;
-            localStorage.removeItem(key);
+            onUpdateSetting(key, []); // 🌟 清空資料庫紀錄
             setIsReorderMode(false);
         }
     };
@@ -4848,7 +4854,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                 : 'active:scale-95'
                         }`}
                     >
-                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`}>
+                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`} style={{ containerType: 'inline-size' }}>
                             {card.image ? (
                                 /* 🌟 修正：匯出時改用原生 img 標籤並開啟 CORS，解決 html-to-image 抓不到圖片變成灰底的問題 */
                                 <img 
@@ -4877,7 +4883,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             </div>
                             {card.note && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
-                                    <div className={`inline-block text-white text-[11px] font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full break-words ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2' }}>{card.note}</div>
+                                    <div className={`inline-block text-white font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full whitespace-nowrap ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: '12cqw' }}>{card.note}</div>
                                 </div>
                             )}
                         </div>
@@ -4903,7 +4909,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                       activeView.title;
 
         return (
-          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto flex flex-col items-center animate-fade-in">
+          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in">
               <div className="bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative" ref={exportRef}>
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
                       <div className="flex items-center justify-between w-full sm:w-auto gap-2">
@@ -4928,7 +4934,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     onChange={(e) => setCols(Number(e.target.value))}
                                     className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
                                  >
-                                    {[6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                    {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
                               </div>
                               <button 
@@ -5092,6 +5098,7 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [bulkRecords, setBulkRecords] = useState([]);
   const [subunits, setSubunits] = useState([]); // 🌟 新增 subunits 狀態
+  const [appSettings, setAppSettings] = useState([]); // 🌟 新增全域設定狀態
   
   const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
 
@@ -5169,6 +5176,7 @@ export default function App() {
         setCustomLists(await fetchTable('custom_lists'));
         setSales(await fetchTable('ui_sales'));
         setSubunits(await fetchTable('ui_subunits')); // 🌟 讀取 subunits
+        setAppSettings(await fetchTable('ui_settings')); // 🌟 讀取全域設定 (排序紀錄)
     }
     fetchAllData();
   }, []);
@@ -5177,9 +5185,9 @@ export default function App() {
       const handleResize = () => {
           const isMobile = window.innerWidth < 768;
           if (isMobile) {
-              setLibraryCols(prev => (prev === 6 ? 3 : prev));
-              setCollectionCols(prev => (prev === 6 ? 3 : prev));
-              setExportCols(prev => (prev === 6 ? 4 : prev));
+              setLibraryCols(prev => (prev === 6 ? 4 : prev));
+              setCollectionCols(prev => (prev === 6 ? 4 : prev));
+              setExportCols(prev => (prev === 8 ? 4 : prev));
           }
       };
       window.addEventListener('resize', handleResize);
@@ -5312,6 +5320,17 @@ export default function App() {
       setBulkRecords(prev => prev.map(r => r.source === oldName ? { ...r, source: '' } : r));
       await supabase.from('ui_inventory').update({ source: null }).eq('source', oldName);
       await supabase.from('bulk_records').update({ source: null }).eq('source', oldName);
+  };
+
+  // 🌟 更新全域設定 (例如自訂排序)
+  const handleUpdateAppSetting = async (key, value) => {
+      setAppSettings(prev => {
+          const exists = prev.some(s => s.key === key);
+          if (exists) return prev.map(s => s.key === key ? { ...s, value } : s);
+          return [...prev, { key, value }];
+      });
+      const { error } = await supabase.from('ui_settings').upsert({ key, value });
+      if (error) console.error('Error saving setting:', error);
   };
 
   // 👇 你的 handleSaveData 應該會緊接著在這邊
@@ -5777,6 +5796,8 @@ export default function App() {
           showDetails={exportShowDetails}       // 🌟 順手修正：把 showDetails 換成 exportShowDetails
           setShowDetails={setExportShowDetails} // 🌟 順手修正
           subunits={subunits}                   // 🌟 傳入 subunits
+          appSettings={appSettings}             // 🌟 傳入設定資料
+          onUpdateSetting={handleUpdateAppSetting} // 🌟 傳入更新函式
         />;
       default: return null;
     }
@@ -5854,7 +5875,7 @@ export default function App() {
                     <div className="fixed inset-0 z-40" onClick={() => setShowGroupSelector(false)}></div>
                     <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in">
                         <div className="p-2 border-b bg-gray-50 text-xs font-bold text-gray-500">切換團體</div>
-                        <div className="max-h-60 overflow-y-auto">
+                        <div className="max-h-60 overflow-y-auto no-scrollbar">
                             {(groups || []).map(g => (
                                 <div 
                                     key={g.id}
