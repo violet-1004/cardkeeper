@@ -8,7 +8,7 @@ import {
   Image as ImageIcon, CheckCircle, XCircle, Share2, Download, Eye, EyeOff,
   X, Maximize2, Minimize2, Save, BookOpen, User, Settings, Filter, 
   ChevronRight, MoreHorizontal, Search, Edit2, Check, Users, Heart, ShoppingBag, FolderPlus,
-  ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp,
+  ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp, ArrowUpDown,
   ChevronLeft, Folder, Package, Copy, Disc
 } from 'lucide-react';
 
@@ -1259,11 +1259,6 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
 
                     <div className="flex justify-between items-end mb-3 px-1">
                         <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider">交易紀錄</h3>
-                        {duplicateBulkItems.length > 0 && (
-                            <button onClick={handleCleanupDuplicates} className="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold animate-pulse hover:bg-red-200 transition-colors">
-                                ⚠️ 修復重複資料
-                            </button>
-                        )}
                         {avgPrice > 0 && <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded border">均價 ${avgPrice}</span>}
                     </div>
                     
@@ -1435,6 +1430,24 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   
   const [editingOption, setEditingOption] = useState(null);
 
+  const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
+  
+  // 🌟 升級版 uniqueSubunits：結合資料庫中的 subunits 與成員中遺留的 subunit 字串
+  const uniqueSubunits = useMemo(() => {
+      const defined = (subunits || []).filter(s => s.groupId === currentGroupId);
+      const definedNames = new Set(defined.map(s => s.name));
+      
+      const used = [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))];
+      const missing = used.filter(name => !definedNames.has(name)).map(name => ({
+          id: `temp_${name}`,
+          name,
+          groupId: currentGroupId,
+          sortOrder: 999
+      }));
+      
+      return [...defined, ...missing].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
+  }, [subunits, currentMembers, currentGroupId]);
+
   useEffect(() => {
     setFilterMemberId('All');
     setFilterSeriesId('All');
@@ -1445,17 +1458,15 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   }, [currentGroupId]);
 
   useEffect(() => {
-      const groupMembers = (members || []).filter(m => m.groupId === currentGroupId);
-      const subs = [...new Set(groupMembers.map(m => m.subunit).filter(Boolean))];
-      
-      if (subs.length > 0) {
-          if (filterSubunit === 'All' || !subs.includes(filterSubunit)) {
-              setFilterSubunit(subs[0]);
+      if (uniqueSubunits.length > 0) {
+          const isValid = uniqueSubunits.some(s => s.name === filterSubunit);
+          if (filterSubunit === 'All' || !isValid) {
+              setFilterSubunit(uniqueSubunits[0].name);
           }
       } else {
           setFilterSubunit('All'); 
       }
-  }, [currentGroupId, members, filterSubunit]);
+  }, [uniqueSubunits, filterSubunit]);
 
   const handleLongPress = (type, value, name) => {
       setIsSelectionMode(true);
@@ -1499,24 +1510,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           await supabase.from('series').update({ type: '' }).eq('type', data.value);
       }
   };
-
-  const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
-  
-  // 🌟 升級版 uniqueSubunits：結合資料庫中的 subunits 與成員中遺留的 subunit 字串
-  const uniqueSubunits = useMemo(() => {
-      const defined = (subunits || []).filter(s => s.groupId === currentGroupId);
-      const definedNames = new Set(defined.map(s => s.name));
-      
-      const used = [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))];
-      const missing = used.filter(name => !definedNames.has(name)).map(name => ({
-          id: `temp_${name}`,
-          name,
-          groupId: currentGroupId,
-          sortOrder: 999
-      }));
-      
-      return [...defined, ...missing].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
-  }, [subunits, currentMembers, currentGroupId]);
 
   const displayMembers = currentMembers.filter(m => filterSubunit === 'All' || m.subunit === filterSubunit);
 
@@ -2065,15 +2058,25 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const availableTypes = useMemo(() => {
       const ids = new Set(subunitFilteredCards.map(c => c.type).filter(Boolean));
       const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
+      // 🌟 修正：補回未定義在 types 列表中的自訂子類 (例如：卡包卡)
+      ids.forEach(id => {
+          if (!currentTypes.some(t => t.id === id || t.name === id)) {
+              currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
+          }
+      });
       return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
   }, [subunitFilteredCards, types]);
 
   const availableChannels = useMemo(() => {
       const ids = new Set(subunitFilteredCards.map(c => c.channel).filter(Boolean));
       const currentChannels = (channels || []).filter(c => ids.has(c.id) || ids.has(c.name));
+      // 🌟 修正：補回未定義的自訂通路
+      ids.forEach(id => {
+          if (!currentChannels.some(c => c.id === id || c.name === id)) currentChannels.push({ id, name: id, shortName: '' });
+      });
       const freqMap = {};
       subunitFilteredCards.forEach(c => { if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1; });
-      return currentChannels.sort((a, b) => (freqMap[b.id] || 0) - (freqMap[a.id] || 0));
+      return currentChannels.sort((a, b) => (freqMap[b.id] || freqMap[b.name] || 0) - (freqMap[a.id] || freqMap[a.name] || 0));
   }, [subunitFilteredCards, channels]);
   
   const availableSeriesTypes = useMemo(() => {
@@ -4372,17 +4375,22 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [listToDelete, setListToDelete] = useState(null);
     const clickTimer = useRef(null);
 
-    // 🌟 篩選過濾器狀態
-    const [filterSubunit, setFilterSubunit] = useState('All');
-    const [filterMember, setFilterMember] = useState('All');
-    const [filterType, setFilterType] = useState('All');
-    const [filterChannel, setFilterChannel] = useState('All');
+    // 🌟 篩選過濾器狀態 (改為複選陣列)
+    const [filterSubunits, setFilterSubunits] = useState([]);
+    const [filterMembers, setFilterMembers] = useState([]);
+    const [filterTypes, setFilterTypes] = useState([]);
+    const [filterColors, setFilterColors] = useState([]);
 
     const exportRef = useRef(null);
     const [isExporting, setIsExporting] = useState(false);
     const [exportedImage, setExportedImage] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [cardMarks, setCardMarks] = useState({});
+
+    // 🌟 自訂排序相關狀態
+    const [customOrder, setCustomOrder] = useState([]);
+    const [isReorderMode, setIsReorderMode] = useState(false);
+    const [reorderSelectedId, setReorderSelectedId] = useState(null);
 
     // ==========================================
     // 2. 效能升級字典與資料池
@@ -4439,20 +4447,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         })).sort((a, b) => a.sortOrder - b.sortOrder);
     }, [poolCards, members, subunits]);
 
-    useEffect(() => {
-        const availableIds = availableSubunits.map(s => s.id);
-        if (availableIds.length > 0 && (filterSubunit === 'All' || !availableIds.includes(filterSubunit))) {
-            setFilterSubunit(availableIds[0]);
-        }
-    }, [availableSubunits, filterSubunit]);
-
     const subunitFilteredCards = useMemo(() => {
-        if (filterSubunit === 'All') return poolCards;
+        if (filterSubunits.length === 0) return poolCards;
         return poolCards.filter(c => {
             const m = (members || []).find(mem => mem.id === c.memberId);
-            return m && m.subunit === filterSubunit;
+            return m && filterSubunits.includes(m.subunit);
         });
-    }, [poolCards, filterSubunit, members]);
+    }, [poolCards, filterSubunits, members]);
 
     const availableMembers = useMemo(() => {
         const ids = new Set(subunitFilteredCards.map(c => c.memberId));
@@ -4462,34 +4463,59 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const availableTypes = useMemo(() => {
         const ids = new Set(subunitFilteredCards.map(c => c.type).filter(Boolean));
         const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
+        // 🌟 修正：補回未定義在 types 列表中的自訂子類
+        ids.forEach(id => {
+            if (!currentTypes.some(t => t.id === id || t.name === id)) {
+                currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
+            }
+        });
         return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
     }, [subunitFilteredCards, types]);
 
-    const availableChannels = useMemo(() => {
-        const ids = new Set(subunitFilteredCards.map(c => c.channel).filter(Boolean));
-        const currentChannels = (channels || []).filter(c => ids.has(c.id) || ids.has(c.name));
-        const freqMap = {};
-        subunitFilteredCards.forEach(c => { if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1; });
-        return currentChannels.sort((a, b) => (freqMap[b.id] || 0) - (freqMap[a.id] || 0));
-    }, [subunitFilteredCards, channels]);
+    // 🌟 新增：顏色篩選 (僅限販售模式)
+    const availableColors = useMemo(() => {
+        if (activeView !== 'selling') return [];
+        const colors = new Set();
+        subunitFilteredCards.forEach(c => {
+            const s = salesMap[c.id];
+            if (s) colors.add(s.color || 'bg-black/70');
+        });
+        return [...colors];
+    }, [activeView, subunitFilteredCards, salesMap]);
 
     useEffect(() => {
-        setFilterSubunit('All');
-        setFilterMember('All');
-        setFilterType('All');
-        setFilterChannel('All');
+        setFilterSubunits([]);
+        setFilterMembers([]);
+        setFilterTypes([]);
+        setFilterColors([]);
         setIsEditMode(false);
         setCardMarks({}); 
+        
+        // 🌟 切換視圖時讀取自訂排序
+        if (activeView) {
+            const key = `custom_sort_${activeView.id || activeView}`;
+            try {
+                const saved = JSON.parse(localStorage.getItem(key));
+                setCustomOrder(Array.isArray(saved) ? saved : []);
+            } catch (e) { setCustomOrder([]); }
+        }
+        setIsReorderMode(false);
+        setReorderSelectedId(null);
     }, [activeView]);
 
     // ==========================================
     // 4. 取得顯示卡片與終極排序
     // ==========================================
     const getDisplayCards = () => {
-        return subunitFilteredCards.filter(c => {
-            if (filterMember !== 'All' && c.memberId !== filterMember) return false;
-            if (filterType !== 'All' && c.type !== filterType) return false;
-            if (filterChannel !== 'All' && c.channel !== filterChannel) return false;
+        const filtered = subunitFilteredCards.filter(c => {
+            if (filterMembers.length > 0 && !filterMembers.includes(c.memberId)) return false;
+            if (filterTypes.length > 0 && !filterTypes.includes(c.type)) return false;
+            
+            if (activeView === 'selling' && filterColors.length > 0) {
+                 const saleRecord = salesMap[c.id];
+                 const color = saleRecord?.color || 'bg-black/70';
+                 if (!filterColors.includes(color)) return false;
+            }
             return true;
         }).map(c => {
             if (activeView === 'selling') {
@@ -4501,7 +4527,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 return { ...c, note: item?.note };
             }
             return c;
-        }).sort((cardA, cardB) => {
+        });
+
+        // 🌟 先執行預設排序
+        const defaultSorted = filtered.sort((cardA, cardB) => {
             const safeString = (val) => val ? String(val) : '';
             const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
@@ -4533,6 +4562,17 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             if (mSortA !== mSortB) return mSortA - mSortB;
             return safeString(cardA.id).localeCompare(safeString(cardB.id));
         });
+
+        // 🌟 如果有自訂排序，則依照自訂順序重排 (優先度高)
+        if (customOrder.length > 0) {
+            const orderMap = new Map(customOrder.map((id, index) => [id, index]));
+            return defaultSorted.sort((a, b) => {
+                const indexA = orderMap.has(a.id) ? orderMap.get(a.id) : 999999;
+                const indexB = orderMap.has(b.id) ? orderMap.get(b.id) : 999999;
+                return indexA - indexB;
+            });
+        }
+        return defaultSorted;
     };
 
     const displayCards = getDisplayCards() || [];
@@ -4605,6 +4645,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
                 cacheBust: true,
+                skipAutoScale: true,
                 width: targetWidth,
                 height: targetHeight, 
                 style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
@@ -4622,22 +4663,71 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             setIsExporting(false);
         }
     };
+
+    // 🌟 處理自訂排序邏輯
+    const handleReorderClick = (cardId) => {
+        if (!reorderSelectedId) {
+            setReorderSelectedId(cardId);
+        } else if (reorderSelectedId === cardId) {
+            setReorderSelectedId(null);
+        } else {
+            // 移動卡片：將 selectedId 移動到 cardId 之前
+            const currentList = displayCards.map(c => c.id);
+            const fromIndex = currentList.indexOf(reorderSelectedId);
+            const toIndex = currentList.indexOf(cardId);
+            
+            if (fromIndex !== -1 && toIndex !== -1) {
+                const newList = [...currentList];
+                const [movedItem] = newList.splice(fromIndex, 1);
+                newList.splice(toIndex, 0, movedItem);
+                
+                setCustomOrder(newList);
+                const key = `custom_sort_${activeView.id || activeView}`;
+                localStorage.setItem(key, JSON.stringify(newList));
+            }
+            setReorderSelectedId(null);
+        }
+    };
+
+    const resetCustomSort = () => {
+        if (confirm('確定要重置此頁面的自訂排序嗎？')) {
+            setCustomOrder([]);
+            const key = `custom_sort_${activeView.id || activeView}`;
+            localStorage.removeItem(key);
+            setIsReorderMode(false);
+        }
+    };
+
+    // 🌟 使用長按 Hook
+    const sortBtnBind = useLongPress(resetCustomSort, 800);
     
     // ==========================================
     // 6. 內部渲染元件
     // ==========================================
-    const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+    const RenderFilterSection = ({ label, options, current, onChange, mapName, isColor = false }) => (
        <div className="flex items-center gap-3 overflow-hidden no-export no-print">
           <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
               {(options || []).map(opt => {
                   const id = typeof opt === 'object' ? opt.id : opt;
                   const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
-                  const isSelected = current === id;
+                  const isSelected = current.includes(id);
+                  
+                  if (isColor) {
+                      return (
+                          <button
+                              key={id}
+                              onClick={() => onChange(id)}
+                              className={`w-6 h-6 rounded-full border-2 transition-all ${id} ${isSelected ? 'border-gray-600 scale-110 ring-1 ring-gray-400 shadow-sm' : 'border-transparent opacity-40 hover:opacity-100'}`}
+                              title={name}
+                          />
+                      );
+                  }
+
                   return (
                       <button 
                           key={id}
-                          onClick={() => onChange(isSelected ? 'All' : id)}
+                          onClick={() => onChange(id)}
                           className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                       >
                           {name}
@@ -4647,6 +4737,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
           </div>
        </div>
     );
+
+    const toggleFilter = (setFunc, val) => {
+        setFunc(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+    };
     
     const CardGrid = ({ displayCards }) => (
         <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
@@ -4665,10 +4759,22 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                 return (
-                    <div key={idx} onClick={() => !isEditMode && setViewingCard(card)} className="flex flex-col gap-1 relative group cursor-pointer active:scale-95 transition-transform">
-                        <div className="relative aspect-[2/3] bg-gray-100 rounded-lg border border-gray-200 shadow-sm flex-shrink-0 overflow-hidden">
+                    <div 
+                        key={idx} 
+                        onClick={() => {
+                            if (isReorderMode) handleReorderClick(card.id);
+                            else if (!isEditMode) setViewingCard(card);
+                        }} 
+                        className={`flex flex-col gap-1 relative group cursor-pointer transition-all ${
+                            isReorderMode 
+                                ? (reorderSelectedId === card.id ? 'scale-95 ring-4 ring-indigo-500 rounded-lg z-10' : 'hover:scale-[0.98] opacity-90') 
+                                : 'active:scale-95'
+                        }`}
+                    >
+                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`}>
                             {card.image ? (
-                                <Image src={card.image} alt="卡片圖片" fill className="absolute inset-0 w-full h-full object-cover pointer-events-none" sizes="(max-width: 768px) 33vw, 15vw" unoptimized={true}/>
+                                /* 🌟 修正：匯出時改用原生 img 標籤並開啟 CORS，解決 html-to-image 抓不到圖片變成灰底的問題 */
+                                <img src={card.image} alt="卡片圖片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" crossOrigin="anonymous" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                     <ImageIcon className="w-8 h-8" />
@@ -4711,8 +4817,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                       activeView.title;
 
         return (
-          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto flex flex-col items-center py-4 sm:py-10 animate-fade-in px-2 sm:px-0">
-              <div className="bg-white p-4 sm:p-8 shadow-2xl min-h-[600px] w-full max-w-5xl relative rounded-xl sm:rounded-none" ref={exportRef}>
+          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto flex flex-col items-center animate-fade-in">
+              <div className="bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative" ref={exportRef}>
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
                       <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -4739,6 +4845,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
                               </div>
+                              <button 
+                                  {...sortBtnBind}
+                                  onClick={() => { setIsReorderMode(!isReorderMode); setIsEditMode(false); }} 
+                                  className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} 
+                                  title="自訂排序 (長按重置)"
+                              >
+                                  <ArrowUpDown className="w-4 h-4" />
+                              </button>
                               <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
                                   <PenTool className="w-4 h-4" />
                               </button>
@@ -4754,11 +4868,17 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   </div>
 
                   <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
-                      {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} mapName={s => s.name} />}
-                      {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
-                      {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
-                      {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
+                      {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />}
+                      {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />}
+                      {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />}
+                      {availableColors.length > 0 && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
                   </div>
+
+                  {isReorderMode && (
+                      <div className="mb-4 p-3 bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg text-center border border-indigo-100 animate-pulse">
+                          {reorderSelectedId ? "請點擊另一張卡片以插入其前方" : "請點擊一張卡片開始移動"}
+                      </div>
+                  )}
 
                   <CardGrid displayCards={displayCards} />
                   {displayCards.length === 0 && <div className="text-center py-20 text-gray-400">沒有符合條件的卡片</div>}
