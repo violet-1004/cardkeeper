@@ -1793,7 +1793,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                           onChange={(e) => setCols(Number(e.target.value))}
                           className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
                        >
-                                    {[6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                    {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
                        </select>
                     </div>
                      <button 
@@ -2250,7 +2250,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                           onChange={(e) => setCols(Number(e.target.value))}
                           className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full"
                        >
-                          {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                          {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
                        </select>
                     </div>
 
@@ -3455,8 +3455,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             if (existing) return existing;
             return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false };
         });
-        const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
-        setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems, albumItems);
+        const { nextCards, nextMisc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+        setCardItems(nextCards); 
+        setMiscItems(nextMisc);
+        syncToParent(form, totalAmount, nextCards, nextMisc, albumItems);
         setShowCardSelector(false);
     };
 
@@ -3779,8 +3781,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
                             const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);
-                            const recalculated = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
-                            setCardItems(recalculated); syncToParent(form, totalAmount, recalculated, miscItems, albumItems);
+                            const { nextCards, nextMisc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                            setCardItems(nextCards); 
+                            setMiscItems(nextMisc);
+                            syncToParent(form, totalAmount, nextCards, nextMisc, albumItems);
                             setCardToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -3795,9 +3799,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setMiscToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
                             const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);
-                            setMiscItems(nextMisc);
-                            const nextCardItems = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
-                            setCardItems(nextCardItems); syncToParent(form, totalAmount, nextCardItems, nextMisc, albumItems);
+                            const { nextCards, nextMisc: recalculatedMisc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                            setCardItems(nextCards);
+                            setMiscItems(recalculatedMisc);
+                            syncToParent(form, totalAmount, nextCards, recalculatedMisc, albumItems);
                             setMiscToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -3813,8 +3818,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => {
                             const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);
                             setAlbumItems(nextAlbums);
-                            const nextCardItems = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
-                            setCardItems(nextCardItems); syncToParent(form, totalAmount, nextCardItems, miscItems, nextAlbums);
+                            const { nextCards, nextMisc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                            setCardItems(nextCards);
+                            setMiscItems(nextMisc);
+                            syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
                             setAlbumToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -5170,8 +5177,8 @@ export default function App() {
       const handleResize = () => {
           const isMobile = window.innerWidth < 768;
           if (isMobile) {
-              setLibraryCols(prev => (prev === 6 ? 4 : prev));
-              setCollectionCols(prev => (prev === 6 ? 4 : prev));
+              setLibraryCols(prev => (prev === 6 ? 3 : prev));
+              setCollectionCols(prev => (prev === 6 ? 3 : prev));
               setExportCols(prev => (prev === 6 ? 4 : prev));
           }
       };
@@ -5800,7 +5807,7 @@ export default function App() {
                   onClick={() => {
                       setActiveTab(tab.id);
                       setIsSelectionMode(false);
-                      setSelectedCardIds([]);
+                      setSelectedItems([]);
                       setBatchCategorizeTarget(null);
                   }}
                   className={`px-3 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
@@ -6050,13 +6057,13 @@ export default function App() {
                           key={list.id}
                           onClick={async () => {
                               const note = prompt("批量備註文字 (可留空)");
-                              const newItems = [...(list.items || []), ...selectedCardIds.map(id => ({ cardId: id, note: note || '' }))];
+                              const newItems = [...(list.items || []), ...selectedItems.map(item => ({ cardId: item.cardId, note: note || '' }))];
                               setCustomLists((customLists || []).map(l => l.id === list.id ? { ...l, items: newItems } : l));
                               await supabase.from('custom_lists').update({ items: newItems }).eq('id', list.id);
                               alert("已加入收藏冊");
                               setActiveModal(null);
                               setIsSelectionMode(false);
-                              setSelectedCardIds([]);
+                              setSelectedItems([]);
                           }}
                           className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
                       >
