@@ -4678,7 +4678,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const targetHeight = element.scrollHeight;
             const targetWidth = element.scrollWidth;
 
-            const dataUrl = await htmlToImage.toPng(element, {
+            // 1. 把設定統整成一個變數
+            const exportOptions = {
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
                 cacheBust: true, 
@@ -4689,7 +4690,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 height: targetHeight, 
                 style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
                 filter: (node) => !(node?.classList?.contains('no-export') || node?.classList?.contains('no-print'))
-            });
+            };
+
+            // 2. 🌟 🍎 專剋 Safari：連擊暖身法 (Warm-up Hack)
+            // Safari 常常在前兩次渲染 SVG 時把圖片丟失，我們強迫它連畫三次！
+            try { await htmlToImage.toPng(element, exportOptions); } catch (e) {}
+            try { await htmlToImage.toPng(element, exportOptions); } catch (e) {}
+            
+            // 3. 第三次正式截圖
+            const dataUrl = await htmlToImage.toPng(element, exportOptions);
 
             setExportedImage(dataUrl);
         } catch (error) {
