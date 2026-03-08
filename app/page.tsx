@@ -4644,39 +4644,30 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
 
-            // 🌟 🍎 專剋 Safari：隱形 Canvas 繪布偷渡法
+            // 🌟 🍎 終極殺器：透過自家的 Next.js API 代理伺服器拿圖片，完全免疫 Safari 的阻擋！
             for (let img of imgElements) {
-                // 確保只處理 http 開頭的網址，且避開已經是 base64 (data:) 的圖片
-                if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:')) {
+                if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:') && !img.src.includes('/api/proxy')) {
                     originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset });
                     try {
-                        // 1. 給 Safari 專用的破壞快取網址
-                        const safariBypassUrl = img.src + (img.src.includes('?') ? '&' : '?') + 'mac_bypass=' + Date.now();
+                        // 1. 把外部網址，包裝成呼叫我們剛剛建立的 API
+                        const proxyUrl = `/api/proxy?url=${encodeURIComponent(img.src)}`;
                         
-                        // 2. 放棄容易被 Safari 擋下的 fetch，改用原生 Image 物件 + Canvas 繪圖
-                        const base64 = await new Promise((resolve, reject) => {
-                            const tempImg = new window.Image();
-                            tempImg.crossOrigin = 'anonymous'; // 關鍵：宣告跨域
-                            tempImg.onload = () => {
-                                // 圖片載入後，在背景畫一塊一樣大的隱形畫布
-                                const canvas = document.createElement('canvas');
-                                canvas.width = tempImg.width || 200;
-                                canvas.height = tempImg.height || 300;
-                                const ctx = canvas.getContext('2d');
-                                ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
-                                // 將畫布轉成 Base64 密碼
-                                resolve(canvas.toDataURL('image/jpeg', 0.8));
-                            };
-                            tempImg.onerror = () => reject(new Error('Safari Canvas 繪圖遭拒'));
-                            tempImg.src = safariBypassUrl; // 觸發載入
+                        // 2. 透過自家 API 拿圖片，Safari 絕對不會擋
+                        const response = await fetch(proxyUrl);
+                        if (!response.ok) throw new Error('Proxy failed');
+                        
+                        const blob = await response.blob();
+                        const base64 = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
                         });
                         
                         // 3. 完美替換，拔除 srcset
                         img.src = base64; 
                         img.removeAttribute('srcset'); 
-
                     } catch (e) {
-                        console.warn("🍎 Safari 圖片轉 Base64 失敗，跳過此圖:", img.src, e);
+                        console.warn("透過 Proxy 轉換圖片失敗:", e);
                     }
                 }
             }
