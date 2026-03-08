@@ -4640,7 +4640,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
-            await new Promise(resolve => setTimeout(resolve, 800));
+            await new Promise(resolve => setTimeout(resolve, 2500));
 
             const targetHeight = element.scrollHeight;
             const targetWidth = element.scrollWidth;
@@ -4648,7 +4648,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const dataUrl = await htmlToImage.toPng(element, {
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
-                cacheBust: true,
+                // cacheBust: true, // 🌟 移除：避免 library 再次附加 timestamp 導致請求新的未載入圖片
                 skipAutoScale: true,
                 width: targetWidth,
                 height: targetHeight, 
@@ -4798,7 +4798,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     src={card.image.startsWith('http') ? `${card.image}${card.image.includes('?') ? '&' : '?'}export=true` : card.image} 
                                     alt="卡片圖片" 
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none" 
-                                    crossOrigin="anonymous" 
+                                    crossOrigin="anonymous" loading="eager"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
