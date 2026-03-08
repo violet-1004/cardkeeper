@@ -1438,7 +1438,11 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           sortOrder: 999
       }));
       
-      return [...defined, ...missing].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
+      return [...defined, ...missing].sort((a, b) => {
+          const valA = (a.sortOrder !== undefined && a.sortOrder !== null) ? Number(a.sortOrder) : 999;
+          const valB = (b.sortOrder !== undefined && b.sortOrder !== null) ? Number(b.sortOrder) : 999;
+          return valA - valB;
+      });
   }, [subunits, currentMembers, currentGroupId]);
 
   useEffect(() => {
@@ -2359,9 +2363,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     
     const [itemToDelete, setItemToDelete] = useState(null);
     
-    const touchStartX = useRef(0);
-    const touchEndX = useRef(0);
-
     const cardMap = useMemo(() => {
         const map = {};
         (cards || []).forEach(c => map[c.id] = c);
@@ -2403,17 +2404,6 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         }, 600); 
     };
     const cancelPress = () => clearTimeout(pressTimer.current);
-    const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
-    const handleTouchEnd = (e) => {
-        touchEndX.current = e.changedTouches[0].clientX;
-        if (dateFilterMode !== 'range') {
-            const diff = touchStartX.current - touchEndX.current;
-            if (Math.abs(diff) > 50) {
-                if (diff > 0) handleNext();
-                else handlePrev();
-            }
-        }
-    };
 
     const handlePrev = () => {
         if (dateFilterMode === 'month') {
@@ -2500,7 +2490,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     }, [inventory, year, month, filterType, bulkRecords, dateFilterMode, startDate, endDate]);
 
     return (
-        <div className="bg-gray-50 min-h-screen pb-20" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+        <div className="bg-gray-50 min-h-screen pb-20">
              <div className="bg-white border-b sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
                  <div className="flex justify-center items-center relative">
                      <div className="relative">
@@ -2777,7 +2767,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                     <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
                 </div>
                 <div className="flex justify-between items-center">
-                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收管理</h2>
+                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />{viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
                     {viewMode === 'bulk' && <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>}
                 </div>
             </div>
@@ -4926,13 +4916,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                       </div>
                       
                       <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-4">
-                          <div className="flex items-center gap-2 no-export no-print">
-                               <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8">
+                          <div className="flex items-center gap-2 no-export no-print w-full sm:w-auto">
+                               <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-1 sm:flex-none justify-center">
                                  <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
                                  <select 
                                     value={cols}
                                     onChange={(e) => setCols(Number(e.target.value))}
-                                    className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
+                                    className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full text-center"
                                  >
                                     {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
@@ -4940,15 +4930,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                               <button 
                                   {...sortBtnBind}
                                   onClick={() => { setIsReorderMode(!isReorderMode); setIsEditMode(false); }} 
-                                  className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} 
+                                  className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} 
                                   title="自訂排序 (長按重置)"
                               >
                                   <ArrowUpDown className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
+                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
                                   <PenTool className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setShowDetails(!showDetails)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
+                              <button onClick={() => setShowDetails(!showDetails)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
                           </div>
@@ -5143,6 +5133,41 @@ export default function App() {
     const cancelPress = () => clearTimeout(pressTimer.current);
   const [batchCategorizeTarget, setBatchCategorizeTarget] = useState(null); 
 
+  // 🌟 新增：主頁左右滑動切換分頁
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const handleTouchStart = (e) => {
+      touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+      touchEndX.current = e.changedTouches[0].clientX;
+      const diff = touchStartX.current - touchEndX.current;
+      
+      // 門檻 60px，避免誤觸
+      if (Math.abs(diff) > 60) {
+          const tabs = ['library', 'collection', 'bulk', 'inventory', 'export'];
+          const currentIndex = tabs.indexOf(activeTab);
+          
+          if (diff > 0) { // 左滑 (手指右->左) -> 下一頁
+              if (currentIndex < tabs.length - 1) {
+                  setActiveTab(tabs[currentIndex + 1]);
+                  setIsSelectionMode(false);
+                  setSelectedItems([]);
+                  setBatchCategorizeTarget(null);
+              }
+          } else { // 右滑 (手指左->右) -> 上一頁
+              if (currentIndex > 0) {
+                  setActiveTab(tabs[currentIndex - 1]);
+                  setIsSelectionMode(false);
+                  setSelectedItems([]);
+                  setBatchCategorizeTarget(null);
+              }
+          }
+      }
+  };
+
   // 🌟 從 Supabase 抓取所有資料
   useEffect(() => {
     async function fetchAllData() {
@@ -5163,9 +5188,16 @@ export default function App() {
         setGroups(fetchedGroups);
         if (fetchedGroups.length > 0 && !currentGroupId) setCurrentGroupId(fetchedGroups[0].id);
 
-        const fetchedMembers = await fetchTable('members');
+        // 🌟 改為並行讀取，確保分隊資訊與成員同時到位，避免預設選取錯誤
+        const [fetchedMembers, fetchedSubunits] = await Promise.all([
+            fetchTable('members'),
+            fetchTable('ui_subunits')
+        ]);
+
         // 🌟 確保一開始載入就排好序
         setMembers(fetchedMembers.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)));
+        setSubunits(fetchedSubunits);
+
         setSeries(await fetchTable('series'));
         setBatches(await fetchTable('batches'));
         setChannels(await fetchTable('channels'));
@@ -5175,7 +5207,6 @@ export default function App() {
         setBulkRecords(await fetchTable('bulk_records'));
         setCustomLists(await fetchTable('custom_lists'));
         setSales(await fetchTable('ui_sales'));
-        setSubunits(await fetchTable('ui_subunits')); // 🌟 讀取 subunits
         setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
     }
     fetchAllData();
@@ -5904,7 +5935,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto p-4">
+      <main className="max-w-6xl mx-auto p-4" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {renderContent()}
       </main>
 
