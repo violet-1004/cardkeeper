@@ -4629,18 +4629,42 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         setIsEditMode(false);
         setIsExporting(true);
         
-        // 🌟 1. 提早宣告變數，以便在 finally 區塊中存取
         const element = exportRef.current;
         const overlay = element.parentElement; 
         const origOverlayStyle = overlay.style.cssText;
         const origElementStyle = element.style.cssText;
         const origScrollTop = overlay.scrollTop;
 
+        // 🌟 準備存放原始圖片 URL 的陣列，截圖完要還原
+        const originalImageSrcs = [];
+        const imgElements = element.querySelectorAll('img');
+
         try {
             overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
-            await new Promise(resolve => setTimeout(resolve, 2500));
+
+            // 🌟 終極殺招：在截圖前，將所有外部圖片強制轉換為 Base64，繞過 CORS 限制！
+            for (let img of imgElements) {
+                if (img.src && img.src.startsWith('http')) {
+                    originalImageSrcs.push({ el: img, src: img.src });
+                    try {
+                        const response = await fetch(img.src);
+                        const blob = await response.blob();
+                        const base64 = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                        img.src = base64; // 把網址替換成 Base64 編碼
+                    } catch (e) {
+                        console.warn("圖片轉 Base64 失敗，跳過此圖:", e);
+                    }
+                }
+            }
+
+            // 給予更充裕的緩衝時間讓 DOM 渲染 Base64 圖片
+            await new Promise(resolve => setTimeout(resolve, 3000));
 
             const targetHeight = element.scrollHeight;
             const targetWidth = element.scrollWidth;
@@ -4648,9 +4672,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const dataUrl = await htmlToImage.toPng(element, {
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
-                cacheBust: true, // 🌟 啟用：強制 html-to-image 重新抓取圖片，避開瀏覽器快取問題
+                cacheBust: true, 
                 skipAutoScale: true,
-                // 🌟 依照指示加入 CORS 相關設定 (確保跨域圖片能正確渲染)
                 useCORS: true, 
                 allowTaint: true,
                 width: targetWidth,
@@ -4662,7 +4685,6 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             setExportedImage(dataUrl);
         } catch (error) {
             console.error('Export failed:', error);
-            // 🌟 2. 更嚴謹的錯誤訊息處理，避免顯示 undefined
             let msg = '未知錯誤';
             if (error) {
                  if (typeof error === 'string') msg = error;
@@ -4673,7 +4695,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             }
             alert(`匯出圖片失敗: ${msg}`);
         } finally {
-            // 🌟 3. 無論成功或失敗，都必須還原樣式，否則畫面會卡住
+            // 🌟 無論成功失敗，最後把卡片的圖片網址復原，以免影響後續操作
+            originalImageSrcs.forEach(item => {
+                item.el.src = item.src;
+            });
+            
             if (overlay && element) {
                 overlay.style.cssText = origOverlayStyle;
                 element.style.cssText = origElementStyle;
@@ -4801,7 +4827,6 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     src={card.image} 
                                     alt="卡片圖片" 
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                                    crossOrigin="anonymous"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
