@@ -4626,13 +4626,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         if (!exportRef.current) return;
         setIsEditMode(false);
         setIsExporting(true);
+        
+        // 🌟 1. 提早宣告變數，以便在 finally 區塊中存取
+        const element = exportRef.current;
+        const overlay = element.parentElement; 
+        const origOverlayStyle = overlay.style.cssText;
+        const origElementStyle = element.style.cssText;
+        const origScrollTop = overlay.scrollTop;
+
         try {
-            const element = exportRef.current;
-            const overlay = element.parentElement; 
-            const origOverlayStyle = overlay.style.cssText;
-            const origElementStyle = element.style.cssText;
-            const origScrollTop = overlay.scrollTop;
-            
             overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
@@ -4652,14 +4654,24 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 filter: (node) => !(node?.classList?.contains('no-export') || node?.classList?.contains('no-print'))
             });
 
-            overlay.style.cssText = origOverlayStyle;
-            element.style.cssText = origElementStyle;
-            overlay.scrollTop = origScrollTop;
             setExportedImage(dataUrl);
         } catch (error) {
             console.error('Export failed:', error);
-            alert(`匯出圖片失敗: ${error.message}`);
+            // 🌟 2. 更嚴謹的錯誤訊息處理，避免顯示 undefined
+            let msg = '未知錯誤';
+            if (error) {
+                 if (typeof error === 'string') msg = error;
+                 else if (error.message) msg = error.message;
+                 else msg = String(error);
+            }
+            alert(`匯出圖片失敗: ${msg}`);
         } finally {
+            // 🌟 3. 無論成功或失敗，都必須還原樣式，否則畫面會卡住
+            if (overlay && element) {
+                overlay.style.cssText = origOverlayStyle;
+                element.style.cssText = origElementStyle;
+                overlay.scrollTop = origScrollTop;
+            }
             setIsExporting(false);
         }
     };
@@ -4758,6 +4770,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
+                // 🌟 計算販售數量
+                const saleRecord = activeView === 'selling' ? salesMap[card.id] : null;
+                const sellQty = saleRecord ? (Number(saleRecord.quantity) || 0) : 0;
+
                 return (
                     <div 
                         key={idx} 
@@ -4780,7 +4796,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     <ImageIcon className="w-8 h-8" />
                                 </div>
                             )}
-                            <div className="absolute top-1 right-1 left-1 flex justify-end z-30 pointer-events-none">
+                            <div className="absolute top-1 right-1 left-1 flex flex-col items-end gap-1 z-30 pointer-events-none">
+                                {activeView === 'selling' && sellQty > 1 && (
+                                    <div className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                                        x{sellQty}
+                                    </div>
+                                )}
                                 {isEditMode ? (
                                     <CardMarkInput initialValue={cardMarks[card.id]} onSave={(newVal) => setCardMarks({...cardMarks, [card.id]: newVal})} />
                                 ) : (
