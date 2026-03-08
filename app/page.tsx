@@ -4794,7 +4794,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                         <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`}>
                             {card.image ? (
                                 /* 🌟 修正：匯出時改用原生 img 標籤並開啟 CORS，解決 html-to-image 抓不到圖片變成灰底的問題 */
-                                <img src={card.image} alt="卡片圖片" className="absolute inset-0 w-full h-full object-cover pointer-events-none" crossOrigin="anonymous" />
+                                <img 
+                                    src={card.image.startsWith('http') ? `${card.image}${card.image.includes('?') ? '&' : '?'}export=true` : card.image} 
+                                    alt="卡片圖片" 
+                                    className="absolute inset-0 w-full h-full object-cover pointer-events-none" 
+                                    crossOrigin="anonymous" 
+                                />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                     <ImageIcon className="w-8 h-8" />
