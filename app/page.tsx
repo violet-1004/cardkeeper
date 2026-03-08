@@ -2773,11 +2773,11 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
         <div className="space-y-6 pb-24">
             <div className="px-2 space-y-2">
                 <div className="bg-gray-100 p-1 rounded-lg flex items-center w-fit">
-                    <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>包裹</button>
+                    <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>盤收</button>
                     <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
                 </div>
                 <div className="flex justify-between items-center">
-                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收包裹管理</h2>
+                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />盤收管理</h2>
                     {viewMode === 'bulk' && <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>}
                 </div>
             </div>
@@ -3481,7 +3481,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-24">
+            <div className="flex-1 overflow-y-auto no-scrollbar p-2 sm:p-4 space-y-4 pb-24">
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
                     <div className="w-28 h-28 flex-shrink-0">
                         <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
@@ -3574,7 +3574,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         </div>
                                     </div>
                                     
-                                    <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
+                                    <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-auto justify-end">
                                         <div className="flex flex-col items-end">
                                             <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
                                             <div className="flex items-baseline">
@@ -4308,7 +4308,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                                         {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
+                                <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-auto justify-end">
                                     <div className="flex flex-col items-end">
                                         <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
                                         <div className="flex items-baseline">
@@ -5146,13 +5146,13 @@ export default function App() {
   // 🌟 從 Supabase 抓取所有資料
   useEffect(() => {
     async function fetchAllData() {
-        const fetchTable = async (t) => { 
+        const fetchTable = async (t, silent = false) => { 
         const { data, error } = await supabase.from(t).select('*').limit(10000); 
     
         // 🌟 加上錯誤警告，抓出連線或權限問題
         if (error) {
          console.error(`🚨 [${t}] 讀取失敗:`, error.message);
-         alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+         if (!silent) alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
         } else {
              console.log(`✅ [${t}] 成功讀取 ${data?.length || 0} 筆資料`);
         }
@@ -5176,7 +5176,7 @@ export default function App() {
         setCustomLists(await fetchTable('custom_lists'));
         setSales(await fetchTable('ui_sales'));
         setSubunits(await fetchTable('ui_subunits')); // 🌟 讀取 subunits
-        setAppSettings(await fetchTable('ui_settings')); // 🌟 讀取全域設定 (排序紀錄)
+        setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
     }
     fetchAllData();
   }, []);
@@ -5819,7 +5819,7 @@ export default function App() {
               {[
                 { id: 'library', icon: Layers, label: '圖鑑' },
                 { id: 'collection', icon:  CheckCircle, label: '收藏' },
-                { id: 'bulk', icon: Package, label: '盤收' },
+                { id: 'bulk', icon: Package, label: '管理' },
                 { id: 'inventory', icon: List, label: '紀錄' },
                 { id: 'export', icon: Share2, label: '輸出' },
               ].map(tab => (

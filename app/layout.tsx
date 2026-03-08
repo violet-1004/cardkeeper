@@ -13,6 +13,15 @@ export default function RootLayout({
   return (
     <html lang="zh-TW">
       <body className="antialiased no-scrollbar">
+        <style>{`
+          ::-webkit-scrollbar {
+            display: none;
+          }
+          * {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+        `}</style>
         {children}
       </body>
     </html>
