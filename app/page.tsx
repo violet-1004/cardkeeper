@@ -3231,7 +3231,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         return (record?.items || []).filter(i => i.isAlbum).map(i => ({
             ...i,
             uid: i.uid || i.id || `album_${Date.now()}_${Math.random()}`,
-            sellDate: i.sellDate || ''
+            sellDate: i.sellDate || '',
+            isManual: i.isManual !== undefined ? i.isManual : true // 🌟 預設為手動(保留舊資料價格)，清空價格後會變自動
         }));
     });
 
@@ -3278,7 +3279,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             sellPrice: Number(a.sellPrice) || 0,
             sellDate: a.sellDate,
             isAlbum: true,
-            isManual: true // 專輯視為手動定價
+            isManual: a.isManual // 🌟 改為使用實際狀態
         }));
 
         onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
@@ -3290,18 +3291,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         if (totalVal === '' || totalVal === undefined) {
             return {
                 nextCards: currentCardItems.map(c => c.isManual ? c : { ...c, buyPrice: '' }),
-                nextMisc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' })
+                nextMisc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' }),
+                nextAlbums: currentAlbumItems.map(a => a.isManual ? a : { ...a, buyPrice: '' })
             };
         }
         const total = Number(totalVal) || 0;
         let manualSum = 0; 
         let autoQty = 0;
-        
-        // 🌟 專輯成本：數量 x 單價
-        let albumSum = 0; 
-        currentAlbumItems.forEach(a => { 
-            albumSum += (Number(a.buyPrice) || 0) * (Number(a.albumQuantity) || 0); 
-        });
         
         // Cards
         currentCardItems.forEach(c => {
@@ -3315,7 +3311,17 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
              else autoQty += 1;
         });
         
-        const remaining = Math.max(0, total - manualSum - albumSum);
+        // Albums
+        currentAlbumItems.forEach(a => {
+             const qty = Number(a.albumQuantity) || 0;
+             if (a.isManual) {
+                 manualSum += (Number(a.buyPrice) || 0) * qty;
+             } else {
+                 autoQty += qty;
+             }
+        });
+        
+        const remaining = Math.max(0, total - manualSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : 0;
         
         const nextCards = currentCardItems.map(c => {
@@ -3549,7 +3555,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
                 <div>
                     <div className="flex justify-between items-end mb-3 px-1">
-                        <div className="font-bold text-gray-800 text-sm">盤收內容清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
+                        <div className="font-bold text-gray-800 text-sm">小卡記錄 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
                         <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
                     </div>
                     
@@ -3646,9 +3652,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
-                                <Disc className="w-4 h-4 text-purple-500"/>
-                                專輯內容
-                                <span className="text-gray-400 text-[10px] font-normal ml-1">(計入總金額扣除)</span>
+                                <Disc className="w-4 h-4 text-purple-500"/>專輯記錄
                             </div>
                             <button onClick={handleAddAlbum} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增專輯
@@ -3675,7 +3679,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                 {Number(item.sellPrice) > 0 && (
                                                     <div 
                                                         className="flex items-center gap-1 mt-1 bg-green-50 px-2 py-1 rounded-lg w-fit active:scale-95 transition-transform"
-                                                        onClick={(e) => e.stopPropagation()}
+                                                        onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
                                                     >
                                                        <Calendar className="w-3.5 h-3.5 text-green-600" />
                                                        <input 
@@ -3718,14 +3722,16 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end">
-                                                <label className="text-[9px] font-bold uppercase mb-0.5 text-red-400">購入</label>
+                                                <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
+                                                    {item.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                </label>
                                                 <div className="flex items-baseline">
-                                                    <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                    <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
                                                     <input 
                                                         type="number" placeholder="0" step="50" min="0"
                                                         value={item.buyPrice} 
                                                         onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
-                                                        className="w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent text-red-600 placeholder-red-200 focus:border-red-400" 
+                                                        className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
                                                     />
                                                 </div>
                                             </div>
@@ -3741,9 +3747,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
-                                <Tag className="w-4 h-4 text-orange-500"/>
-                                雜物記錄 
-                                <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
+                                <Tag className="w-4 h-4 text-orange-500"/>雜物記錄 
                             </div>
                             <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增雜物
@@ -3809,10 +3813,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
                             const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);
-                            const { nextCards, nextMisc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                            const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
                             setCardItems(nextCards); 
                             setMiscItems(nextMisc);
-                            syncToParent(form, totalAmount, nextCards, nextMisc, albumItems);
+                            setAlbumItems(nextAlbums);
+                            syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
                             setCardToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -3827,10 +3832,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setMiscToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
                             const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);
-                            const { nextCards, nextMisc: recalculatedMisc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                            const { nextCards, nextMisc: recalculatedMisc, nextAlbums } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
                             setCardItems(nextCards);
                             setMiscItems(recalculatedMisc);
-                            syncToParent(form, totalAmount, nextCards, recalculatedMisc, albumItems);
+                            setAlbumItems(nextAlbums);
+                            syncToParent(form, totalAmount, nextCards, recalculatedMisc, nextAlbums);
                             setMiscToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -3845,11 +3851,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <button onClick={() => setAlbumToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
                             const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);
-                            setAlbumItems(nextAlbums);
-                            const { nextCards, nextMisc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                            const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
                             setCardItems(nextCards);
                             setMiscItems(nextMisc);
-                            syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
+                            setAlbumItems(recalculatedAlbums);
+                            syncToParent(form, totalAmount, nextCards, nextMisc, recalculatedAlbums);
                             setAlbumToRemove(null);
                         }} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確定移除</button>
                     </div>
@@ -4330,7 +4336,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                     </div>
                     <div className="col-span-2 bg-red-50/50 p-4 rounded-xl flex flex-col justify-center gap-1 border border-red-100/50 relative">
                         <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-bold text-red-600 uppercase tracking-wider">批量總金額 (將自動均分單價)</label>
+                            <label className="text-[10px] font-bold text-red-600 uppercase tracking-wider">總金額</label>
                             {cardItems.filter(c=>c.isManual).length > 0 && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold shadow-sm">已有 {cardItems.filter(c=>c.isManual).length} 張自訂單價</span>}
                         </div>
                         <div className="flex items-baseline mt-1">
@@ -4431,6 +4437,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [listTitleInput, setListTitleInput] = useState('');
     const [listToDelete, setListToDelete] = useState(null);
     const clickTimer = useRef(null);
+
+    // 🌟 新增：匯出範圍與隱藏卡片狀態
+    const [exportStartRow, setExportStartRow] = useState(1);
+    const [exportEndRow, setExportEndRow] = useState(0); // 0 代表全部
+    const [isHideMode, setIsHideMode] = useState(false);
+    const [hiddenCardIds, setHiddenCardIds] = useState(new Set());
     
     // 🌟 眼睛長按邏輯 (隱藏/顯示價格)
     const pricePressTimer = useRef(null);
@@ -4469,7 +4481,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [isEditMode, setIsEditMode] = useState(false);
     const [cardMarks, setCardMarks] = useState({});
 
-    // 🌟 自訂排序相關狀態
+    // 🌟 自訂排序 & 隱藏模式相關狀態
     const [customOrder, setCustomOrder] = useState([]);
     const [isReorderMode, setIsReorderMode] = useState(false);
     const [reorderSelectedId, setReorderSelectedId] = useState(null);
@@ -4577,6 +4589,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         setCardMarks({}); 
         setIsReorderMode(false);
         setReorderSelectedId(null);
+        setIsHideMode(false);
+        setHiddenCardIds(new Set());
     }, [activeView]);
 
     // 從資料庫清單中讀取跨裝置的自訂排序
@@ -4786,7 +4800,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 width: targetWidth,
                 height: targetHeight, 
                 style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
-                filter: (node) => !(node?.classList?.contains('no-export') || node?.classList?.contains('no-print'))
+                filter: (node) => {
+                    const isNoExport = node?.classList?.contains('no-export') || node?.classList?.contains('no-print');
+                    // 🌟 新增：過濾掉被隱藏的卡片
+                    const isHiddenCard = node?.classList?.contains('card-is-hidden-for-export');
+                    return !isNoExport && !isHiddenCard;
+                }
             };
 
             // 2. 🌟 🍎 專剋 Safari：連擊暖身法 (Warm-up Hack)
@@ -4825,6 +4844,39 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             }
             setIsExporting(false);
         }
+    };
+
+    // 🌟 處理自訂排序按鈕的複雜點擊與長按邏輯
+    const sortPressTimer = useRef(null);
+    const resetSortTimer = useRef(null);
+    const hasTriggeredAction = useRef(false);
+
+    const handleSortButtonPressStart = () => {
+        hasTriggeredAction.current = false;
+        // Timer for hide mode (800ms)
+        sortPressTimer.current = setTimeout(() => {
+            setIsHideMode(prev => !prev);
+            setIsReorderMode(false); // 隱藏模式與排序模式互斥
+            hasTriggeredAction.current = true;
+        }, 800);
+
+        // Timer for reset (5 seconds)
+        resetSortTimer.current = setTimeout(() => {
+            resetCustomSort();
+            hasTriggeredAction.current = true;
+        }, 5000);
+    };
+
+    const handleSortButtonPressEnd = (e) => {
+        clearTimeout(sortPressTimer.current);
+        clearTimeout(resetSortTimer.current);
+        if (hasTriggeredAction.current) {
+            e.preventDefault();
+        }
+    };
+
+    const handleSortButtonClick = () => {
+        if (!hasTriggeredAction.current) { setIsReorderMode(!isReorderMode); setIsEditMode(false); setIsHideMode(false); }
     };
 
     // 🌟 處理自訂排序邏輯
@@ -4891,8 +4943,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         }
     };
 
-    // 🌟 使用長按 Hook
-    const sortBtnBind = useLongPress(resetCustomSort, 800);
+    // 🌟 處理隱藏模式下的卡片點擊
+    const handleCardClickInHideMode = (cardId) => {
+        setHiddenCardIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(cardId)) newSet.delete(cardId);
+            else newSet.add(cardId);
+            return newSet;
+        });
+    };
     
     // ==========================================
     // 6. 內部渲染元件
@@ -4959,13 +5018,20 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     <div 
                         key={idx} 
                         onClick={() => {
-                            if (isReorderMode) handleReorderClick(card.id);
-                            else if (!isEditMode) setViewingCard(card);
+                            if (isHideMode) {
+                                handleCardClickInHideMode(card.id);
+                            } else if (isReorderMode) {
+                                handleReorderClick(card.id);
+                            } else if (!isEditMode) {
+                                setViewingCard(card);
+                            }
                         }} 
                         className={`flex flex-col gap-1 relative group cursor-pointer transition-all ${
                             isReorderMode 
                                 ? (reorderSelectedId === card.id ? 'scale-95 ring-4 ring-indigo-500 rounded-lg z-10' : 'hover:scale-[0.98] opacity-90') 
                                 : 'active:scale-95'
+                        } ${
+                            isHideMode && hiddenCardIds.has(card.id) ? 'card-is-hidden-for-export' : ''
                         }`}
                     >
                         <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`} style={{ containerType: 'inline-size' }}>
@@ -4998,6 +5064,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             {card.note && (activeView !== 'selling' || showPrices) && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
                                     <div className={`inline-block text-white font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full whitespace-nowrap ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: '12cqw' }}>{card.note}</div>
+                                </div>
+                            )}
+                            {isHideMode && hiddenCardIds.has(card.id) && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20 rounded-lg backdrop-blur-sm">
+                                    <EyeOff className="w-1/3 h-1/3 text-white/80" />
                                 </div>
                             )}
                         </div>
@@ -5050,12 +5121,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                  >
                                     {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
-                              </div>
+                              </div> 
                               <button 
-                                  {...sortBtnBind}
-                                  onClick={() => { setIsReorderMode(!isReorderMode); setIsEditMode(false); }} 
+                                  onMouseDown={handleSortButtonPressStart} onMouseUp={handleSortButtonPressEnd} onMouseLeave={handleSortButtonPressEnd}
+                                  onTouchStart={handleSortButtonPressStart} onTouchEnd={handleSortButtonPressEnd}
+                                  onClick={handleSortButtonClick}
                                   className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} 
-                                  title="自訂排序 (長按重置)"
+                                  title="排序 | 長按切換隱藏模式 | 長按5秒重置排序"
                               >
                                   <ArrowUpDown className="w-4 h-4" />
                               </button>
@@ -5079,16 +5151,30 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                       {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />}
                       {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />}
                       {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />}
-                      {availableColors.length > 0 && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
+                      {availableColors.length > 0 && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />} 
+                      <div className="flex items-center gap-3 pt-2 border-t mt-2">
+                          <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">匯出範圍</span>
+                          <div className="flex items-center gap-2">
+                              <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-14 text-center bg-white border rounded-md text-xs font-bold p-1" />
+                              <span className="text-xs font-bold text-gray-400">-</span>
+                              <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-14 text-center bg-white border rounded-md text-xs font-bold p-1" />
+                              <span className="text-xs text-gray-500">排 (共 {maxRows} 排)</span>
+                          </div>
+                      </div>
                   </div>
 
+                  {isHideMode && (
+                      <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-bold rounded-lg text-center border border-red-100 no-export no-print">
+                          隱藏模式：點擊卡片可將其從匯出圖片中隱藏 (已隱藏 {hiddenCardIds.size} 張)
+                      </div>
+                  )}
                   {isReorderMode && (
                       <div className="mb-4 p-3 bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg text-center border border-indigo-100 animate-pulse">
                           {reorderSelectedId ? "請點擊另一張卡片以插入其前方" : "請點擊一張卡片開始移動"}
                       </div>
                   )}
 
-                  <CardGrid displayCards={displayCards} />
+                  <CardGrid displayCards={cardsToRender} />
                   {displayCards.length === 0 && <div className="text-center py-20 text-gray-400">沒有符合條件的卡片</div>}
               </div>
 
