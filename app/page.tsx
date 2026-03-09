@@ -1822,7 +1822,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                           onChange={(e) => setCols(Number(e.target.value))}
                           className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
                        >
-                                    {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                                    {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                        </select>
                     </div>
                      <button 
@@ -2279,7 +2279,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                           onChange={(e) => setCols(Number(e.target.value))}
                           className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full"
                        >
-                          {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                          {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                        </select>
                     </div>
 
@@ -3240,6 +3240,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [cardToRemove, setCardToRemove] = useState(null);
     const [miscToRemove, setMiscToRemove] = useState(null);
     const [albumToRemove, setAlbumToRemove] = useState(null); // 🌟 新增刪除專輯確認
+    const [albumToSelect, setAlbumToSelect] = useState(null);
     const swipeHandlers = useSwipeToClose(onClose);
 
     const totalSoldPrice = useMemo(() => {
@@ -3658,78 +3659,79 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             {albumItems.map((item) => {
                                 const album = (series || []).find(s => s.id === item.albumId);
                                 return (
-                                    <div key={item.uid} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3 relative">
-                                        <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
-                                            {album?.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
-                                        </div>
-                                        
-                                        <div className="flex-1 min-w-0 space-y-2">
-                                            <div className="flex gap-2">
-                                                <div className="relative flex-1">
-                                                    <select 
-                                                        value={item.albumId || ''} 
-                                                        onChange={e => handleAlbumChange(item.uid, 'albumId', e.target.value)}
-                                                        className="w-full border p-1.5 rounded-lg bg-gray-50 text-xs font-bold outline-none appearance-none"
-                                                    >
-                                                        <option value="">選擇專輯...</option>
-                                                        {albumOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                                    </select>
-                                                    <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    <div key={item.uid} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-colors relative">
+                                        <div 
+                                            className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto cursor-pointer select-none"
+                                            onClick={() => setAlbumToSelect(item.uid)}
+                                        >
+                                            <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border relative group">
+                                                {album?.image ? <Image src={album.image} alt={album.name} fill className="object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
+                                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <PenTool className="w-5 h-5 text-white" />
                                                 </div>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => handleAlbumChange(item.uid, 'albumStatus', item.albumStatus === '未拆' ? '空專' : '未拆')}
-                                                    className={`px-2 py-1.5 rounded-lg border text-xs font-bold whitespace-nowrap ${item.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
-                                                >
-                                                    {item.albumStatus}
-                                                </button>
-                                                <div className="flex items-center border rounded-lg bg-white overflow-hidden w-16 flex-shrink-0">
+                                            </div>
+                                            <div className="flex-1 min-w-0 flex flex-col justify-center items-start">
+                                                <p className="text-sm font-bold text-gray-800 truncate">{album?.name || '選擇專輯...'}</p>
+                                                {Number(item.sellPrice) > 0 && (
+                                                    <div 
+                                                        className="flex items-center gap-1 mt-1 bg-green-50 px-2 py-1 rounded-lg w-fit active:scale-95 transition-transform"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                       <Calendar className="w-3.5 h-3.5 text-green-600" />
+                                                       <input 
+                                                           type="date" 
+                                                           value={item.sellDate || ''} 
+                                                           onChange={e => handleAlbumChange(item.uid, 'sellDate', e.target.value)} 
+                                                           className="bg-transparent text-xs font-bold text-green-600 outline-none w-24 p-0 cursor-pointer" 
+                                                       />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleAlbumChange(item.uid, 'albumStatus', item.albumStatus === '未拆' ? '空專' : '未拆')}
+                                                className={`px-2 py-1.5 rounded-lg border text-xs font-bold whitespace-nowrap ${item.albumStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                                            >
+                                                {item.albumStatus}
+                                            </button>
+                                            <div className="flex items-center border rounded-lg bg-white overflow-hidden w-16 flex-shrink-0">
+                                                <input 
+                                                    type="number" 
+                                                    value={item.albumQuantity} 
+                                                    onChange={e => handleAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
+                                                    className="w-full text-center text-xs font-bold outline-none appearance-none h-full py-1.5" 
+                                                    placeholder="數量"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
+                                                <div className="flex items-baseline">
+                                                    <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
                                                     <input 
-                                                        type="number" 
-                                                        value={item.albumQuantity} 
-                                                        onChange={e => handleAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
-                                                        className="w-full text-center text-xs font-bold outline-none appearance-none h-full py-1.5" 
-                                                        placeholder="數量"
+                                                        type="number" placeholder="0" step="50" min="0"
+                                                        value={item.sellPrice} 
+                                                        onChange={e => handleAlbumChange(item.uid, 'sellPrice', e.target.value)} 
+                                                        className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" 
                                                     />
                                                 </div>
-                                                {/* 🌟 售出按鈕 (在數量右側) */}
-                                                <button 
-                                                    onClick={() => handleQuickSellAlbum(item.uid)}
-                                                    className="bg-black text-white px-3 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors whitespace-nowrap"
-                                                >
-                                                    售出
-                                                </button>
                                             </div>
-                                            
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2">
-                                                    {/* 🌟 顯示售出紀錄 */}
-                                                    {(item.soldCount > 0) && (
-                                                        <div className="text-[10px] text-gray-400 flex items-center gap-1">
-                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">已售 {item.soldCount}</span>
-                                                            {item.latestSellDate && <span>(最後: {item.latestSellDate})</span>}
-                                                        </div>
-                                                    )}
+                                            <div className="flex flex-col items-end">
+                                                <label className="text-[9px] font-bold uppercase mb-0.5 text-red-400">購入</label>
+                                                <div className="flex items-baseline">
+                                                    <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
+                                                    <input 
+                                                        type="number" placeholder="0" step="50" min="0"
+                                                        value={item.buyPrice} 
+                                                        onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
+                                                        className="w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent text-red-600 placeholder-red-200 focus:border-red-400" 
+                                                    />
                                                 </div>
-                                                
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex flex-col items-end">
-                                                        <label className="text-[9px] text-red-400 font-bold uppercase">成本</label>
-                                                        <div className="flex items-baseline">
-                                                            <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
-                                                            <input 
-                                                                type="number" placeholder="0" step="50" min="0"
-                                                                value={item.buyPrice} 
-                                                                onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
-                                                                className="w-12 text-left border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent text-red-600 placeholder-red-200" 
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => setAlbumToRemove(item)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-4 h-4" /></button>
-                                                </div>
+                                            </div>
+                                            <button onClick={() => setAlbumToRemove(item)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-4 h-4" /></button>
                                             </div>
                                         </div>
-                                    </div>
                                 )
                             })}
                             {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未包含專輯。</div>}
@@ -3853,6 +3855,28 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     </div>
                 }>
                     <div className="p-6 text-center text-gray-600 text-sm">確定要移除這個專輯項目嗎？</div>
+                </Modal>
+            )}
+
+            {albumToSelect && (
+                <Modal title="選擇專輯" onClose={() => setAlbumToSelect(null)} className="max-w-xl">
+                    <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                        {albumOptions.map(album => (
+                            <div 
+                                key={album.id} 
+                                onClick={() => {
+                                    handleAlbumChange(albumToSelect, 'albumId', album.id);
+                                    setAlbumToSelect(null);
+                                }}
+                                className="cursor-pointer group flex flex-col items-center gap-1"
+                            >
+                                <div className="w-full aspect-square rounded-lg bg-gray-100 overflow-hidden border group-hover:border-indigo-500 transition-all relative">
+                                    {album.image ? <Image src={album.image} alt={album.name} fill sizes="150px" className="object-cover" unoptimized={true} /> : <Disc className="w-8 h-8 text-gray-300 m-auto" />}
+                                </div>
+                                <p className="text-xs font-bold text-center mt-1 group-hover:text-indigo-600 line-clamp-2">{album.name}</p>
+                            </div>
+                        ))}
+                    </div>
                 </Modal>
             )}
 
@@ -4393,7 +4417,7 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting }) {
+function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices }) {
     // ==========================================
     // 1. 狀態宣告 (確保順序與唯一性)
     // ==========================================
@@ -4407,6 +4431,31 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [listTitleInput, setListTitleInput] = useState('');
     const [listToDelete, setListToDelete] = useState(null);
     const clickTimer = useRef(null);
+    
+    // 🌟 眼睛長按邏輯 (隱藏/顯示價格)
+    const pricePressTimer = useRef(null);
+    const hasPriceLongPressed = useRef(false);
+
+    const startPricePress = () => {
+        hasPriceLongPressed.current = false;
+        pricePressTimer.current = setTimeout(() => {
+            hasPriceLongPressed.current = true;
+            if (activeView === 'selling') {
+                setShowPrices(prev => !prev);
+            }
+        }, 600);
+    };
+
+    const cancelPricePress = () => clearTimeout(pricePressTimer.current);
+    
+    const handleEyeClick = (e) => {
+        if (hasPriceLongPressed.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        setShowDetails(!showDetails);
+    };
 
     // 🌟 篩選過濾器狀態 (改為複選陣列)
     const [filterSubunits, setFilterSubunits] = useState([]);
@@ -4946,7 +4995,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     )
                                 )}
                             </div>
-                            {card.note && (
+                            {card.note && (activeView !== 'selling' || showPrices) && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
                                     <div className={`inline-block text-white font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full whitespace-nowrap ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: '12cqw' }}>{card.note}</div>
                                 </div>
@@ -4999,7 +5048,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     onChange={(e) => setCols(Number(e.target.value))}
                                     className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full text-center"
                                  >
-                                    {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                                    {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
                               </div>
                               <button 
@@ -5013,7 +5062,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                               <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
                                   <PenTool className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setShowDetails(!showDetails)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
+                              <button 
+                                  onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick}
+                                  className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
                           </div>
@@ -5171,6 +5222,7 @@ export default function App() {
   const [collectionCols, setCollectionCols] = useState(6);
   const [exportCols, setExportCols] = useState(8);
   const [exportShowDetails, setExportShowDetails] = useState(true);
+  const [exportShowPrices, setExportShowPrices] = useState(true); // 🌟 新增：控制販售價格顯示
 
   const [viewingCard, setViewingCard] = useState(null);
   const [isExportMode, setIsExportMode] = useState(false);
@@ -5911,6 +5963,8 @@ export default function App() {
           subunits={subunits}                   // 🌟 傳入 subunits
           appSettings={appSettings}             // 🌟 傳入設定資料
           onUpdateSetting={handleUpdateAppSetting} // 🌟 傳入更新函式
+          showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
+          setShowPrices={setExportShowPrices}
         />;
       default: return null;
     }
