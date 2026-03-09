@@ -210,7 +210,12 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
     </div>
 
     {currentCropImage && (
-        <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col animate-fade-in" style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+        <div 
+            className="fixed inset-0 z-[9999] bg-black/95 flex flex-col animate-fade-in" 
+            style={{ touchAction: 'none' }} 
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}
+        >
             <div className="pt-12 pb-4 px-4 flex justify-center items-center bg-black text-white z-10">
                 <div className="font-bold text-sm tracking-wider text-gray-300">
                     {pendingCrops.length > 1 ? `裁剪 (還剩 ${pendingCrops.length - 1} 張)` : '移動圖片並縮放'}
@@ -294,6 +299,27 @@ const useLongPress = (callback = () => {}, ms = 600) => {
   };
 };
 
+// 🌟 新增：右滑返回上一頁的 Hook
+const useSwipeToClose = (onClose) => {
+    const touchStartX = useRef(0);
+    const touchStartY = useRef(0);
+    
+    const onTouchStart = (e) => {
+        touchStartX.current = e.targetTouches[0].clientX;
+        touchStartY.current = e.targetTouches[0].clientY;
+    };
+
+    const onTouchEnd = (e) => {
+        const diffX = touchStartX.current - e.changedTouches[0].clientX;
+        const diffY = touchStartY.current - e.changedTouches[0].clientY;
+        if (Math.abs(diffY) > Math.abs(diffX)) return; // 垂直滑動忽略
+        if (e.target.closest('input[type="range"]')) return; // 滑動條忽略
+        if (diffX < -100) onClose(); // 右滑 (手指往右) -> 返回/關閉
+    };
+
+    return { onTouchStart, onTouchEnd };
+};
+
 function getModalTitle(type) {
     switch(type) {
         case 'group': return '團體';
@@ -314,8 +340,10 @@ const getOwnedQuantity = (invList, cardId) => {
 };
 
 // --- 3. 基礎 UI 組件 ---
-const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false }) => (
-  <div className={`fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose}>
+const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false }) => {
+  const swipeHandlers = useSwipeToClose(onClose);
+  return (
+  <div className={`fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
     <div 
       className={`bg-white w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-xl ${className}` : `rounded-xl max-h-[90vh] ${className}`}`} 
       onClick={e => e.stopPropagation()}
@@ -339,7 +367,8 @@ const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullS
       )}
     </div>
   </div>
-);
+  );
+};
 
 const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allowCustom = false, placeholder = "自訂...", multiple = false, onOptionEdit, onOptionDelete }) => {
   const [customValue, setCustomValue] = useState('');
@@ -912,6 +941,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     const [activeModal, setActiveModal] = useState(null); 
     const [tempInvData, setTempInvData] = useState(null);
     const saleFocusRef = useRef(null);
+    const swipeHandlers = useSwipeToClose(onClose);
 
     const SALE_COLORS = [
         { id: 'black', class: 'bg-black/70', display: 'bg-gray-800' },
@@ -1153,7 +1183,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     }, [activeModal]);
 
     return (
-        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in">
+        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in" {...swipeHandlers}>
             <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">卡片詳情</div>
@@ -3208,6 +3238,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [cardToRemove, setCardToRemove] = useState(null);
     const [miscToRemove, setMiscToRemove] = useState(null);
     const [albumToRemove, setAlbumToRemove] = useState(null); // 🌟 新增刪除專輯確認
+    const swipeHandlers = useSwipeToClose(onClose);
 
     const totalSoldPrice = useMemo(() => {
         const cardSellSum = cardItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
@@ -3462,7 +3493,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
     return (
-        <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up">
+        <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up" {...swipeHandlers}>
             <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0 shadow-sm">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
@@ -3537,7 +3568,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         onMouseDown={() => startPress(item.uid, displayTitle)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                         onTouchStart={() => startPress(item.uid, displayTitle)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
                                         onContextMenu={(e) => { e.preventDefault(); cancelPress(); setCardToRemove({ uid: item.uid, title: displayTitle }); }}
-                                        onClick={(e) => { if (hasCardLongPressed.current) { e.preventDefault(); e.stopPropagation(); } }}
+                                        onClick={(e) => { 
+                                            if (hasCardLongPressed.current) { 
+                                                e.preventDefault(); 
+                                                e.stopPropagation(); 
+                                            } else {
+                                                if (card && onViewCard) onViewCard(card);
+                                            }
+                                        }}
                                     >
                                         <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
                                             {card.image ? (
@@ -3551,13 +3589,16 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                             {cardBatch?.name && <div className="text-[10px] text-gray-500 truncate">{cardBatch.name}</div>}
                                             {/* 🌟 售出日期移到名稱下方 */}
                                             {Number(item.sellPrice) > 0 && (
-                                                <div className="flex items-center gap-1 mt-1">
-                                                   <Calendar className="w-3 h-3 text-green-500" />
+                                                <div 
+                                                    className="flex items-center gap-1 mt-1 bg-green-50 px-2 py-1 rounded-lg w-fit active:scale-95 transition-transform"
+                                                    onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+                                                >
+                                                   <Calendar className="w-3.5 h-3.5 text-green-600" />
                                                    <input 
                                                        type="date" 
                                                        value={item.sellDate || ''} 
                                                        onChange={e => handleCardChange(item.uid, 'sellDate', e.target.value)} 
-                                                       className="bg-transparent text-[10px] font-bold text-green-600 outline-none w-[65px] p-0" 
+                                                       className="bg-transparent text-xs font-bold text-green-600 outline-none w-24 p-0 cursor-pointer" 
                                                    />
                                                 </div>
                                             )}
@@ -3720,9 +3761,9 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         <div className="flex-1 min-w-0 flex flex-col justify-center items-start">
                                             <input type="text" placeholder={`雜物名稱 ${idx + 1} (例: 專卡/海報)`} value={misc.name} onChange={(e) => handleMiscChange(misc.id, 'name', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="w-full text-sm font-bold text-gray-800 bg-transparent border-b border-transparent focus:border-orange-400 outline-none pb-0.5 placeholder-gray-300 mb-1 transition-colors" />
                                             {Number(misc.sellPrice) > 0 && (
-                                                <div className="flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded w-fit">
-                                                   <Calendar className="w-3 h-3 text-green-500" />
-                                                   <input type="date" value={misc.sellDate} onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="bg-transparent text-[10px] font-bold text-green-600 outline-none cursor-pointer" />
+                                                <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-lg w-fit active:scale-95 transition-transform">
+                                                   <Calendar className="w-3.5 h-3.5 text-green-600" />
+                                                   <input type="date" value={misc.sellDate} onChange={(e) => handleMiscChange(misc.id, 'sellDate', e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="bg-transparent text-xs font-bold text-green-600 outline-none w-24 p-0 cursor-pointer" />
                                                 </div>
                                             )}
                                         </div>
@@ -4382,6 +4423,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [isReorderMode, setIsReorderMode] = useState(false);
     const [reorderSelectedId, setReorderSelectedId] = useState(null);
 
+    const swipeHandlers = useSwipeToClose(() => setActiveView(null));
+
     // ==========================================
     // 2. 效能升級字典與資料池
     // ==========================================
@@ -4473,6 +4516,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         return [...colors];
     }, [activeView, subunitFilteredCards, salesMap]);
 
+    // 處理視圖切換時的 UI 狀態重置
     useEffect(() => {
         setFilterSubunits([]);
         setFilterMembers([]);
@@ -4480,33 +4524,27 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         setFilterColors([]);
         setIsEditMode(false);
         setCardMarks({}); 
-        
-        // 🌟 切換視圖時讀取自訂排序
-        if (activeView) {
-            const key = `custom_sort_${activeView.id || activeView}`;
-            // 🌟 優先從資料庫設定讀取
-            const remoteSetting = (appSettings || []).find(s => s.key === key);
-            
-            if (remoteSetting && Array.isArray(remoteSetting.value)) {
-                setCustomOrder(remoteSetting.value);
-            } else {
-                // 🌟 如果資料庫沒資料，嘗試從 localStorage 遷移舊資料
-                try {
-                    const local = JSON.parse(localStorage.getItem(key));
-                    if (Array.isArray(local) && local.length > 0) {
-                        setCustomOrder(local);
-                        onUpdateSetting(key, local); // 自動同步到資料庫
-                    } else {
-                        setCustomOrder([]);
-                    }
-                } catch (e) { 
-                    setCustomOrder([]); 
-                }
-            }
-        }
         setIsReorderMode(false);
         setReorderSelectedId(null);
     }, [activeView]);
+
+    // 從資料庫清單中讀取跨裝置的自訂排序
+    useEffect(() => {
+        if (activeView) {
+            let savedOrder = [];
+            if (typeof activeView === 'string') {
+                const pref = (customLists || []).find(l => l.id === `sys_sort_${activeView}`);
+                if (pref && pref.items) {
+                    savedOrder = pref.items.map(i => typeof i === 'object' ? i.cardId : i);
+                }
+            } else if (activeView.items) {
+                savedOrder = activeView.items.map(i => typeof i === 'object' ? i.cardId : i);
+            }
+            
+            // 比對新舊陣列避免不必要的重新渲染
+            setCustomOrder(prev => JSON.stringify(prev) !== JSON.stringify(savedOrder) ? savedOrder : prev);
+        }
+    }, [activeView, customLists]);
 
     // ==========================================
     // 4. 取得顯示卡片與終極排序
@@ -4734,7 +4772,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     };
 
     // 🌟 處理自訂排序邏輯
-    const handleReorderClick = (cardId) => {
+    const handleReorderClick = async (cardId) => {
         if (!reorderSelectedId) {
             setReorderSelectedId(cardId);
         } else if (reorderSelectedId === cardId) {
@@ -4751,19 +4789,49 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 newList.splice(toIndex, 0, movedItem);
                 
                 setCustomOrder(newList);
-                const key = `custom_sort_${activeView.id || activeView}`;
-                onUpdateSetting(key, newList); // 🌟 儲存到資料庫
+                
+                // 同步排序結果至資料庫
+                if (typeof activeView === 'string') {
+                    const prefId = `sys_sort_${activeView}`;
+                    const payload = { 
+                        id: prefId, 
+                        title: `sys_sort_${activeView}`, 
+                        items: newList.map(cid => ({ cardId: cid })) 
+                    };
+                    
+                    if (!(customLists || []).some(l => l.id === prefId)) {
+                        setCustomLists([...(customLists || []), payload]);
+                    } else {
+                        setCustomLists((customLists || []).map(l => l.id === prefId ? payload : l));
+                    }
+                    await supabase.from('custom_lists').upsert(toSnakeCase(payload));
+                } else {
+                    const updatedItems = newList.map(cid => {
+                        const existingItem = (activeView.items || []).find(i => (i.cardId || i) === cid);
+                        return existingItem || { cardId: cid };
+                    });
+                    const payload = { ...activeView, items: updatedItems };
+                    setActiveView(payload);
+                    setCustomLists((customLists || []).map(l => l.id === payload.id ? payload : l));
+                    await supabase.from('custom_lists').upsert(toSnakeCase(payload));
+                }
             }
             setReorderSelectedId(null);
         }
     };
 
-    const resetCustomSort = () => {
-        if (confirm('確定要重置此頁面的自訂排序嗎？')) {
+    const resetCustomSort = async () => {
+        if (confirm('確定要恢復為自動排序嗎？\n這將會清除目前的自訂排序紀錄。')) {
             setCustomOrder([]);
-            const key = `custom_sort_${activeView.id || activeView}`;
-            onUpdateSetting(key, []); // 🌟 清空資料庫紀錄
             setIsReorderMode(false);
+            
+            if (typeof activeView === 'string') {
+                const prefId = `sys_sort_${activeView}`;
+                setCustomLists((customLists || []).filter(l => l.id !== prefId));
+                await supabase.from('custom_lists').delete().eq('id', prefId);
+            } else {
+                alert("自訂收藏冊將維持手動排列順序。");
+            }
         }
     };
 
@@ -4899,7 +4967,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                       activeView.title;
 
         return (
-          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in">
+          <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in" {...swipeHandlers}>
               <div className="bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative" ref={exportRef}>
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
                       <div className="flex items-center justify-between w-full sm:w-auto gap-2">
@@ -5019,7 +5087,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
           <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {(customLists || []).map(list => (
+                  {(customLists || []).filter(l => !l.id.startsWith('sys_sort_')).map(list => (
                       <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
                            <div className="flex items-center gap-3 min-w-0">
                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
@@ -5135,18 +5203,25 @@ export default function App() {
 
   // 🌟 新增：主頁左右滑動切換分頁
   const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
   const touchEndX = useRef(0);
 
   const handleTouchStart = (e) => {
       touchStartX.current = e.targetTouches[0].clientX;
+      touchStartY.current = e.targetTouches[0].clientY;
   };
 
   const handleTouchEnd = (e) => {
       touchEndX.current = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
       const diff = touchStartX.current - touchEndX.current;
+      const diffY = touchStartY.current - touchEndY;
       
-      // 門檻 60px，避免誤觸
-      if (Math.abs(diff) > 60) {
+      if (Math.abs(diffY) > Math.abs(diff)) return; // 垂直滑動忽略
+      if (e.target.closest('input[type="range"]')) return; // 滑動條忽略
+
+      // 門檻 100px，避免誤觸
+      if (Math.abs(diff) > 100) {
           const tabs = ['library', 'collection', 'bulk', 'inventory', 'export'];
           const currentIndex = tabs.indexOf(activeTab);
           
@@ -6032,7 +6107,14 @@ export default function App() {
           }}
           onOpenBulkRecord={(bulkId) => {
               const record = (bulkRecords || []).find(r => r.id === bulkId);
-              if (record) setEditingBulkRecord(record);
+              if (record) {
+                  setEditingBulkRecord(record);
+                  setViewingCard(null);
+                  setActiveTab('bulk');
+                  if (record.groupId && record.groupId !== currentGroupId) {
+                      setCurrentGroupId(record.groupId);
+                  }
+              }
           }}
           uniqueSources={uniqueSources}
           onRenameSource={handleRenameSource}
