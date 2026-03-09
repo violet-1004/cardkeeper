@@ -5396,8 +5396,12 @@ export default function App() {
     
         // 🌟 加上錯誤警告，抓出連線或權限問題
         if (error) {
-         console.error(`🚨 [${t}] 讀取失敗:`, error.message);
-         if (!silent) alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+         if (!silent) {
+             console.error(`🚨 [${t}] 讀取失敗:`, error.message);
+             alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+         } else {
+             console.warn(`⚠️ [${t}] 讀取略過 (非致命): ${error.message}`);
+         }
         } else {
              console.log(`✅ [${t}] 成功讀取 ${data?.length || 0} 筆資料`);
         }
