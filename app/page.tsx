@@ -305,11 +305,13 @@ const useSwipeToClose = (onClose) => {
     const touchStartY = useRef(0);
     
     const onTouchStart = (e) => {
+        e.stopPropagation(); // 🌟 防止事件冒泡到主頁面，避免誤觸分頁切換
         touchStartX.current = e.targetTouches[0].clientX;
         touchStartY.current = e.targetTouches[0].clientY;
     };
 
     const onTouchEnd = (e) => {
+        e.stopPropagation(); // 🌟 防止事件冒泡
         const diffX = touchStartX.current - e.changedTouches[0].clientX;
         const diffY = touchStartY.current - e.changedTouches[0].clientY;
         if (Math.abs(diffY) > Math.abs(diffX)) return; // 垂直滑動忽略
@@ -3614,7 +3616,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                     type="number" placeholder="0" step="50" min="0"
                                                     value={item.sellPrice} 
                                                     onChange={e => handleCardChange(item.uid, 'sellPrice', e.target.value)} 
-                                                    className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" 
+                                                    className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" 
                                                 />
                                             </div>
                                         </div>
@@ -3628,7 +3630,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                     type="number" placeholder="0" step="50" min="0"
                                                     value={item.buyPrice} 
                                                     onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} 
-                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
                                                 />
                                             </div>
                                         </div>
@@ -3719,7 +3721,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                                 type="number" placeholder="0" step="50" min="0"
                                                                 value={item.buyPrice} 
                                                                 onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
-                                                                className="w-12 text-left border-b border-gray-200 outline-none font-bold text-xs py-0.5 bg-transparent text-red-600 placeholder-red-200" 
+                                                                className="w-12 text-left border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent text-red-600 placeholder-red-200" 
                                                             />
                                                         </div>
                                                     </div>
@@ -3773,7 +3775,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                             <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
                                             <div className="flex items-baseline">
                                                 <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
-                                                <input type="number" placeholder="0" step="50" min="0" value={misc.sellPrice} onChange={e => handleMiscChange(misc.id, 'sellPrice', e.target.value)} className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" />
+                                                <input type="number" placeholder="0" step="50" min="0" value={misc.sellPrice} onChange={e => handleMiscChange(misc.id, 'sellPrice', e.target.value)} className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" />
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end">
@@ -3786,7 +3788,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                     type="number" placeholder="0" step="50" min="0" 
                                                     value={misc.buyPrice} 
                                                     onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
-                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${misc.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${misc.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
                                                 />
                                             </div>
                                         </div>
@@ -4344,7 +4346,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                                         <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
                                         <div className="flex items-baseline">
                                             <span className="text-[10px] font-bold text-green-500 mr-0.5">$</span>
-                                            <input type="number" placeholder="0" step="50" min="0" value={item.sellPrice} onChange={e => handleCardChange(item.uid, 'sellPrice', e.target.value)} className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" />
+                                            <input type="number" placeholder="0" step="50" min="0" value={item.sellPrice} onChange={e => handleCardChange(item.uid, 'sellPrice', e.target.value)} className="w-12 sm:w-14 text-right border-b border-gray-200 focus:border-green-400 outline-none font-bold text-base py-0.5 bg-transparent text-green-600 placeholder-green-200 transition-colors" />
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end">
@@ -4353,7 +4355,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                                         </label>
                                         <div className="flex items-baseline">
                                             <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
-                                            <input type="number" placeholder="0" step="50" min="0" value={item.buyPrice} onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-sm sm:text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} />
+                                            <input type="number" placeholder="0" step="50" min="0" value={item.buyPrice} onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} />
                                         </div>
                                     </div>
                                 </div>
@@ -4630,14 +4632,19 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 payload.id = editingListId;
                 setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
             } else {
-                payload.id = Date.now().toString();
+                payload.id = generateUUID(); // 🌟 改用 UUID 避免格式問題
                 payload.items = [];
                 setCustomLists([...(customLists || []), payload]);
             }
-            await supabase.from('custom_lists').upsert(toSnakeCase(payload));
-            setIsListModalOpen(false);
-            setEditingListId(null);
-            setListTitleInput('');
+            
+            const { error } = await supabase.from('custom_lists').upsert(toSnakeCase(payload));
+            if (error) {
+                alert("儲存失敗: " + error.message);
+            } else {
+                setIsListModalOpen(false);
+                setEditingListId(null);
+                setListTitleInput('');
+            }
         }
     };
 
