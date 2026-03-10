@@ -4687,7 +4687,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         return defaultSorted;
     };
 
-    const displayCards = getDisplayCards() || [];
+    // 🌟 重構：先取得所有符合篩選條件的卡片
+    const allCardsForView = getDisplayCards() || [];
+
+    // 🌟 重構：再根據是否為隱藏模式，決定是否要排除已隱藏的卡片
+    const displayCards = useMemo(() => {
+        if (isHideMode) return allCardsForView;
+        return allCardsForView.filter(c => !hiddenCardIds.has(c.id));
+    }, [allCardsForView, isHideMode, hiddenCardIds]);
 
     // 🌟 1. 先定義 maxRows (必須在 useEffect 和 cardsToRender 之前)
     const maxRows = useMemo(() => {
@@ -5063,7 +5070,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                 ? (reorderSelectedId === card.id ? 'scale-95 ring-4 ring-indigo-500 rounded-lg z-10' : 'hover:scale-[0.98] opacity-90') 
                                 : 'active:scale-95'
                         } ${
-                            isHideMode && hiddenCardIds.has(card.id) ? 'card-is-hidden-for-export' : ''
+                            hiddenCardIds.has(card.id) ? 'card-is-hidden-for-export' : ''
                         }`}
                     >
                         <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`} style={{ containerType: 'inline-size' }}>
@@ -5098,8 +5105,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     <div className={`inline-block text-white font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full whitespace-nowrap ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: '12cqw' }}>{card.note}</div>
                                 </div>
                             )}
-                            {isHideMode && hiddenCardIds.has(card.id) && (
-                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20 rounded-lg backdrop-blur-sm">
+                            {hiddenCardIds.has(card.id) && (
+                                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20 rounded-lg backdrop-blur-sm">
                                     <EyeOff className="w-1/3 h-1/3 text-white/80" />
                                 </div>
                             )}
