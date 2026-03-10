@@ -3231,8 +3231,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         return (record?.items || []).filter(i => i.isAlbum).map(i => ({
             ...i,
             uid: i.uid || i.id || `album_${Date.now()}_${Math.random()}`,
-            sellDate: i.sellDate || '',
-            isManual: i.isManual !== undefined ? i.isManual : true // 🌟 預設為手動(保留舊資料價格)，清空價格後會變自動
+            sellDate: i.sellDate || ''
         }));
     });
 
@@ -3279,7 +3278,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             sellPrice: Number(a.sellPrice) || 0,
             sellDate: a.sellDate,
             isAlbum: true,
-            isManual: a.isManual // 🌟 改為使用實際狀態
+            isManual: true // 專輯視為手動定價
         }));
 
         onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
@@ -3291,13 +3290,18 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         if (totalVal === '' || totalVal === undefined) {
             return {
                 nextCards: currentCardItems.map(c => c.isManual ? c : { ...c, buyPrice: '' }),
-                nextMisc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' }),
-                nextAlbums: currentAlbumItems.map(a => a.isManual ? a : { ...a, buyPrice: '' })
+                nextMisc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' })
             };
         }
         const total = Number(totalVal) || 0;
         let manualSum = 0; 
         let autoQty = 0;
+        
+        // 🌟 專輯成本：數量 x 單價
+        let albumSum = 0; 
+        currentAlbumItems.forEach(a => { 
+            albumSum += (Number(a.buyPrice) || 0) * (Number(a.albumQuantity) || 0); 
+        });
         
         // Cards
         currentCardItems.forEach(c => {
@@ -3311,17 +3315,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
              else autoQty += 1;
         });
         
-        // Albums
-        currentAlbumItems.forEach(a => {
-             const qty = Number(a.albumQuantity) || 0;
-             if (a.isManual) {
-                 manualSum += (Number(a.buyPrice) || 0) * qty;
-             } else {
-                 autoQty += qty;
-             }
-        });
-        
-        const remaining = Math.max(0, total - manualSum);
+        const remaining = Math.max(0, total - manualSum - albumSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : 0;
         
         const nextCards = currentCardItems.map(c => {
@@ -3334,7 +3328,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             return m;
         });
 
-        return { nextCards, nextMisc };
+        const nextAlbums = currentAlbumItems.map(a => {
+            if (!a.isManual) return { ...a, buyPrice: autoPrice };
+            return a;
+        });
+
+        return { nextCards, nextMisc, nextAlbums };
     };
 
     const handleFormChange = (key, value) => {
@@ -3344,10 +3343,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     const handleTotalAmountChange = (e) => {
         const val = e.target.value; setTotalAmount(val);
-        const { nextCards, nextMisc } = recalculatePrices(val, cardItems, miscItems, albumItems);
+        const { nextCards, nextMisc, nextAlbums } = recalculatePrices(val, cardItems, miscItems, albumItems);
         setCardItems(nextCards); 
         setMiscItems(nextMisc);
-        syncToParent(form, val, nextCards, nextMisc, albumItems);
+        setAlbumItems(nextAlbums);
+        syncToParent(form, val, nextCards, nextMisc, nextAlbums);
     };
 
     const handleCardChange = (uid, field, value) => {
@@ -3360,10 +3360,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             return c;
         });
         if (field === 'buyPrice') {
-            const { nextCards, nextMisc } = recalculatePrices(totalAmount, nextItems, miscItems, albumItems);
+            const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, nextItems, miscItems, albumItems);
             setCardItems(nextCards);
             setMiscItems(nextMisc);
-            syncToParent(form, totalAmount, nextCards, nextMisc, albumItems);
+            setAlbumItems(nextAlbums);
+            syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
         } else {
             setCardItems(nextItems);
             syncToParent(form, totalAmount, nextItems, miscItems, albumItems);
@@ -3386,10 +3387,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         });
         
         if (field === 'buyPrice') {
-            const { nextCards, nextMisc: recalculatedMisc } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+            const { nextCards, nextMisc: recalculatedMisc, nextAlbums } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
             setCardItems(nextCards);
             setMiscItems(recalculatedMisc);
-            syncToParent(form, totalAmount, nextCards, recalculatedMisc, albumItems);
+            setAlbumItems(nextAlbums);
+            syncToParent(form, totalAmount, nextCards, recalculatedMisc, nextAlbums);
         } else {
             setMiscItems(nextMisc);
             syncToParent(form, totalAmount, cardItems, nextMisc, albumItems);
@@ -3418,10 +3420,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         setAlbumItems(nextAlbums);
         // 🌟 專輯數量或單價變更時，重新計算總金額分配
         if (field === 'buyPrice' || field === 'albumQuantity') {
-            const { nextCards, nextMisc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+            const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
             setCardItems(nextCards);
             setMiscItems(nextMisc);
-            syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
+            setAlbumItems(recalculatedAlbums);
+            syncToParent(form, totalAmount, nextCards, nextMisc, recalculatedAlbums);
         } else {
             syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
         }
@@ -3465,11 +3468,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         setAlbumItems(nextAlbums);
         
         // Recalculate costs
-        const { nextCards, nextMisc } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+        const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
         setCardItems(nextCards);
         setMiscItems(nextMisc);
+        setAlbumItems(recalculatedAlbums);
         
-        syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
+        syncToParent(form, totalAmount, nextCards, nextMisc, recalculatedAlbums);
     };
 
     const handleConfirmSelectCards = (newSelectedItems) => {
@@ -3478,10 +3482,11 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             if (existing) return existing;
             return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false };
         });
-        const { nextCards, nextMisc } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+        const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
         setCardItems(nextCards); 
         setMiscItems(nextMisc);
-        syncToParent(form, totalAmount, nextCards, nextMisc, albumItems);
+        setAlbumItems(nextAlbums);
+        syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
         setShowCardSelector(false);
     };
 
@@ -3555,7 +3560,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
                 <div>
                     <div className="flex justify-between items-end mb-3 px-1">
-                        <div className="font-bold text-gray-800 text-sm">小卡記錄 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
+                        <div className="font-bold text-gray-800 text-sm">盤收內容清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
                         <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
                     </div>
                     
@@ -3652,7 +3657,9 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
-                                <Disc className="w-4 h-4 text-purple-500"/>專輯記錄
+                                <Disc className="w-4 h-4 text-purple-500"/>
+                                專輯內容
+                                <span className="text-gray-400 text-[10px] font-normal ml-1">(計入總金額扣除)</span>
                             </div>
                             <button onClick={handleAddAlbum} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增專輯
@@ -3722,16 +3729,14 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end">
-                                                <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
-                                                    {item.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
-                                                </label>
+                                                <label className="text-[9px] font-bold uppercase mb-0.5 text-red-400">購入</label>
                                                 <div className="flex items-baseline">
-                                                    <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                    <span className="text-[10px] font-bold text-red-500 mr-0.5">$</span>
                                                     <input 
                                                         type="number" placeholder="0" step="50" min="0"
                                                         value={item.buyPrice} 
                                                         onChange={e => handleAlbumChange(item.uid, 'buyPrice', e.target.value)} 
-                                                        className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                        className="w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent text-red-600 placeholder-red-200 focus:border-red-400" 
                                                     />
                                                 </div>
                                             </div>
@@ -3747,7 +3752,9 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
-                                <Tag className="w-4 h-4 text-orange-500"/>雜物記錄 
+                                <Tag className="w-4 h-4 text-orange-500"/>
+                                雜物記錄 
+                                <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
                             </div>
                             <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增雜物
@@ -3812,8 +3819,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="flex gap-2 w-full">
                         <button onClick={() => setCardToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
-                            const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);
-                            const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+                            const nextCardItems = cardItems.filter(i => i.uid !== cardToRemove.uid);                            const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
                             setCardItems(nextCards); 
                             setMiscItems(nextMisc);
                             setAlbumItems(nextAlbums);
@@ -3831,8 +3837,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="flex gap-2 w-full">
                         <button onClick={() => setMiscToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
-                            const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);
-                            const { nextCards, nextMisc: recalculatedMisc, nextAlbums } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
+                            const nextMisc = miscItems.filter(m => m.id !== miscToRemove.id);                            const { nextCards, nextMisc: recalculatedMisc, nextAlbums } = recalculatePrices(totalAmount, cardItems, nextMisc, albumItems);
                             setCardItems(nextCards);
                             setMiscItems(recalculatedMisc);
                             setAlbumItems(nextAlbums);
@@ -3850,8 +3855,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     <div className="flex gap-2 w-full">
                         <button onClick={() => setAlbumToRemove(null)} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                         <button onClick={() => {
-                            const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);
-                            const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+                            const nextAlbums = albumItems.filter(a => a.uid !== albumToRemove.uid);                            const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
                             setCardItems(nextCards);
                             setMiscItems(nextMisc);
                             setAlbumItems(recalculatedAlbums);
@@ -4336,7 +4340,7 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
                     </div>
                     <div className="col-span-2 bg-red-50/50 p-4 rounded-xl flex flex-col justify-center gap-1 border border-red-100/50 relative">
                         <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-bold text-red-600 uppercase tracking-wider">總金額</label>
+                            <label className="text-[10px] font-bold text-red-600 uppercase tracking-wider">批量總金額 (將自動均分單價)</label>
                             {cardItems.filter(c=>c.isManual).length > 0 && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold shadow-sm">已有 {cardItems.filter(c=>c.isManual).length} 張自訂單價</span>}
                         </div>
                         <div className="flex items-baseline mt-1">
@@ -4684,6 +4688,34 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     };
 
     const displayCards = getDisplayCards() || [];
+
+    // 🌟 1. 先定義 maxRows (必須在 useEffect 和 cardsToRender 之前)
+    const maxRows = useMemo(() => {
+        if (!displayCards) return 0;
+        return Math.ceil(displayCards.length / cols);
+    }, [displayCards, cols]);
+
+    // 🌟 2. 再定義 useEffect (依賴 maxRows)
+    useEffect(() => {
+        if (maxRows > 0 && (exportEndRow === 0 || exportEndRow > maxRows)) {
+            setExportEndRow(maxRows);
+        }
+        if (exportStartRow > maxRows) {
+            setExportStartRow(maxRows > 0 ? maxRows : 1);
+        }
+    }, [maxRows, exportStartRow, exportEndRow]);
+
+    // 🌟 3. 最後定義 cardsToRender (依賴 maxRows)
+    const cardsToRender = useMemo(() => {
+        const start = Math.max(1, exportStartRow);
+        const end = exportEndRow > 0 ? exportEndRow : maxRows;
+        if (start > 1 || end < maxRows) {
+            const startIndex = (start - 1) * cols;
+            const endIndex = end * cols;
+            return displayCards.slice(startIndex, endIndex);
+        }
+        return displayCards;
+    }, [displayCards, exportStartRow, exportEndRow, cols, maxRows]);
 
     // ==========================================
     // 5. 事件與功能函式
@@ -5396,12 +5428,8 @@ export default function App() {
     
         // 🌟 加上錯誤警告，抓出連線或權限問題
         if (error) {
-         if (!silent) {
-             console.error(`🚨 [${t}] 讀取失敗:`, error.message);
-             alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
-         } else {
-             console.warn(`⚠️ [${t}] 讀取略過 (非致命): ${error.message}`);
-         }
+         console.error(`🚨 [${t}] 讀取失敗:`, error.message);
+         if (!silent) alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
         } else {
              console.log(`✅ [${t}] 成功讀取 ${data?.length || 0} 筆資料`);
         }
