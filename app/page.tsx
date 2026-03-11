@@ -2862,12 +2862,15 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
     if (!album) return null;
 
     const [activeStatus, setActiveStatus] = useState('未拆');
+    const [isExpanded, setIsExpanded] = useState(false);
     const swipeHandlers = useSwipeToClose(onClose);
 
     const allItems = [
         ...(album.stats['未拆']?.items || []).map(i => ({...i, _status: '未拆'})),
         ...(album.stats['空專']?.items || []).map(i => ({...i, _status: '空專'}))
     ].sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
+
+    const displayedItems = isExpanded ? allItems : allItems.slice(0, 6);
 
     const handleSellAlbum = async () => {
         const priceKey = `${album.id}_${activeStatus}`;
@@ -2963,28 +2966,37 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                         </div>
                     </div>
 
-                    <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3 px-1">相關庫存</h3>
-                    <div className="space-y-3">
-                        {allItems.map(inv => {
+                    <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3 px-1">相關庫存 <span className="text-gray-400 text-xs font-normal">({allItems.length})</span></h3>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                        {displayedItems.map(inv => {
                             const card = (cards || []).find(c => c.id === inv.cardId);
                             if (!card) return null;
                             const member = (members || []).find(m => m.id === card.memberId);
-                            const cardSeries = (series || []).find(s => s.id === card.seriesId);
                             return (
-                                <div key={inv.id} onClick={() => { onClose(); onViewCard(card); }} className="bg-white p-3 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-indigo-300 group">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className="w-10 aspect-[2/3] bg-gray-100 rounded-md overflow-hidden flex-shrink-0 border"><Image src={card.image} alt={card.name} fill sizes="50px" className="object-cover" unoptimized={true} /></div>
-                                        <div className="min-w-0">
-                                            <div className="text-xs font-bold text-gray-800 truncate">{member?.name} - {cardSeries?.name}</div>
-                                            <div className="text-[10px] text-gray-500 truncate">來自盤收: {inv.note.replace('來自盤收: ', '')}</div>
+                                <div key={inv.id} onClick={() => { onClose(); onViewCard(card); }} className="cursor-pointer group active:scale-95 transition-transform">
+                                    <div className="aspect-[2/3] bg-gray-100 rounded-lg border overflow-hidden relative shadow-sm">
+                                        <Image src={card.image} alt={card.name} fill sizes="150px" className="object-cover" unoptimized={true} />
+                                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
+                                            <div className="text-[10px] text-white font-bold truncate">{member?.name}</div>
+                                            <div className="text-[9px] text-white/80 flex items-center gap-1">
+                                                <Disc className="w-2.5 h-2.5" /> {inv.albumStatus} x{inv.albumQuantity}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="text-right flex flex-col items-end gap-0.5"><div className="text-sm font-bold text-purple-600 flex items-center gap-1"><Disc className="w-3 h-3" />{inv.albumStatus} x{inv.albumQuantity}</div></div>
                                 </div>
                             );
                         })}
-                        {allItems.length === 0 && <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">無相關庫存項目</div>}
                     </div>
+                    {allItems.length > 6 && (
+                        <button 
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className="w-full py-2.5 mt-3 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 shadow-sm active:scale-[0.98]"
+                        >
+                            {isExpanded ? '收起列表' : `顯示全部 (${allItems.length})`}
+                            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                    )}
+                    {allItems.length === 0 && <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">無相關庫存項目</div>}
                 </div>
             </div>
         </div>
