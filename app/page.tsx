@@ -2663,12 +2663,12 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     );
 }
 
-function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series, setInventory, setSales }) {
+function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series, setInventory, setSales, members, onViewCard }) {
     const [viewMode, setViewMode] = useState('bulk'); // 'bulk' | 'album'
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
     const [albumPrices, setAlbumPrices] = useState({});
-    const [activeAlbumStatus, setActiveAlbumStatus] = useState({}); // 🌟 新增狀態：記錄每個專輯目前顯示的是「未拆」還是「空專」
+    const [viewingAlbum, setViewingAlbum] = useState(null);
 
     // 🌟 讀取記憶的售價
     useEffect(() => {
@@ -2832,62 +2832,161 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                     </div>
                 </>
             ) : (
-                <div className="space-y-3 px-2">
-                    {albumList.map(album => {
-                        const currentStatus = activeAlbumStatus[album.id] || '未拆';
-                        const count = album.stats[currentStatus].count;
-                        const priceKey = `${album.id}_${currentStatus}`;
-
-                        return (
-                        <div key={album.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
-                                {album.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
-                            </div>
-                            
-                            {/* 🌟 左側狀態切換按鈕 */}
-                            <div className="flex flex-col gap-1">
-                                <button 
-                                    onClick={() => setActiveAlbumStatus(prev => ({ ...prev, [album.id]: '未拆' }))}
-                                    className={`text-[10px] px-2 py-0.5 rounded-full border font-bold transition-colors ${currentStatus === '未拆' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'text-gray-400 border-transparent hover:bg-gray-50'}`}
-                                >
-                                    未拆
-                                </button>
-                                <button 
-                                    onClick={() => setActiveAlbumStatus(prev => ({ ...prev, [album.id]: '空專' }))}
-                                    className={`text-[10px] px-2 py-0.5 rounded-full border font-bold transition-colors ${currentStatus === '空專' ? 'bg-gray-100 text-gray-600 border-gray-300' : 'text-gray-400 border-transparent hover:bg-gray-50'}`}
-                                >
-                                    空專
-                                </button>
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                                <div className="font-bold text-gray-800 text-sm truncate">{album.name}</div>
-                                <div className="text-xs text-gray-500">
-                                    {currentStatus}庫存: <span className={`font-bold ${count > 0 ? 'text-indigo-600' : 'text-red-400'}`}>{count}</span>
+                <>
+                    <div className="space-y-3 px-2">
+                        {albumList.map(album => (
+                            <div key={album.id} onClick={() => setViewingAlbum(album)} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-indigo-300 group active:scale-95 transition-transform">
+                                <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
+                                    {album.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
                                 </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-gray-800 text-sm truncate">{album.name}</div>
+                                    <div className="text-xs text-gray-500 flex gap-4 mt-1">
+                                        <span>未拆: <span className="font-bold text-indigo-600">{album.stats['未拆']?.count || 0}</span></span>
+                                        <span>空專: <span className="font-bold text-gray-600">{album.stats['空專']?.count || 0}</span></span>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 transition-colors" />
                             </div>
-                            <div className="flex items-center gap-2">
-                                <div className="flex items-center border rounded-lg overflow-hidden bg-gray-50">
-                                    <span className="px-2 text-xs text-gray-400 font-bold">$</span>
-                                    <input 
-                                        type="number" 
-                                        placeholder="售價" 
-                                        value={albumPrices[priceKey] || ''} 
+                        ))}
+                        {albumList.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有專輯庫存</div>}
+                    </div>
+                    {viewingAlbum && <AlbumDetailModal album={viewingAlbum} onClose={() => setViewingAlbum(null)} cards={cards} members={members} series={series} setInventory={setInventory} setSales={setSales} albumPrices={albumPrices} setAlbumPrices={setAlbumPrices} onViewCard={onViewCard} />}
+                </>
+            )}
+        </div>
+    );
+}
+
+function AlbumDetailModal({ album, onClose, cards, members, series, setInventory, setSales, albumPrices, setAlbumPrices, onViewCard }) {
+    if (!album) return null;
+
+    const [activeStatus, setActiveStatus] = useState('未拆');
+    const swipeHandlers = useSwipeToClose(onClose);
+
+    const allItems = [
+        ...(album.stats['未拆']?.items || []).map(i => ({...i, _status: '未拆'})),
+        ...(album.stats['空專']?.items || []).map(i => ({...i, _status: '空專'}))
+    ].sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
+
+    const handleSellAlbum = async () => {
+        const priceKey = `${album.id}_${activeStatus}`;
+        const price = Number(albumPrices[priceKey]) || 0;
+        
+        const targetItems = album.stats[activeStatus]?.items || [];
+        const targetItem = targetItems.find(i => i.albumQuantity > 0);
+        
+        if (!targetItem) return alert(`「${activeStatus}」庫存不足！`);
+
+        const newQuantity = targetItem.albumQuantity - 1;
+        const updatedItem = { ...targetItem, albumQuantity: newQuantity };
+        
+        setInventory(prev => prev.map(i => i.id === targetItem.id ? updatedItem : i));
+        await supabase.from('ui_inventory').update({ album_quantity: newQuantity }).eq('id', targetItem.id);
+
+        const newSale = {
+            id: Date.now().toString(),
+            cardId: targetItem.cardId,
+            price: price,
+            quantity: 1,
+            date: new Date().toISOString().split('T')[0],
+            note: `售出專輯 (${activeStatus}): ${album.name}`,
+            color: 'bg-purple-500'
+        };
+        setSales(prev => [...prev, newSale]);
+        await supabase.from('ui_sales').insert(toSnakeCase(newSale));
+        
+        const newPrices = { ...albumPrices, [priceKey]: price };
+        setAlbumPrices(newPrices);
+        localStorage.setItem('album_prices', JSON.stringify(newPrices));
+        
+        onClose();
+    };
+
+    const priceKey = `${album.id}_${activeStatus}`;
+
+    return (
+        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0">
+                <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
+                <div className="font-bold text-lg">專輯詳情</div>
+                <div className="w-10"></div> {/* Placeholder */}
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar bg-gray-50">
+                <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
+                    <div className="w-40 aspect-square mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
+                        <Image src={album.image} alt={album.name} fill priority unoptimized className="object-cover" />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{album.name}</h2>
+                    <div className="flex justify-center gap-3 mt-4">
+                        <span className="text-sm font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                            未拆庫存: {album.stats['未拆']?.count || 0}
+                        </span>
+                        <span className="text-sm font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
+                            空專庫存: {album.stats['空專']?.count || 0}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="p-4 pb-24">
+                    <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-2">
+                             <div className="flex items-center gap-2">
+                                <div className="bg-purple-100 p-1.5 rounded-lg text-purple-600"><Coins className="w-4 h-4" /></div>
+                                <div className="font-bold text-gray-800 text-sm">快速售出</div>
+                            </div>
+                            <div className="flex bg-gray-100 p-1 rounded-lg">
+                                <button onClick={() => setActiveStatus('未拆')} className={`px-3 py-1 text-xs font-bold rounded-md ${activeStatus === '未拆' ? 'bg-white shadow' : 'text-gray-500'}`}>未拆</button>
+                                <button onClick={() => setActiveStatus('空專')} className={`px-3 py-1 text-xs font-bold rounded-md ${activeStatus === '空專' ? 'bg-white shadow' : 'text-gray-500'}`}>空專</button>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                                <label className="text-[10px] text-gray-400 font-bold ml-1 mb-0.5 block">售價</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                                    <input type="number" placeholder="0" value={albumPrices[priceKey] || ''}
                                         onChange={e => {
                                             const newPrices = {...albumPrices, [priceKey]: e.target.value};
                                             setAlbumPrices(newPrices);
                                             localStorage.setItem('album_prices', JSON.stringify(newPrices));
                                         }}
-                                        className="w-16 bg-transparent text-sm font-bold text-gray-800 outline-none py-1.5"
+                                        className="w-full bg-gray-50 border-none rounded-lg py-2 pl-6 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
                                     />
                                 </div>
-                                <button onClick={() => handleSellAlbum(album.id)} className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">售出</button>
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-[10px] text-gray-400 font-bold ml-1 mb-0.5 block invisible">操作</label>
+                                <button onClick={handleSellAlbum} className="w-full bg-black text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 transition-colors">售出 {activeStatus}</button>
                             </div>
                         </div>
-                    )})}
-                    {albumList.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有專輯庫存</div>}
+                    </div>
+
+                    <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3 px-1">相關庫存</h3>
+                    <div className="space-y-3">
+                        {allItems.map(inv => {
+                            const card = (cards || []).find(c => c.id === inv.cardId);
+                            if (!card) return null;
+                            const member = (members || []).find(m => m.id === card.memberId);
+                            const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                            return (
+                                <div key={inv.id} onClick={() => { onClose(); onViewCard(card); }} className="bg-white p-3 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-indigo-300 group">
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <div className="w-10 aspect-[2/3] bg-gray-100 rounded-md overflow-hidden flex-shrink-0 border"><Image src={card.image} alt={card.name} fill sizes="50px" className="object-cover" unoptimized={true} /></div>
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-bold text-gray-800 truncate">{member?.name} - {cardSeries?.name}</div>
+                                            <div className="text-[10px] text-gray-500 truncate">來自盤收: {inv.note.replace('來自盤收: ', '')}</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right flex flex-col items-end gap-0.5"><div className="text-sm font-bold text-purple-600 flex items-center gap-1"><Disc className="w-3 h-3" />{inv.albumStatus} x{inv.albumQuantity}</div></div>
+                                </div>
+                            );
+                        })}
+                        {allItems.length === 0 && <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">無相關庫存項目</div>}
+                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 }
@@ -6039,6 +6138,8 @@ export default function App() {
             series={series}
             setInventory={setInventory}
             setSales={setSales}
+            members={members}
+            onViewCard={setViewingCard}
         />;
         case 'inventory': 
         return <InventoryTab 
