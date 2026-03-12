@@ -2507,7 +2507,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     if (filterType === 'all' || filterType === 'income') {
                         items.push({
                             id: `misc_${record.id}_${idx}`, _virtualId: `misc_${record.id}_${idx}`, _type: 'income',
-                            name: `[雜物] ${item.name} (${record.name})`, _displayPrice: totalSellPrice, _displayDate: item.sellDate,
+                            // 🌟 修正：移除 [雜物] 前綴，改由渲染時統一加上 [包裹]
+                            name: `${item.name} (${record.name})`, _displayPrice: totalSellPrice, _displayDate: item.sellDate,
                             note: `數量: ${qty}`, isMisc: true, originalRecord: record
                         });
                     }
@@ -2587,7 +2588,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     const channelObj = card?.channel ? channelMap[card.channel] : null;
                     
                     const displayTitle = card ? [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ') : '';
-                    const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片');
+                    // 🌟 修正：如果是雜物，也顯示為 [包裹] 品名，與盤收標頭一致 (同時修復雜物顯示為"未命名卡片"的問題)
+                    const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (item.isMisc ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片'));
 
                     return (
                         <div key={item._virtualId} 
