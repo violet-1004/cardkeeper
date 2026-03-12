@@ -1,3 +1,5 @@
 git add .
-git commit -m "0312 專輯詳情-3"
+git commit -m "0312 專輯詳情-8"
 git push
+
+npx vercel --prod

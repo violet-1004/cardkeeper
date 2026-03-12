@@ -345,12 +345,12 @@ const getOwnedQuantity = (invList, cardId) => {
 const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false }) => {
   const swipeHandlers = useSwipeToClose(onClose);
   return (
-  <div className={`fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
+  <div className={`fixed inset-0 z-[150] bg-black/30 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
     <div 
-      className={`bg-white w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-xl ${className}` : `rounded-xl max-h-[90vh] ${className}`}`} 
+      className={`bg-white/90 backdrop-blur-xl border border-white/50 w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl ${className}` : `rounded-2xl max-h-[90vh] ${className}`}`} 
       onClick={e => e.stopPropagation()}
     >
-      <div className="px-4 py-3 border-b flex justify-between items-center bg-white flex-shrink-0 z-10">
+      <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/50 backdrop-blur-sm flex-shrink-0 z-10">
         <div className="font-bold text-lg text-gray-800 truncate pr-2 flex-1 flex items-center">
             {title}
         </div>
@@ -359,11 +359,11 @@ const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullS
             <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors"><X className="w-6 h-6 text-gray-500" /></button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto no-scrollbar relative bg-gray-50">
+      <div className="flex-1 overflow-y-auto no-scrollbar relative bg-gray-50/50">
         {children}
       </div>
       {footer && (
-        <div className="px-4 py-3 border-t bg-white flex justify-end gap-3 flex-shrink-0 z-10 safe-area-bottom">
+        <div className="px-4 py-3 border-t border-gray-200/50 bg-white/50 backdrop-blur-sm flex justify-end gap-3 flex-shrink-0 z-10 safe-area-bottom">
           {footer}
         </div>
       )}
@@ -1185,15 +1185,15 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     }, [activeModal]);
 
     return (
-        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in" {...swipeHandlers}>
-            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0">
+        <div className="fixed inset-0 z-[250] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-fade-in" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">卡片詳情</div>
                 <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-indigo-600"><Edit2 className="w-5 h-5" /></button>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar bg-gray-50">
-                <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
+            <div className="flex-1 overflow-y-auto no-scrollbar bg-transparent">
+                <div className="bg-white/60 p-6 mb-2 text-center border-b border-gray-200/50 shadow-sm backdrop-blur-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
                         {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
                         <Image src={card.image} alt="卡片詳情" fill priority unoptimized className="object-cover" unoptimized={true}/>
@@ -1346,7 +1346,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                 </div>
             </div>
 
-            <div className="border-t bg-white p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] grid grid-cols-3 gap-3 z-20">
+            <div className="border-t border-gray-200/50 bg-white/80 backdrop-blur-md p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] grid grid-cols-3 gap-3 z-20">
                 <button 
                     onClick={toggleWishlist}
                     className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all active:scale-95 ${card.isWishlist ? 'bg-pink-50 text-pink-600 ring-1 ring-pink-200' : 'hover:bg-gray-50 text-gray-600'}`}
@@ -2507,8 +2507,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     if (filterType === 'all' || filterType === 'income') {
                         items.push({
                             id: `misc_${record.id}_${idx}`, _virtualId: `misc_${record.id}_${idx}`, _type: 'income',
-                            // 🌟 修正：移除 [雜物] 前綴，改由渲染時統一加上 [包裹]
-                            name: `${item.name} (${record.name})`, _displayPrice: totalSellPrice, _displayDate: item.sellDate,
+                            name: `[雜物] ${item.name} (${record.name})`, _displayPrice: totalSellPrice, _displayDate: item.sellDate,
                             note: `數量: ${qty}`, isMisc: true, originalRecord: record
                         });
                     }
@@ -2524,7 +2523,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
     return (
         <div className="bg-gray-50 min-h-screen pb-20">
-             <div className="bg-white border-b sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
+             <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
                  <div className="flex justify-center items-center relative">
                      <div className="relative">
                          <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm">
@@ -2993,8 +2992,8 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
     const priceKey = `${album.id}_${activeStatus}`;
 
     return (
-        <div className="fixed inset-0 z-[250] bg-white flex flex-col animate-fade-in" {...swipeHandlers}>
-            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0">
+        <div className="fixed inset-0 z-[250] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-fade-in" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">專輯詳情</div>
                 <div className="w-10"></div> {/* Placeholder */}
@@ -3345,8 +3344,8 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     const cancelPress = () => clearTimeout(pressTimer.current);
 
     return (
-        <div className="fixed inset-0 z-[200] bg-gray-50 flex flex-col animate-slide-up">
-            <div className="px-4 py-3 border-b flex justify-between items-center bg-white shadow-sm z-10 sticky top-0">
+        <div className="fixed inset-0 z-[200] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up">
+            <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/80 backdrop-blur-md shadow-sm z-10 sticky top-0">
                 <div className="font-bold text-lg text-gray-800">選擇卡片 (點擊+1，長按-1)</div>
                 <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-6 h-6 text-gray-500" /></button>
             </div>
@@ -3401,7 +3400,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                     {filteredCards.length === 0 && <div className="col-span-full py-10 text-center text-gray-400">沒有符合條件的卡片</div>}
                 </div>
             </div>
-            <div className="p-4 border-t bg-white sticky bottom-0 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+            <div className="p-4 border-t border-gray-200/50 bg-white/80 backdrop-blur-md sticky bottom-0 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
                 <div className="flex gap-2">
                     <button onClick={onClose} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
                     <button onClick={() => onConfirm(localItems)} className="flex-[2] py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認加入清單 ({localItems.length} 張)</button>
@@ -3734,8 +3733,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
     return (
-        <div className="fixed inset-0 z-[150] bg-gray-50 flex flex-col animate-slide-up" {...swipeHandlers}>
-            <div className="px-4 py-3 border-b flex items-center justify-between bg-white z-10 sticky top-0 shadow-sm">
+        <div className="fixed inset-0 z-[150] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0 shadow-sm">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
                 <div className="flex gap-1 items-center">
@@ -6329,7 +6328,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20 md:pb-0">
-      <nav className="bg-white shadow-sm sticky top-0 z-40 px-4">
+      <nav className="bg-white/70 backdrop-blur-lg border-b border-white/20 shadow-sm sticky top-0 z-40 px-4">
         <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="bg-indigo-600 p-2 rounded-lg">
