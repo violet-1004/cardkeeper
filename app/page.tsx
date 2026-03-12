@@ -2757,6 +2757,22 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
         }).sort((a, b) => new Date(a.date) - new Date(b.date));
     }, [albumInventory, series]);
 
+    // 🌟 確保專輯詳情頁面的資料與庫存同步 (當刪除庫存時，強制更新 viewingAlbum)
+    useEffect(() => {
+        if (viewingAlbum) {
+            const updated = albumList.find(a => a.id === viewingAlbum.id);
+            if (updated) {
+                setViewingAlbum(updated);
+            } else {
+                 // 若該專輯已無庫存，更新為空狀態以免報錯
+                 setViewingAlbum(prev => ({
+                     ...prev,
+                     stats: { '未拆': { count: 0, items: [] }, '空專': { count: 0, items: [] } }
+                 }));
+            }
+        }
+    }, [albumList, viewingAlbum]);
+
     const handleSellAlbum = async (albumId) => {
         const status = activeAlbumStatus[albumId] || '未拆'; // 🌟 取得當前狀態
         const priceKey = `${albumId}_${status}`;
@@ -2948,8 +2964,26 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
 
     const handleDeleteInventory = async (invId) => {
         if(!confirm("確定要刪除這筆紀錄嗎？")) return;
+        
+        // 🌟 找出要刪除的項目 (檢查是否屬於盤收)
+        const targetItem = allItems.find(i => i.id === invId);
+
         setInventory(prev => prev.filter(i => i.id !== invId));
         await supabase.from('ui_inventory').delete().eq('id', invId);
+
+        // 🌟 如果這筆資料來自盤收，同步移除盤收紀錄內的該項目
+        if (targetItem && targetItem.bulkRecordId && setBulkRecords) {
+            setBulkRecords(prev => prev.map(record => {
+                if (record.id === targetItem.bulkRecordId) {
+                    const newItems = (record.items || []).filter(item => item.id !== invId);
+                    // 背景同步更新資料庫
+                    supabase.from('bulk_records').update({ items: newItems }).eq('id', record.id).then();
+                    return { ...record, items: newItems };
+                }
+                return record;
+            }));
+        }
+
         setActiveModal(null);
         setTempInvData(null);
     };
@@ -3064,6 +3098,15 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                                 <div key={inv.id} onClick={() => { onClose(); onViewCard(card); }} className="cursor-pointer group active:scale-95 transition-transform">
                                     <div className="aspect-[2/3] bg-gray-100 rounded-lg border overflow-hidden relative shadow-sm">
                                         <Image src={card.image} alt={card.name} fill sizes="150px" className="object-cover" unoptimized={true} />
+                                        
+                                        {/* 🌟 專輯詳情頁：相關庫存刪除按鈕 */}
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteInventory(inv.id); }}
+                                            className="absolute top-1 right-1 p-1.5 bg-black/40 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+
                                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
                                             <div className="text-[10px] text-white font-bold truncate">{member?.name}</div>
                                             <div className="text-[9px] text-white/80 flex items-center gap-1">
@@ -3783,7 +3826,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
                 <div>
                     <div className="flex justify-between items-end mb-3 px-1">
-                        <div className="font-bold text-gray-800 text-sm">盤收內容清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
+                        <div className="font-bold text-gray-800 text-sm">小卡清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
                         <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
                     </div>
                     
@@ -3881,9 +3924,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
                                 <Disc className="w-4 h-4 text-purple-500"/>
-                                專輯內容
-                                <span className="text-gray-400 text-[10px] font-normal ml-1">(計入總金額扣除)</span>
-                            </div>
+                                專輯記錄
+                            </div>  
                             <button onClick={handleAddAlbum} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增專輯
                             </button>
@@ -3977,7 +4019,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
                                 <Tag className="w-4 h-4 text-orange-500"/>
                                 雜物記錄 
-                                <span className="text-gray-400 text-[10px] font-normal ml-1">(不影響卡片庫存，售出顯示於紀錄)</span>
                             </div>
                             <button onClick={handleAddMisc} className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors">
                                 <Plus className="w-3 h-3"/> 新增雜物
