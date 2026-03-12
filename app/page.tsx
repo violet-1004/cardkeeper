@@ -3512,7 +3512,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         if (totalVal === '' || totalVal === undefined) {
             return {
                 nextCards: currentCardItems.map(c => c.isManual ? c : { ...c, buyPrice: '' }),
-                nextMisc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' })
+                nextMisc: currentMiscItems.map(m => m.isManual ? m : { ...m, buyPrice: '' }),
+                nextAlbums: currentAlbumItems.map(a => a.isManual ? a : { ...a, buyPrice: '' })
             };
         }
         const total = Number(totalVal) || 0;
