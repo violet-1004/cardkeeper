@@ -3087,47 +3087,6 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                             </div>
                         ))}
                     </div>
-
-                    <h3 className="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3 px-1">相關庫存 <span className="text-gray-400 text-xs font-normal">({allItems.length})</span></h3>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                        {displayedItems.map(inv => {
-                            const card = (cards || []).find(c => c.id === inv.cardId);
-                            if (!card) return null;
-                            const member = (members || []).find(m => m.id === card.memberId);
-                            return (
-                                <div key={inv.id} onClick={() => { onClose(); onViewCard(card); }} className="cursor-pointer group active:scale-95 transition-transform">
-                                    <div className="aspect-[2/3] bg-gray-100 rounded-lg border overflow-hidden relative shadow-sm">
-                                        <Image src={card.image} alt={card.name} fill sizes="150px" className="object-cover" unoptimized={true} />
-                                        
-                                        {/* 🌟 專輯詳情頁：相關庫存刪除按鈕 */}
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteInventory(inv.id); }}
-                                            className="absolute top-1 right-1 p-1.5 bg-black/40 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors z-20"
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </button>
-
-                                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
-                                            <div className="text-[10px] text-white font-bold truncate">{member?.name}</div>
-                                            <div className="text-[9px] text-white/80 flex items-center gap-1">
-                                                <Disc className="w-2.5 h-2.5" /> {inv.albumStatus} x{inv.albumQuantity}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    {allItems.length > 6 && (
-                        <button 
-                            onClick={() => setIsExpanded(!isExpanded)}
-                            className="w-full py-2.5 mt-3 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 shadow-sm active:scale-[0.98]"
-                        >
-                            {isExpanded ? '收起列表' : `顯示全部 (${allItems.length})`}
-                            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                        </button>
-                    )}
-                    {allItems.length === 0 && <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">無相關庫存項目</div>}
                 </div>
             </div>
 
