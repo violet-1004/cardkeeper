@@ -1,5 +1,7 @@
 git add .
-git commit -m "0312 專輯詳情-8"
+git commit -m "0312 玻璃ui2"
 git push
 
 npx vercel --prod
+
+npm run dev

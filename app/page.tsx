@@ -9,7 +9,7 @@ import {
   X, Maximize2, Minimize2, Save, BookOpen, User, Settings, Filter, 
   ChevronRight, MoreHorizontal, Search, Edit2, Check, Users, Heart, ShoppingBag, FolderPlus,
   ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp, ArrowUpDown,
-  ChevronLeft, Folder, Package, Copy, Disc
+  ChevronLeft, Folder, Package, Copy, Disc, RefreshCw
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
@@ -954,21 +954,21 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
         { id: 'purple', class: 'bg-purple-500/80', display: 'bg-purple-500' },
     ];
 
-    const card = cards.find(c => c.id === initialCard.id) || initialCard;
+    const card = cards.find(c => String(c.id) === String(initialCard.id)) || initialCard;
 
-    const memberName = members.find(m => m.id === card.memberId)?.name;
-    const groupName = groups.find(g => g.id === card.groupId)?.name;
+    const memberName = members.find(m => String(m.id) === String(card.memberId))?.name;
+    const groupName = groups.find(g => String(g.id) === String(card.groupId))?.name;
     
-    const cardSeries = (series || []).find(s => s.id === card.seriesId);
+    const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
     const seriesName = cardSeries?.shortName || cardSeries?.name;
-    const cardBatch = (batches || []).find(b => b.id === card.batchId);
+    const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
     
     const effectiveType = card.type;
-    const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+    const typeObj = (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType);
     const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
     
     const effectiveChannelId = card.channel;
-    const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+    const channelObj = (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId);
     const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
     
     const batchNumber = cardBatch?.batchNumber;
@@ -1444,7 +1444,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     );
 }
 
-function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, sales, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols, subunits, setSubunits }) {
+function LibraryTab({ currentGroupId, members, series, batches, channels, types, cards, setViewingCard, inventory, sales, openModal, combinedTypes, combinedChannels, uniqueSeriesTypes, isSelectionMode, setIsSelectionMode, selectedItems, setSelectedItems, selectedBatches, setSelectedBatches, batchCategorizeTarget, setBatchCategorizeTarget, allCards, setGroups, setSeries, setBatches, setCards, cols, setCols, subunits, setSubunits }) {
   const [filterMemberId, setFilterMemberId] = useState('All');
   const [filterSubunit, setFilterSubunit] = useState('All'); 
   const [filterSeriesId, setFilterSeriesId] = useState('All');
@@ -1455,18 +1455,18 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   
   const [editingOption, setEditingOption] = useState(null);
 
-  const currentMembers = (members || []).filter(m => m.groupId === currentGroupId);
+  const currentMembers = (members || []).filter(m => String(m.groupId) === String(currentGroupId));
   
   // 🌟 升級版 uniqueSubunits：結合資料庫中的 subunits 與成員中遺留的 subunit 字串
   const uniqueSubunits = useMemo(() => {
-      const defined = (subunits || []).filter(s => s.groupId === currentGroupId);
+      const defined = (subunits || []).filter(s => String(s.groupId) === String(currentGroupId));
       const definedNames = new Set(defined.map(s => s.name));
       
       const used = [...new Set(currentMembers.map(m => m.subunit).filter(Boolean))];
       const missing = used.filter(name => !definedNames.has(name)).map(name => ({
           id: `temp_${name}`,
           name,
-          groupId: currentGroupId,
+          groupId: String(currentGroupId),
           sortOrder: 999
       }));
       
@@ -1502,14 +1502,19 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       setBatchCategorizeTarget({ type, value, name });
       
       // 🌟 升級：把撈出來的卡片加上專屬的 uid，轉換成新的物件陣列格式
-      const preSelectedItems = (allCards || [])
+      const itemsToSelect = (allCards || [])
         .filter(c => c.groupId === currentGroupId && c[type] === value)
         .map(c => ({
             uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
             cardId: c.id
         }));
       
-      setSelectedItems(preSelectedItems); // 🌟 改用新的大腦
+      // 🌟 升級：將新選中的項目加入現有選取列表，而不是覆蓋
+      setSelectedItems(prevItems => {
+          const existingCardIds = new Set(prevItems.map(item => item.cardId));
+          const itemsToAdd = itemsToSelect.filter(item => !existingCardIds.has(item.cardId));
+          return [...prevItems, ...itemsToAdd];
+      });
   };
 
   const handleOptionDoubleClick = (type, data) => {
@@ -1543,17 +1548,18 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   const displayMembers = currentMembers.filter(m => filterSubunit === 'All' || m.subunit === filterSubunit);
 
   const currentSeries = (series || []).filter(s => {
-      if (s.groupId !== currentGroupId) return false;
+      if (String(s.groupId) !== String(currentGroupId)) return false;
       if (filterSubunit !== 'All' && s.subunit !== filterSubunit) return false;
       if (filterSeriesType !== 'All' && s.type !== filterSeriesType) return false;
       return true;
   }).sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
   
   const currentBatches = (batches || []).filter(b => {
-      if (b.groupId !== currentGroupId) return false;
-      if (filterSeriesId !== 'All' && b.seriesId !== filterSeriesId) return false;
-      if (filterType !== 'All' && b.type !== filterType) return false;
-      if (filterChannel !== 'All' && b.channel !== filterChannel) return false;
+      if (String(b.groupId) !== String(currentGroupId)) return false;
+      if (filterSeriesId !== 'All' && String(b.seriesId) !== String(filterSeriesId)) return false;
+      // 🌟 修正：不再因為選擇子類或通路而隱藏批次 (因為批次本身可能沒有設定類型，導致被錯誤過濾)
+      // if (filterType !== 'All' && b.type !== filterType) return false;
+      // if (filterChannel !== 'All' && b.channel !== filterChannel) return false;
       return true;
   }).sort((a, b) => {
       const typeA = (types || []).find(t => t.id === a.type || t.name === a.type);
@@ -1575,22 +1581,22 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   });
   
   const filteredCards = (cards || []).filter(card => {
-    if (card.groupId !== currentGroupId) return false;
+    if (String(card.groupId) !== String(currentGroupId)) return false;
     
     if (filterSubunit !== 'All' && filterMemberId === 'All') {
-        const mem = currentMembers.find(m => m.id === card.memberId);
+        const mem = currentMembers.find(m => String(m.id) === String(card.memberId));
         if (!mem || mem.subunit !== filterSubunit) return false;
     }
     
-    if (filterMemberId !== 'All' && card.memberId !== filterMemberId) return false;
-    if (filterSeriesId !== 'All' && card.seriesId !== filterSeriesId) return false;
+    if (filterMemberId !== 'All' && String(card.memberId) !== String(filterMemberId)) return false;
+    if (filterSeriesId !== 'All' && String(card.seriesId) !== String(filterSeriesId)) return false;
     if (filterSeriesType !== 'All' && filterSeriesId === 'All') {
-        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+        const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
         if (!cardSeries || cardSeries.type !== filterSeriesType) return false;
     }
-    if (filterType !== 'All' && card.type !== filterType) return false;
-    if (filterChannel !== 'All' && card.channel !== filterChannel) return false;
-    if (filterBatchId !== 'All' && card.batchId !== filterBatchId) return false;
+    if (filterType !== 'All' && String(card.type) !== String(filterType)) return false;
+    if (filterChannel !== 'All' && String(card.channel) !== String(filterChannel)) return false;
+    if (filterBatchId !== 'All' && String(card.batchId) !== String(filterBatchId)) return false;
     
     return true;
   }).sort((cardA, cardB) => {
@@ -1600,54 +1606,36 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           return isNaN(n) ? defaultVal : n;
       };
 
-      const sA = (series || []).find(s => s.id === cardA.seriesId);
-      const sB = (series || []).find(s => s.id === cardB.seriesId);
+      // 1. 系列時間 (越舊越前)
+      const sA = (series || []).find(s => String(s.id) === String(cardA.seriesId));
+      const sB = (series || []).find(s => String(s.id) === String(cardB.seriesId));
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
       const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
       if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
-      const seriesIdA = safeString(cardA.seriesId);
-      const seriesIdB = safeString(cardB.seriesId);
-      if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
+      // 2. 子類排序 (數字越小排越前面)
+      const tA = (types || []).find(t => String(t.id) === String(cardA.type) || t.name === cardA.type);
+      const tB = (types || []).find(t => String(t.id) === String(cardB.type) || t.name === cardB.type);
+      const sortA_type = tA ? safeNum(tA.sortOrder, 999) : 999;
+      const sortB_type = tB ? safeNum(tB.sortOrder, 999) : 999;
+      if (sortA_type !== sortB_type) return sortA_type - sortB_type;
 
-      const bA = (batches || []).find(b => b.id === cardA.batchId);
-      const bB = (batches || []).find(b => b.id === cardB.batchId);
-      
-      if (bA && bB && bA.id !== bB.id) {
-          const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
-          const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
-          const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
-          const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
-          if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
-          
-          const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
-          const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
-          if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
-          
-          const nameA = safeString(bA.name);
-          const nameB = safeString(bB.name);
-          const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
-          if (nameCompare !== 0) return nameCompare;
-      } else if (bA && !bB) {
-          return -1; 
-      } else if (!bA && bB) {
-          return 1;
-      }
+      // 3. 批次時間 (越舊越前)
+      const bA = (batches || []).find(b => String(b.id) === String(cardA.batchId));
+      const bB = (batches || []).find(b => String(b.id) === String(cardB.batchId));
+      const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
+      const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+      if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
 
-      const batchIdA = safeString(cardA.batchId);
-      const batchIdB = safeString(cardB.batchId);
-      if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
+      // 4. 批次名稱
+      const nameA = safeString(bA?.name);
+      const nameB = safeString(bB?.name);
+      const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+      if (nameCompare !== 0) return nameCompare;
 
-      if (!bA && !bB) {
-          const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
-          const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
-          const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
-          const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
-          if (cSortA !== cSortB) return cSortA - cSortB;
-      }
-
-      const mA = (members || []).find(m => m.id === cardA.memberId);
-      const mB = (members || []).find(m => m.id === cardB.memberId);
+      // 5. 成員排序 (數字越小排越前面)
+      const mA = (members || []).find(m => String(m.id) === String(cardA.memberId));
+      const mB = (members || []).find(m => String(m.id) === String(cardB.memberId));
       const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
       const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
       if (mSortA !== mSortB) return mSortA - mSortB;
@@ -1826,7 +1814,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                        </select>
                     </div>
                      <button 
-                        onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedItems([]); }}
+                        onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedItems([]); setSelectedBatches([]); }}
                         className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-colors ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-white border hover:bg-gray-50'}`}
                      >
                         <CheckSquare className="w-3 h-3" /> 批量選取
@@ -1881,9 +1869,15 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                 <BatchItem 
                                     key={b.id} 
                                     batch={b}
-                                    isSelected={filterBatchId === b.id}
-                                    onClick={() => setFilterBatchId(filterBatchId === b.id ? 'All' : b.id)}
-                                    onLongPress={(b) => handleLongPress('batchId', b.id, b.name)}
+                                    isSelected={isSelectionMode ? (selectedBatches || []).includes(b.id) : filterBatchId === b.id}
+                                    onClick={() => {
+                                        if (isSelectionMode) {
+                                            setSelectedBatches(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id]);
+                                        } else {
+                                            setFilterBatchId(filterBatchId === b.id ? 'All' : b.id);
+                                        }
+                                    }}
+                                    onLongPress={(b) => { if (!isSelectionMode) handleLongPress('batchId', b.id, b.name); }}
                                     onDoubleClick={() => handleOptionDoubleClick('batch', b)}
                                 />
                             )) : (
@@ -1905,18 +1899,18 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const qty = inventoryMap[card.id] || 0;
                         const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
 
-                        const memberName = (members || []).find(m => m.id === card.memberId)?.name;
+                        const memberName = (members || []).find(m => String(m.id) === String(card.memberId))?.name;
                         // 🌟 補回名稱顯示邏輯
-                        const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                        const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                         const seriesName = cardSeries?.shortName || cardSeries?.name;
-                        const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                        const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
                         
                         const effectiveType = card.type;
-                        const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                        const typeObj = (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType);
                         const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                         
                         const effectiveChannelId = card.channel;
-                        const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                        const channelObj = (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId);
                         const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                         
                         const batchNumber = cardBatch?.batchNumber;
@@ -1992,14 +1986,16 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const [filterSeries, setFilterSeries] = useState('All');
   const [filterBatch, setFilterBatch] = useState('All');
 
-  const allOwnedCards = useMemo(() => cards || [], [cards]);
+  // 🌟 基底資料還原：直接使用完整的 cards，這樣才能顯示灰色未擁有的卡片！
+  const baseCards = cards || [];
 
-  // 🚀 效能升級：七大極速字典，徹底消滅迴圈卡頓！
+  // 🚀 效能升級：七大極速字典，全部強制轉字串，徹底消滅型別卡頓！
   const inventoryMap = useMemo(() => {
       const map = {};
       (inventory || []).forEach(inv => {
           if (!inv.sellPrice || inv.sellPrice <= 0) {
-              map[inv.cardId] = (map[inv.cardId] || 0) + Number(inv.quantity || 1);
+              const key = String(inv.cardId);
+              map[key] = (map[key] || 0) + Number(inv.quantity || 1);
           }
       });
       return map;
@@ -2007,89 +2003,96 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   const salesMap = useMemo(() => {
       const map = {};
-      (sales || []).forEach(s => { if (s.quantity > 0) map[s.cardId] = true; });
+      (sales || []).forEach(s => { if (s.quantity > 0) map[String(s.cardId)] = true; });
       return map;
   }, [sales]);
 
   const seriesMap = useMemo(() => {
       const map = {};
-      (series || []).forEach(s => map[s.id] = s);
+      (series || []).forEach(s => map[String(s.id)] = s);
       return map;
   }, [series]);
 
   const batchMap = useMemo(() => {
       const map = {};
-      (batches || []).forEach(b => map[b.id] = b);
+      (batches || []).forEach(b => map[String(b.id)] = b);
       return map;
   }, [batches]);
 
   const memberMap = useMemo(() => {
       const map = {};
-      (members || []).forEach(m => map[m.id] = m);
+      (members || []).forEach(m => map[String(m.id)] = m);
       return map;
   }, [members]);
 
   const typeMap = useMemo(() => {
       const map = {};
-      (types || []).forEach(t => { map[t.id] = t; map[t.name] = t; });
+      (types || []).forEach(t => { map[String(t.id)] = t; map[String(t.name)] = t; });
       return map;
   }, [types]);
 
   const channelMap = useMemo(() => {
       const map = {};
-      (channels || []).forEach(c => { map[c.id] = c; map[c.name] = c; });
+      (channels || []).forEach(c => { map[String(c.id)] = c; map[String(c.name)] = c; });
       return map;
   }, [channels]);
 
-  // 🌟 連動過濾器邏輯
+  // 🌟 修正分隊清單：從所有卡片的 Member 與 Series 推導出存在的分隊
   const availableSubunits = useMemo(() => {
-      const ids = new Set(allOwnedCards.map(c => c.memberId)); // 找出所有持有卡片的成員 ID
-      const usedNames = [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+      const usedNames = new Set();
+      baseCards.forEach(c => {
+          const m = memberMap[String(c.memberId)];
+          const s = seriesMap[String(c.seriesId)];
+          if (m && m.subunit) usedNames.add(m.subunit);
+          if (s && s.subunit) usedNames.add(s.subunit); // 同時抓取 Series 層級的分隊設定
+      });
       
-      // 🌟 排序邏輯：建立名稱到排序的對照表
       const subunitSortMap = new Map();
       (subunits || []).forEach(s => {
           const current = subunitSortMap.get(s.name);
-          // 如果有多個同名分隊（不同團體），取最小的 sortOrder（最優先）
           if (current === undefined || (s.sortOrder !== undefined && s.sortOrder < current)) {
               subunitSortMap.set(s.name, s.sortOrder ?? 999);
           }
       });
 
-      return usedNames.map(name => ({
+      return Array.from(usedNames).map(name => ({
           id: name,
           name: name,
           sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
       })).sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [allOwnedCards, members, subunits]);
+  }, [baseCards, memberMap, seriesMap, subunits]);
 
   useEffect(() => {
-      // 🌟 修正：availableSubunits 現在是物件陣列，檢查 id
-      const availableIds = availableSubunits.map(s => s.id);
-      if (availableIds.length > 0 && (filterSubunit === 'All' || !availableIds.includes(filterSubunit))) {
-          setFilterSubunit(availableIds[0]);
+      if (availableSubunits.length > 0) {
+          const availableIds = availableSubunits.map(s => s.id);
+          if (filterSubunit === 'All' || !availableIds.includes(filterSubunit)) {
+              setFilterSubunit(availableSubunits[0].id);
+          }
+      } else {
+          setFilterSubunit('All');
       }
   }, [availableSubunits, filterSubunit]);
 
   const subunitFilteredCards = useMemo(() => {
-      if (filterSubunit === 'All') return allOwnedCards;
-      return allOwnedCards.filter(c => {
-          const m = memberMap[c.memberId];
-          return m && m.subunit === filterSubunit;
+      if (filterSubunit === 'All') return baseCards;
+      return baseCards.filter(c => {
+          const m = memberMap[String(c.memberId)];
+          const s = seriesMap[String(c.seriesId)];
+          // 🌟 雙重判斷：如果 member 沒有資料(例如批次卡)，則看 series 是否屬於該分隊
+          return (m && m.subunit === filterSubunit) || (s && s.subunit === filterSubunit);
       });
-  }, [allOwnedCards, filterSubunit, memberMap]);
+  }, [baseCards, filterSubunit, memberMap, seriesMap]);
 
   const availableMembers = useMemo(() => {
-      const ids = new Set(subunitFilteredCards.map(c => c.memberId));
-      return (members || []).filter(m => ids.has(m.id));
+      const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
+      return (members || []).filter(m => ids.has(String(m.id)));
   }, [subunitFilteredCards, members]);
 
   const availableTypes = useMemo(() => {
-      const ids = new Set(subunitFilteredCards.map(c => c.type).filter(Boolean));
-      const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
-      // 🌟 修正：補回未定義在 types 列表中的自訂子類 (例如：卡包卡)
+      const ids = new Set(subunitFilteredCards.map(c => String(c.type)).filter(Boolean));
+      const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(String(t.name)));
       ids.forEach(id => {
-          if (!currentTypes.some(t => t.id === id || t.name === id)) {
+          if (!currentTypes.some(t => String(t.id) === id || String(t.name) === id)) {
               currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
           }
       });
@@ -2097,24 +2100,23 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   }, [subunitFilteredCards, types]);
 
   const availableChannels = useMemo(() => {
-      const ids = new Set(subunitFilteredCards.map(c => c.channel).filter(Boolean));
-      const currentChannels = (channels || []).filter(c => ids.has(c.id) || ids.has(c.name));
-      // 🌟 修正：補回未定義的自訂通路
+      const ids = new Set(subunitFilteredCards.map(c => String(c.channel)).filter(Boolean));
+      const currentChannels = (channels || []).filter(c => ids.has(String(c.id)) || ids.has(String(c.name)));
       ids.forEach(id => {
-          if (!currentChannels.some(c => c.id === id || c.name === id)) currentChannels.push({ id, name: id, shortName: '' });
+          if (!currentChannels.some(c => String(c.id) === id || String(c.name) === id)) currentChannels.push({ id, name: id, shortName: '' });
       });
       const freqMap = {};
-      subunitFilteredCards.forEach(c => { if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1; });
-      return currentChannels.sort((a, b) => (freqMap[b.id] || freqMap[b.name] || 0) - (freqMap[a.id] || freqMap[a.name] || 0));
+      subunitFilteredCards.forEach(c => { if (c.channel) freqMap[String(c.channel)] = (freqMap[String(c.channel)] || 0) + 1; });
+      return currentChannels.sort((a, b) => (freqMap[String(b.id)] || freqMap[String(b.name)] || 0) - (freqMap[String(a.id)] || freqMap[String(a.name)] || 0));
   }, [subunitFilteredCards, channels]);
   
   const availableSeriesTypes = useMemo(() => {
-      const ids = new Set(allOwnedCards.map(c => c.seriesId));
-      return [...new Set((series || []).filter(s => ids.has(s.id)).map(s => s.type).filter(Boolean))];
-  }, [allOwnedCards, series]);
+      const ids = new Set(baseCards.map(c => String(c.seriesId)));
+      return [...new Set((series || []).filter(s => ids.has(String(s.id))).map(s => s.type).filter(Boolean))];
+  }, [baseCards, series]);
   
   const availableSeriesList = useMemo(() => {
-      let filtered = (series || []).filter(s => allOwnedCards.some(c => c.seriesId === s.id));
+      let filtered = (series || []).filter(s => baseCards.some(c => String(c.seriesId) === String(s.id)));
       if (filterSubunit !== 'All') {
           filtered = filtered.filter(s => s.subunit === filterSubunit);
       }
@@ -2122,108 +2124,115 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
           filtered = filtered.filter(s => s.type === filterSeriesType);
       }
       return filtered;
-  }, [allOwnedCards, series, filterSeriesType, filterSubunit]);
+  }, [baseCards, series, filterSeriesType, filterSubunit]);
 
   const availableBatchesList = useMemo(() => {
-      let filtered = (batches || []).filter(b => allOwnedCards.some(c => c.batchId === b.id));
+      let filtered = (batches || []).filter(b => baseCards.some(c => String(c.batchId) === String(b.id)));
       if (filterSubunit !== 'All') {
-          const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => s.id));
-          filtered = filtered.filter(b => validSeriesIds.has(b.seriesId));
+          const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => String(s.id)));
+          filtered = filtered.filter(b => validSeriesIds.has(String(b.seriesId)));
       }
       if (filterSeries !== 'All') {
-          filtered = filtered.filter(b => b.seriesId === filterSeries);
+          filtered = filtered.filter(b => String(b.seriesId) === String(filterSeries));
       }
       return filtered;
-  }, [allOwnedCards, batches, filterSeries, filterSubunit, series]);
+  }, [baseCards, batches, filterSeries, filterSubunit, series]);
+
+  useEffect(() => {
+      if (filterSeries !== 'All') {
+          const s = seriesMap[String(filterSeries)];
+          if (s && filterSeriesType !== 'All' && s.type !== filterSeriesType) {
+              setFilterSeries('All');
+          }
+      }
+      if (filterBatch !== 'All') {
+          const b = batchMap[String(filterBatch)];
+          if (b) {
+              if (filterSeries !== 'All' && String(b.seriesId) !== String(filterSeries)) {
+                  setFilterBatch('All');
+              }
+              const s = seriesMap[String(b.seriesId)];
+              if (s && filterSeriesType !== 'All' && s.type !== filterSeriesType) {
+                  setFilterBatch('All');
+              }
+          }
+      }
+  }, [filterSeries, filterSeriesType, filterBatch, seriesMap, batchMap]);
 
   const getSeriesSummary = () => {
       const parts = [];
       if (filterSeriesType !== 'All') parts.push(filterSeriesType);
-      if (filterSeries !== 'All') parts.push(seriesMap[filterSeries]?.name);
-      if (filterBatch !== 'All') parts.push(batchMap[filterBatch]?.name);
+      if (filterSeries !== 'All') parts.push(seriesMap[String(filterSeries)]?.name);
+      if (filterBatch !== 'All') parts.push(batchMap[String(filterBatch)]?.name);
       
       return parts.length > 0 ? parts.join(' · ') : '全部系列';
   };
 
   const cardsInScope = useMemo(() => {
-    return allOwnedCards.filter(card => {
-         const effectiveType = card.type;
-         const effectiveChannel = card.channel;
-         
-         if (filterSubunit !== 'All') {
-             const mem = memberMap[card.memberId];
-             if (!mem || mem.subunit !== filterSubunit) return false;
+    return baseCards.filter(card => {
+         // 🌟 修正批次卡篩選：檢查卡片的 memberId 或是 seriesId 所屬分隊
+         if (filterSubunit !== 'All' && filterMember === 'All') {
+             const mem = memberMap[String(card.memberId)];
+             const ser = seriesMap[String(card.seriesId)];
+             const belongsToSubunit = (mem && mem.subunit === filterSubunit) || (ser && ser.subunit === filterSubunit);
+             if (!belongsToSubunit) return false;
          }
 
-         if (filterMember !== 'All' && card.memberId !== filterMember) return false;
-         if (filterType !== 'All' && effectiveType !== filterType) return false;
-         if (filterChannel !== 'All' && effectiveChannel !== filterChannel) return false;
+         if (filterMember !== 'All' && String(card.memberId) !== String(filterMember)) return false;
+         if (filterSeries !== 'All' && String(card.seriesId) !== String(filterSeries)) return false;
          
-         if (filterSeriesType !== 'All') {
-            const s = seriesMap[card.seriesId];
+         if (filterSeriesType !== 'All' && filterSeries === 'All') {
+            const s = seriesMap[String(card.seriesId)];
             if (!s || s.type !== filterSeriesType) return false;
          }
-         if (filterSeries !== 'All' && card.seriesId !== filterSeries) return false;
-         if (filterBatch !== 'All' && card.batchId !== filterBatch) return false;
+
+         if (filterType !== 'All' && String(card.type) !== String(filterType)) return false;
+         if (filterChannel !== 'All' && String(card.channel) !== String(filterChannel)) return false;
+         if (filterBatch !== 'All' && String(card.batchId) !== String(filterBatch)) return false;
          
          return true;
     });
-  }, [allOwnedCards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, seriesMap, batchMap, memberMap, filterSubunit]);
+  }, [baseCards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, memberMap, seriesMap, filterSubunit]);
 
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
-     if (viewMode === 'selling' && !salesMap[card.id]) return false;
-     if (viewMode === 'owned' && (inventoryMap[card.id] || 0) <= 0) return false;
+     if (viewMode === 'selling' && !salesMap[String(card.id)]) return false;
+     if (viewMode === 'owned' && (inventoryMap[String(card.id)] || 0) <= 0) return false;
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
       const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
-      const sA = seriesMap[cardA.seriesId];
-      const sB = seriesMap[cardB.seriesId];
+      // 1. 系列時間 (越舊越前)
+      const sA = seriesMap[String(cardA.seriesId)];
+      const sB = seriesMap[String(cardB.seriesId)];
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
       const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
       if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
-      const seriesIdA = safeString(cardA.seriesId);
-      const seriesIdB = safeString(cardB.seriesId);
-      if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
+      // 2. 子類排序 (數字越小排越前面)
+      const tA = typeMap[String(cardA.type)];
+      const tB = typeMap[String(cardB.type)];
+      const sortA_type = tA ? safeNum(tA.sortOrder, 999) : 999;
+      const sortB_type = tB ? safeNum(tB.sortOrder, 999) : 999;
+      if (sortA_type !== sortB_type) return sortA_type - sortB_type;
 
-      const bA = batchMap[cardA.batchId];
-      const bB = batchMap[cardB.batchId];
-      
-      if (bA && bB && bA.id !== bB.id) {
-          const typeA = typeMap[bA.type];
-          const typeB = typeMap[bB.type];
-          const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
-          const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
-          if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
-          
-          const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
-          const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
-          if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
-          
-          const nameA = safeString(bA.name);
-          const nameB = safeString(bB.name);
-          const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
-          if (nameCompare !== 0) return nameCompare;
-      } else if (bA && !bB) return -1;
-      else if (!bA && bB) return 1;
+      // 3. 批次時間 (越舊越前)
+      const bA = batchMap[String(cardA.batchId)];
+      const bB = batchMap[String(cardB.batchId)];
+      const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
+      const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+      if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
 
-      const batchIdA = safeString(cardA.batchId);
-      const batchIdB = safeString(cardB.batchId);
-      if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
+      // 4. 批次名稱
+      const nameA = safeString(bA?.name);
+      const nameB = safeString(bB?.name);
+      const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+      if (nameCompare !== 0) return nameCompare;
 
-      if (!bA && !bB) {
-          const cTypeA = typeMap[cardA.type];
-          const cTypeB = typeMap[cardB.type];
-          const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
-          const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
-          if (cSortA !== cSortB) return cSortA - cSortB;
-      }
-
-      const mA = memberMap[cardA.memberId];
-      const mB = memberMap[cardB.memberId];
+      // 5. 成員排序 (數字越小排越前面)
+      const mA = memberMap[String(cardA.memberId)];
+      const mB = memberMap[String(cardB.memberId)];
       const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
       const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
       if (mSortA !== mSortB) return mSortA - mSortB;
@@ -2232,7 +2241,8 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   });
   
   const totalCount = filteredCards.length;
-  const ownedCount = filteredCards.filter(c => (inventoryMap[c.id] || 0) > 0).length;
+  // 🌟 只計算「目前已擁有」的數量，不受 viewMode 影響
+  const ownedCount = filteredCards.filter(c => (inventoryMap[String(c.id)] || 0) > 0).length;
   const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
   const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
@@ -2242,7 +2252,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
             {(options || []).map(opt => {
                 const id = typeof opt === 'object' ? opt.id : opt;
                 const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
-                const isSelected = current === id;
+                const isSelected = String(current) === String(id);
                 return (
                     <FilterTagItem 
                         key={id}
@@ -2300,10 +2310,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} mapName={s => s.name} />}
-            {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
-            {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
-            {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
+            <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />
+            <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />
+            <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />
+            <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />
             <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
@@ -2316,28 +2326,41 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
         <SeriesFilterModal 
             visible={showSeriesModal} onClose={() => setShowSeriesModal(false)}
-            seriesTypes={availableSeriesTypes} selectedSeriesType={filterSeriesType} setSeriesType={setFilterSeriesType}
-            series={availableSeriesList} selectedSeries={filterSeries} setSeries={setFilterSeries}
+            seriesTypes={availableSeriesTypes} 
+            selectedSeriesType={filterSeriesType} 
+            setSeriesType={(val) => {
+                setFilterSeriesType(val);
+                if (val === 'All') {
+                    setFilterSeries('All');
+                    setFilterBatch('All');
+                }
+            }}
+            series={availableSeriesList} 
+            selectedSeries={filterSeries} 
+            setSeries={(val) => {
+                setFilterSeries(val);
+                if (val === 'All') setFilterBatch('All');
+            }}
             batches={availableBatchesList} selectedBatch={filterBatch} setBatch={setFilterBatch}
         />
 
         <div className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
             {filteredCards.map(card => {
-                const qty = inventoryMap[card.id] || 0;
+                const qty = inventoryMap[String(card.id)] || 0;
                 const isOwned = qty > 0;
-                const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
+                const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && s.quantity > 0);
                 
-                const memberName = memberMap[card.memberId]?.name;
-                const cardSeries = seriesMap[card.seriesId];
+                const memberName = memberMap[String(card.memberId)]?.name;
+                const cardSeries = seriesMap[String(card.seriesId)];
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
-                const cardBatch = batchMap[card.batchId];
+                const cardBatch = batchMap[String(card.batchId)];
                 
                 const effectiveType = card.type;
-                const typeObj = typeMap[effectiveType];
+                const typeObj = typeMap[String(effectiveType)];
                 const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                 
                 const effectiveChannelId = card.channel;
-                const channelObj = channelMap[effectiveChannelId];
+                const channelObj = channelMap[String(effectiveChannelId)];
                 const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                 
                 const batchNumber = cardBatch?.batchNumber;
@@ -2395,33 +2418,34 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     
     const [itemToDelete, setItemToDelete] = useState(null);
     
+    // 🌟 同樣全面套用 String() 防禦機制
     const cardMap = useMemo(() => {
         const map = {};
-        (cards || []).forEach(c => map[c.id] = c);
+        (cards || []).forEach(c => map[String(c.id)] = c);
         return map;
     }, [cards]);
 
     const seriesMap = useMemo(() => {
         const map = {};
-        (series || []).forEach(s => map[s.id] = s);
+        (series || []).forEach(s => map[String(s.id)] = s);
         return map;
     }, [series]);
 
     const batchMap = useMemo(() => {
         const map = {};
-        (batches || []).forEach(b => map[b.id] = b);
+        (batches || []).forEach(b => map[String(b.id)] = b);
         return map;
     }, [batches]);
 
     const typeMap = useMemo(() => {
         const map = {};
-        (types || []).forEach(t => { map[t.id] = t; map[t.name] = t; });
+        (types || []).forEach(t => { map[String(t.id)] = t; map[String(t.name)] = t; });
         return map;
     }, [types]);
 
     const channelMap = useMemo(() => {
         const map = {};
-        (channels || []).forEach(c => { map[c.id] = c; map[c.name] = c; });
+        (channels || []).forEach(c => { map[String(c.id)] = c; map[String(c.name)] = c; });
         return map;
     }, [channels]);
 
@@ -2577,14 +2601,14 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
              <div className="px-4 space-y-3">
                 {displayItems.map(item => {
-                    const card = cardMap[item.cardId];
+                    const card = cardMap[String(item.cardId)];
                     const isIncome = item._type === 'income';
                     const dateObj = new Date(item._displayDate);
                     
-                    const cardSeries = card ? seriesMap[card.seriesId] : null;
-                    const cardBatch = card ? batchMap[card.batchId] : null;
-                    const typeObj = card?.type ? typeMap[card.type] : null;
-                    const channelObj = card?.channel ? channelMap[card.channel] : null;
+                    const cardSeries = card ? seriesMap[String(card.seriesId)] : null;
+                    const cardBatch = card ? batchMap[String(card.batchId)] : null;
+                    const typeObj = card?.type ? typeMap[String(card.type)] : null;
+                    const channelObj = card?.channel ? channelMap[String(card.channel)] : null;
                     
                     const displayTitle = card ? [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ') : '';
                     // 🌟 修正：如果是雜物，也顯示為 [包裹] 品名，與盤收標頭一致 (同時修復雜物顯示為"未命名卡片"的問題)
@@ -2664,7 +2688,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     );
 }
 
-function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series, setInventory, setSales, members, onViewCard, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource }) {
+function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series, setInventory, setSales, members, onViewCard, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource, onSyncData }) {
     const [viewMode, setViewMode] = useState('bulk'); // 'bulk' | 'album'
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
@@ -2817,7 +2841,14 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                 </div>
                 <div className="flex justify-between items-center">
                     <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />{viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
-                    {viewMode === 'bulk' && <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>}
+                    {viewMode === 'bulk' && (
+                        <div className="flex gap-2">
+                            <button onClick={onSyncData} className="bg-white text-indigo-600 border border-indigo-100 px-3 py-2 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 transition-all flex items-center gap-1">
+                                <RefreshCw className="w-3.5 h-3.5" /> 同步資料
+                            </button>
+                            <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>
+                        </div>
+                    )}
                 </div>
             </div>
             
@@ -3120,6 +3151,10 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
 function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, subunits }) {
     const [localItems, setLocalItems] = useState([...(selectedItems || [])]);
 
+    const [cols, setCols] = useState(typeof window !== 'undefined' && window.innerWidth < 768 ? 4 : 8);
+    const [showDetails, setShowDetails] = useState(true);
+    const [viewMode, setViewMode] = useState('all');
+
     const [filterSubunit, setFilterSubunit] = useState('All');
     const [filterMember, setFilterMember] = useState('All');
     const [filterSeriesType, setFilterSeriesType] = useState('All');
@@ -3129,11 +3164,47 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     const [filterChannel, setFilterChannel] = useState('All');
     const [showSeriesModal, setShowSeriesModal] = useState(false);
 
+    // 🌟 1. 建立高效能字典 (與 CollectionTab 一致)
+    const seriesMap = useMemo(() => {
+        const map = {};
+        (series || []).forEach(s => map[String(s.id)] = s);
+        return map;
+    }, [series]);
+
+    const batchMap = useMemo(() => {
+        const map = {};
+        (batches || []).forEach(b => map[String(b.id)] = b);
+        return map;
+    }, [batches]);
+
+    const memberMap = useMemo(() => {
+        const map = {};
+        (members || []).forEach(m => map[String(m.id)] = m);
+        return map;
+    }, [members]);
+
+    const typeMap = useMemo(() => {
+        const map = {};
+        (types || []).forEach(t => { map[String(t.id)] = t; map[String(t.name)] = t; });
+        return map;
+    }, [types]);
+
+    const channelMap = useMemo(() => {
+        const map = {};
+        (channels || []).forEach(c => { map[String(c.id)] = c; map[String(c.name)] = c; });
+        return map;
+    }, [channels]);
+
+    // 🌟 2. 分隊篩選邏輯 (支援系列分隊判斷)
     const availableSubunits = useMemo(() => {
-        const ids = new Set((cards || []).map(c => c.memberId));
-        const usedNames = [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+        const usedNames = new Set();
+        (cards || []).forEach(c => {
+            const m = memberMap[String(c.memberId)];
+            const s = seriesMap[String(c.seriesId)];
+            if (m && m.subunit) usedNames.add(m.subunit);
+            if (s && s.subunit) usedNames.add(s.subunit);
+        });
         
-        // 🌟 排序邏輯
         const subunitSortMap = new Map();
         (subunits || []).forEach(s => {
             const current = subunitSortMap.get(s.name);
@@ -3142,63 +3213,65 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             }
         });
 
-        return usedNames.map(name => ({
+        return Array.from(usedNames).map(name => ({
             id: name,
             name: name,
             sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
         })).sort((a, b) => a.sortOrder - b.sortOrder);
-    }, [cards, members, subunits]);
+    }, [cards, memberMap, seriesMap, subunits]);
 
     useEffect(() => {
-        const availableIds = availableSubunits.map(s => s.id);
-        if (availableIds.length > 0 && (filterSubunit === 'All' || !availableIds.includes(filterSubunit))) {
-            setFilterSubunit(availableIds[0]);
+        if (availableSubunits.length > 0) {
+            const availableIds = availableSubunits.map(s => s.id);
+            if (filterSubunit === 'All' || !availableIds.includes(filterSubunit)) {
+                setFilterSubunit(availableSubunits[0].id);
+            }
+        } else {
+            setFilterSubunit('All');
         }
     }, [availableSubunits, filterSubunit]);
 
+    const subunitFilteredCards = useMemo(() => {
+        if (filterSubunit === 'All') return cards || [];
+        return (cards || []).filter(c => {
+            const m = memberMap[String(c.memberId)];
+            const s = seriesMap[String(c.seriesId)];
+            return (m && m.subunit === filterSubunit) || (s && s.subunit === filterSubunit);
+        });
+    }, [cards, filterSubunit, memberMap, seriesMap]);
+
     const availableMembers = useMemo(() => {
-        let currentCards = cards || [];
-        if (filterSubunit !== 'All') {
-            currentCards = currentCards.filter(c => {
-                const m = (members || []).find(mem => mem.id === c.memberId);
-                return m && m.subunit === filterSubunit;
-            });
-        }
-        const ids = new Set(currentCards.map(c => c.memberId));
-        return (members || []).filter(m => ids.has(m.id));
-    }, [cards, members, filterSubunit]);
+        const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
+        return (members || []).filter(m => ids.has(String(m.id)));
+    }, [subunitFilteredCards, members]);
 
     const availableTypes = useMemo(() => {
-        const ids = new Set((cards || []).map(c => c.type).filter(Boolean));
+        const ids = new Set(subunitFilteredCards.map(c => String(c.type)).filter(Boolean));
         const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
         ids.forEach(id => {
             if (!currentTypes.some(t => t.id === id || t.name === id)) currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
         });
         return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
-    }, [cards, types]);
+    }, [subunitFilteredCards, types]);
 
     const availableChannels = useMemo(() => {
-        const ids = new Set((cards || []).map(c => c.channel).filter(Boolean));
+        const ids = new Set(subunitFilteredCards.map(c => String(c.channel)).filter(Boolean));
         const currentChannels = (channels || []).filter(c => ids.has(c.id) || ids.has(c.name));
         ids.forEach(id => {
             if (!currentChannels.some(c => c.id === id || c.name === id)) currentChannels.push({ id, name: id, shortName: '' });
         });
         const freqMap = {};
-        (cards || []).forEach(c => { if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1; });
-        return currentChannels.sort((a, b) => {
-            const freqA = freqMap[a.id] || freqMap[a.name] || 0;
-            const freqB = freqMap[b.id] || freqMap[b.name] || 0;
-            return freqB - freqA;
-        });
-    }, [cards, channels]);
+        subunitFilteredCards.forEach(c => { if (c.channel) freqMap[String(c.channel)] = (freqMap[String(c.channel)] || 0) + 1; });
+        return currentChannels.sort((a, b) => (freqMap[String(b.id)] || freqMap[String(b.name)] || 0) - (freqMap[String(a.id)] || freqMap[String(a.name)] || 0));
+    }, [subunitFilteredCards, channels]);
     
     const availableSeriesTypes = useMemo(() => {
-        const ids = new Set((cards || []).map(c => c.seriesId));
-        return [...new Set((series || []).filter(s => ids.has(s.id)).map(s => s.type).filter(Boolean))];
+        const ids = new Set((cards || []).map(c => String(c.seriesId)));
+        return [...new Set((series || []).filter(s => ids.has(String(s.id))).map(s => s.type).filter(Boolean))];
     }, [cards, series]);
     
     const availableSeriesList = useMemo(() => {
-        let filtered = (series || []).filter(s => (cards || []).some(c => c.seriesId === s.id));
+        let filtered = (series || []).filter(s => (cards || []).some(c => String(c.seriesId) === String(s.id)));
         if (filterSubunit !== 'All') {
             filtered = filtered.filter(s => s.subunit === filterSubunit);
         }
@@ -3207,88 +3280,114 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     }, [cards, series, filterSeriesType, filterSubunit]);
 
     const availableBatchesList = useMemo(() => {
-        let filtered = (batches || []).filter(b => (cards || []).some(c => c.batchId === b.id));
+        let filtered = (batches || []).filter(b => (cards || []).some(c => String(c.batchId) === String(b.id)));
         if (filterSubunit !== 'All') {
-             const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => s.id));
-             filtered = filtered.filter(b => validSeriesIds.has(b.seriesId));
+             const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => String(s.id)));
+             filtered = filtered.filter(b => validSeriesIds.has(String(b.seriesId)));
         }
-        if (filterSeries !== 'All') filtered = filtered.filter(b => b.seriesId === filterSeries);
+        if (filterSeries !== 'All') filtered = filtered.filter(b => String(b.seriesId) === String(filterSeries));
         return filtered;
     }, [cards, batches, filterSeries, filterSubunit, series]);
+
+    // 🌟 3. 連動篩選重置邏輯 (與 CollectionTab 一致)
+    useEffect(() => {
+        if (filterSeries !== 'All') {
+            const s = seriesMap[String(filterSeries)];
+            if (s && filterSeriesType !== 'All' && s.type !== filterSeriesType) {
+                setFilterSeries('All');
+            }
+        }
+        if (filterBatch !== 'All') {
+            const b = batchMap[String(filterBatch)];
+            if (b) {
+                if (filterSeries !== 'All' && String(b.seriesId) !== String(filterSeries)) {
+                    setFilterBatch('All');
+                }
+                const s = seriesMap[String(b.seriesId)];
+                if (s && filterSeriesType !== 'All' && s.type !== filterSeriesType) {
+                    setFilterBatch('All');
+                }
+            }
+        }
+    }, [filterSeries, filterSeriesType, filterBatch, seriesMap, batchMap]);
 
     const getSeriesSummary = () => {
         const parts = [];
         if (filterSeriesType !== 'All') parts.push(filterSeriesType);
-        if (filterSeries !== 'All') parts.push((series || []).find(s => s.id === filterSeries)?.name);
-        if (filterBatch !== 'All') parts.push((batches || []).find(b => b.id === filterBatch)?.name);
+        if (filterSeries !== 'All') parts.push(seriesMap[String(filterSeries)]?.name);
+        if (filterBatch !== 'All') parts.push(batchMap[String(filterBatch)]?.name);
         return parts.length > 0 ? parts.join(' · ') : '全部系列';
     };
 
     const filteredCards = useMemo(() => {
         return (cards || []).filter(card => {
-             const effectiveType = card.type;
-             const effectiveChannel = card.channel;
-             if (filterSubunit !== 'All') {
-                 const mem = (members || []).find(m => m.id === card.memberId);
-                 if (!mem || mem.subunit !== filterSubunit) return false;
+             if (viewMode === 'selected') {
+                 const isSelected = localItems.some(i => String(i.cardId) === String(card.id));
+                 if (!isSelected) return false;
              }
-             if (filterMember !== 'All' && card.memberId !== filterMember) return false;
-             if (filterType !== 'All' && effectiveType !== filterType) return false;
-             if (filterChannel !== 'All' && effectiveChannel !== filterChannel) return false;
+
+             // 🌟 修正：採用與 CollectionTab 完全相同的篩選判斷
+             if (filterSubunit !== 'All' && filterMember === 'All') {
+                 const mem = memberMap[String(card.memberId)];
+                 const ser = seriesMap[String(card.seriesId)];
+                 const belongsToSubunit = (mem && mem.subunit === filterSubunit) || (ser && ser.subunit === filterSubunit);
+                 if (!belongsToSubunit) return false;
+             }
+
+             if (filterMember !== 'All' && String(card.memberId) !== String(filterMember)) return false;
+             if (filterSeries !== 'All' && String(card.seriesId) !== String(filterSeries)) return false;
              
-             if (filterSeriesType !== 'All') {
-                const s = (series || []).find(ser => ser.id === card.seriesId);
+             if (filterSeriesType !== 'All' && filterSeries === 'All') {
+                const s = seriesMap[String(card.seriesId)];
                 if (!s || s.type !== filterSeriesType) return false;
              }
-             if (filterSeries !== 'All' && card.seriesId !== filterSeries) return false;
-             if (filterBatch !== 'All' && card.batchId !== filterBatch) return false;
+
+             if (filterType !== 'All' && String(card.type) !== String(filterType)) return false;
+             if (filterChannel !== 'All' && String(card.channel) !== String(filterChannel)) return false;
+             if (filterBatch !== 'All' && String(card.batchId) !== String(filterBatch)) return false;
+             
              return true;
         }).sort((cardA, cardB) => {
             const safeString = (val) => val ? String(val) : '';
             const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
-            const sA = (series || []).find(s => s.id === cardA.seriesId);
-            const sB = (series || []).find(s => s.id === cardB.seriesId);
+
+            // 1. 系列時間 (越舊越前)
+            const sA = seriesMap[String(cardA.seriesId)];
+            const sB = seriesMap[String(cardB.seriesId)];
             const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
             const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
             if (dateA_series !== dateB_series) return dateA_series - dateB_series;
-            const seriesIdA = safeString(cardA.seriesId);
-            const seriesIdB = safeString(cardB.seriesId);
-            if (seriesIdA !== seriesIdB) return seriesIdA.localeCompare(seriesIdB);
-            const bA = (batches || []).find(b => b.id === cardA.batchId);
-            const bB = (batches || []).find(b => b.id === cardB.batchId);
-            if (bA && bB && bA.id !== bB.id) {
-                const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
-                const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
-                const sortOrderA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
-                const sortOrderB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
-                if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
-                const dateA_batch = bA.date ? new Date(bA.date).getTime() : 253402214400000;
-                const dateB_batch = bB.date ? new Date(bB.date).getTime() : 253402214400000;
-                if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
-                const nameA = safeString(bA.name);
-                const nameB = safeString(bB.name);
-                const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
-                if (nameCompare !== 0) return nameCompare;
-            } else if (bA && !bB) return -1; 
-            else if (!bA && bB) return 1;
-            const batchIdA = safeString(cardA.batchId);
-            const batchIdB = safeString(cardB.batchId);
-            if (batchIdA !== batchIdB) return batchIdA.localeCompare(batchIdB);
-            if (!bA && !bB) {
-                const cTypeA = (types || []).find(t => t.id === cardA.type || t.name === cardA.type);
-                const cTypeB = (types || []).find(t => t.id === cardB.type || t.name === cardB.type);
-                const cSortA = cTypeA ? safeNum(cTypeA.sortOrder, 999) : 999;
-                const cSortB = cTypeB ? safeNum(cTypeB.sortOrder, 999) : 999;
-                if (cSortA !== cSortB) return cSortA - cSortB;
-            }
-            const mA = (members || []).find(m => m.id === cardA.memberId);
-            const mB = (members || []).find(m => m.id === cardB.memberId);
+
+            // 2. 子類排序 (數字越小排越前面)
+            const tA = typeMap[String(cardA.type)];
+            const tB = typeMap[String(cardB.type)];
+            const sortA_type = tA ? safeNum(tA.sortOrder, 999) : 999;
+            const sortB_type = tB ? safeNum(tB.sortOrder, 999) : 999;
+            if (sortA_type !== sortB_type) return sortA_type - sortB_type;
+
+            // 3. 批次時間 (越舊越前)
+            const bA = batchMap[String(cardA.batchId)];
+            const bB = batchMap[String(cardB.batchId)];
+            const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
+            const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+            if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+
+            // 4. 批次名稱
+            const nameA = safeString(bA?.name);
+            const nameB = safeString(bB?.name);
+            const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+            if (nameCompare !== 0) return nameCompare;
+
+            // 5. 成員排序 (數字越小排越前面)
+            const mA = memberMap[String(cardA.memberId)];
+            const mB = memberMap[String(cardB.memberId)];
             const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
             const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
             if (mSortA !== mSortB) return mSortA - mSortB;
+
             return safeString(cardA.id).localeCompare(safeString(cardB.id));
         });
-    }, [cards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, series, batches, types, members, filterSubunit]);
+    }, [cards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, memberMap, seriesMap, batchMap, typeMap, filterSubunit, viewMode, localItems]);
     
     const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
         <div className="flex items-center gap-3 overflow-hidden">
@@ -3330,7 +3429,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             setLocalItems(prev => {
                 let lastIdx = -1;
                 for (let i = prev.length - 1; i >= 0; i--) {
-                    if (prev[i].cardId === cardId) { lastIdx = i; break; }
+                    if (String(prev[i].cardId) === String(cardId)) { lastIdx = i; break; }
                 }
                 if (lastIdx !== -1) {
                     const next = [...prev];
@@ -3345,13 +3444,42 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
 
     return (
         <div className="fixed inset-0 z-[200] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up">
-            <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/80 backdrop-blur-md shadow-sm z-10 sticky top-0">
-                <div className="font-bold text-lg text-gray-800">選擇卡片 (點擊+1，長按-1)</div>
-                <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-6 h-6 text-gray-500" /></button>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex flex-col gap-3 bg-white/80 backdrop-blur-md shadow-sm z-10 sticky top-0">
+                <div className="flex justify-between items-center">
+                    <div className="font-bold text-lg text-gray-800">選擇卡片 <span className="text-xs font-normal text-gray-500">(點擊+1，長按-1)</span></div>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-6 h-6 text-gray-500" /></button>
+                </div>
+                
+                <div className="flex items-center justify-between gap-2">
+                     <div className="flex items-center gap-2">
+                         <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0">
+                           <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
+                           <select 
+                              value={cols}
+                              onChange={(e) => setCols(Number(e.target.value))}
+                              className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
+                           >
+                              {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                           </select>
+                        </div>
+
+                        <button
+                            onClick={() => setShowDetails(!showDetails)}
+                            className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                        >
+                            {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
+                    </div>
+                    
+                    <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center">
+                        <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
+                        <button onClick={() => setViewMode('selected')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'selected' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}>已選 ({localItems.length})</button>
+                    </div>
+                </div>
             </div>
 
             <div className="bg-white p-4 border-b border-gray-100 shadow-sm space-y-4 flex-shrink-0">
-                {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { if (val !== 'All') { setFilterSubunit(val); setFilterMember('All'); } }} mapName={s => s.name} />}
+                {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />}
                 {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
                 {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
                 {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
@@ -3366,10 +3494,28 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-4">
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-3 pb-20">
+                <div 
+                    className="grid gap-2 sm:gap-3 pb-20"
+                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                >
                     {filteredCards.map(card => {
-                        const count = localItems.filter(i => i.cardId === card.id).length;
+                        const count = localItems.filter(i => String(i.cardId) === String(card.id)).length;
                         const isSelected = count > 0;
+
+                        const memberName = memberMap[String(card.memberId)]?.name;
+                        const cardSeries = seriesMap[String(card.seriesId)];
+                        const seriesName = cardSeries?.shortName || cardSeries?.name;
+                        const cardBatch = batchMap[String(card.batchId)];
+                        const effectiveType = card.type;
+                        const typeObj = typeMap[String(effectiveType)];
+                        const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                        const effectiveChannelId = card.channel;
+                        const channelObj = channelMap[String(effectiveChannelId)];
+                        const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                        const batchNumber = cardBatch?.batchNumber;
+                        const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                        const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+
                         return (
                             <div key={card.id} 
                                 className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
@@ -3394,6 +3540,13 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                         {count}
                                     </div>
                                 )}
+                                {showDetails && (
+                                    <div className="px-0.5 sm:px-1 bg-white pt-1 pb-1">
+                                        <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
+                                        <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
+                                        {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                                    </div>
+                                )}
                             </div>
                         )
                     })}
@@ -3407,7 +3560,19 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                 </div>
             </div>
 
-            <SeriesFilterModal visible={showSeriesModal} onClose={() => setShowSeriesModal(false)} seriesTypes={availableSeriesTypes} selectedSeriesType={filterSeriesType} setSeriesType={setFilterSeriesType} series={availableSeriesList} selectedSeries={filterSeries} setSeries={setFilterSeries} batches={availableBatchesList} selectedBatch={filterBatch} setBatch={setFilterBatch} />
+            <SeriesFilterModal 
+                visible={showSeriesModal} onClose={() => setShowSeriesModal(false)} 
+                seriesTypes={availableSeriesTypes} 
+                selectedSeriesType={filterSeriesType} 
+                setSeriesType={(val) => {
+                    setFilterSeriesType(val);
+                    if (val === 'All') { setFilterSeries('All'); setFilterBatch('All'); }
+                }}
+                series={availableSeriesList} 
+                selectedSeries={filterSeries} 
+                setSeries={(val) => { setFilterSeries(val); if (val === 'All') setFilterBatch('All'); }}
+                batches={availableBatchesList} selectedBatch={filterBatch} setBatch={setFilterBatch} 
+            />
         </div>
     );
 }
@@ -3792,12 +3957,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     
                     <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar px-1 pb-4">
                         {cardItems.map((item, idx) => {
-                            const card = (cards || []).find(c => c.id === item.cardId);
+                            const card = (cards || []).find(c => String(c.id) === String(item.cardId));
                             if (!card) return null;
-                            const cardSeries = (series || []).find(s => s.id === card.seriesId);
-                            const cardBatch = (batches || []).find(b => b.id === card.batchId);
-                            const typeObj = (types || []).find(t => t.id === card.type || t.name === card.type);
-                            const channelObj = (channels || []).find(c => c.id === card.channel || c.name === card.channel);
+                            const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
+                            const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
+                            const typeObj = (types || []).find(t => String(t.id) === String(card.type) || t.name === card.type);
+                            const channelObj = (channels || []).find(c => String(c.id) === String(card.channel) || c.name === card.channel);
                             const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
 
                             return (
@@ -4576,12 +4741,12 @@ function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, 
 
                 <div className="space-y-3 max-h-[45vh] overflow-y-auto no-scrollbar px-1 pb-4">
                     {cardItems.map((item, idx) => {
-                        const card = (cards || []).find(c => c.id === item.cardId);
+                        const card = (cards || []).find(c => String(c.id) === String(item.cardId));
                         if (!card) return null;
-                        const cardSeries = (series || []).find(s => s.id === card.seriesId);
-                        const cardBatch = (batches || []).find(b => b.id === card.batchId);
-                        const typeObj = (types || []).find(t => t.id === card.type || t.name === card.type);
-                        const channelObj = (channels || []).find(c => c.id === card.channel || c.name === card.channel);
+                        const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
+                        const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
+                        const typeObj = (types || []).find(t => String(t.id) === String(card.type) || t.name === card.type);
+                        const channelObj = (channels || []).find(c => String(c.id) === String(card.channel) || c.name === card.channel);
                         const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
 
                         return (
@@ -4743,7 +4908,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
         if (activeView === 'selling') return (cards || []).filter(c => salesMap[c.id]);
         if (typeof activeView === 'object' && activeView.items) {
-            return activeView.items.map(item => (cards || []).find(c => c.id === item.cardId)).filter(Boolean);
+            return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
         return [];
     }, [activeView, cards, inventoryMap, salesMap]);
@@ -4752,8 +4917,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     // 3. 連動過濾器邏輯
     // ==========================================
     const availableSubunits = useMemo(() => {
-        const ids = new Set(poolCards.map(c => c.memberId));
-        const usedNames = [...new Set((members || []).filter(m => ids.has(m.id)).map(m => m.subunit).filter(Boolean))];
+        const ids = new Set(poolCards.map(c => String(c.memberId)));
+        const usedNames = [...new Set((members || []).filter(m => ids.has(String(m.id))).map(m => m.subunit).filter(Boolean))];
         
         // 🌟 排序邏輯
         const subunitSortMap = new Map();
@@ -4774,22 +4939,22 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const subunitFilteredCards = useMemo(() => {
         if (filterSubunits.length === 0) return poolCards;
         return poolCards.filter(c => {
-            const m = (members || []).find(mem => mem.id === c.memberId);
+            const m = (members || []).find(mem => String(mem.id) === String(c.memberId));
             return m && filterSubunits.includes(m.subunit);
         });
     }, [poolCards, filterSubunits, members]);
 
     const availableMembers = useMemo(() => {
-        const ids = new Set(subunitFilteredCards.map(c => c.memberId));
-        return (members || []).filter(m => ids.has(m.id));
+        const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
+        return (members || []).filter(m => ids.has(String(m.id)));
     }, [subunitFilteredCards, members]);
 
     const availableTypes = useMemo(() => {
-        const ids = new Set(subunitFilteredCards.map(c => c.type).filter(Boolean));
-        const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
+        const ids = new Set(subunitFilteredCards.map(c => String(c.type)).filter(t => t !== 'null' && t !== 'undefined' && t !== ''));
+        const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(t.name));
         // 🌟 修正：補回未定義在 types 列表中的自訂子類
         ids.forEach(id => {
-            if (!currentTypes.some(t => t.id === id || t.name === id)) {
+            if (!currentTypes.some(t => String(t.id) === id || t.name === id)) {
                 currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
             }
         });
@@ -4844,8 +5009,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     // ==========================================
     const getDisplayCards = () => {
         const filtered = subunitFilteredCards.filter(c => {
-            if (filterMembers.length > 0 && !filterMembers.includes(c.memberId)) return false;
-            if (filterTypes.length > 0 && !filterTypes.includes(c.type)) return false;
+            if (filterMembers.length > 0 && !filterMembers.some(id => String(id) === String(c.memberId))) return false;
+            if (filterTypes.length > 0 && !filterTypes.some(id => String(id) === String(c.type))) return false;
             
             if (activeView === 'selling' && filterColors.length > 0) {
                  const saleRecord = salesMap[c.id];
@@ -4859,7 +5024,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 return { ...c, note: `$${saleRecord?.price || 0}`, noteColor: saleRecord?.color || 'bg-black/70' };
             }
             if (typeof activeView === 'object' && activeView.items) {
-                const item = activeView.items.find(i => i.cardId === c.id);
+                const item = activeView.items.find(i => String(i.cardId) === String(c.id));
                 return { ...c, note: item?.note };
             }
             return c;
@@ -5260,14 +5425,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const CardGrid = ({ displayCards }) => (
         <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
             {displayCards.map((card, idx) => {
-                const cardSeries = (series || []).find(s => s.id === card.seriesId);
+                const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
-                const cardBatch = (batches || []).find(b => b.id === card.batchId);
+                const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
                 const effectiveType = card.type;
-                const typeObj = (types || []).find(t => t.id === effectiveType || t.name === effectiveType);
+                const typeObj = (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType);
                 const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                 const effectiveChannelId = card.channel;
-                const channelObj = (channels || []).find(c => c.id === effectiveChannelId || c.name === effectiveChannelId);
+                const channelObj = (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId);
                 const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                 const batchNumber = cardBatch?.batchNumber;
                 const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
@@ -5336,9 +5501,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             )}
                         </div>
                         {showDetails && (
-                          <div className="text-center px-0.5 pb-1 h-full flex flex-col justify-start">
-                              <div className="text-[10px] font-bold text-gray-800 leading-snug line-clamp-2 break-all" title={displayTitle || '未命名卡片'}>{displayTitle || '未命名卡片'}</div>
-                              {cardBatch?.name && <div className="text-[8px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                          <div className="px-0.5 sm:px-1">
+                              <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
+                              {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                           </div>
                         )}
                     </div>
@@ -5411,10 +5576,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   </div>
 
                   <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
-                      {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />}
-                      {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />}
-                      {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />}
-                      {availableColors.length > 0 && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />} 
+                      <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />
+                      <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
+                      <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
+                      {activeView === 'selling' && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
                       <div className="flex items-center gap-3 pt-2 border-t mt-2">
                           <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">匯出範圍</span>
                           <div className="flex items-center gap-2">
@@ -5580,6 +5745,7 @@ export default function App() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   // 🌟 升級版：支援重複卡片的選取狀態 (存陣列物件)
     const [selectedItems, setSelectedItems] = useState([]);
+    const [selectedBatches, setSelectedBatches] = useState([]);
     const pressTimer = useRef(null);
     const hasLongPressed = useRef(false);
 
@@ -5608,6 +5774,11 @@ export default function App() {
     };
     const cancelPress = () => clearTimeout(pressTimer.current);
   const [batchCategorizeTarget, setBatchCategorizeTarget] = useState(null); 
+  const [categorizeSubBatchId, setCategorizeSubBatchId] = useState('');
+
+  useEffect(() => {
+      setCategorizeSubBatchId('');
+  }, [batchCategorizeTarget]);
 
   // 🌟 新增：主頁左右滑動切換分頁
   const touchStartX = useRef(0);
@@ -5638,6 +5809,7 @@ export default function App() {
                   setActiveTab(tabs[currentIndex + 1]);
                   setIsSelectionMode(false);
                   setSelectedItems([]);
+                  setSelectedBatches([]);
                   setBatchCategorizeTarget(null);
               }
           } else { // 右滑 (手指左->右) -> 上一頁
@@ -5645,6 +5817,7 @@ export default function App() {
                   setActiveTab(tabs[currentIndex - 1]);
                   setIsSelectionMode(false);
                   setSelectedItems([]);
+                  setSelectedBatches([]);
                   setBatchCategorizeTarget(null);
               }
           }
@@ -5711,13 +5884,40 @@ export default function App() {
 
   const currentGroup = (groups || []).find(g => g.id === currentGroupId);
 
+  // 🌟 核心過濾：根據當前團體 ID 篩選所有資料 (資料隔離的關鍵)
+  const currentMembers = useMemo(() => (members || []).filter(m => String(m.groupId) === String(currentGroupId)).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)), [members, currentGroupId]);
+  const currentSeries = useMemo(() => (series || []).filter(s => String(s.groupId) === String(currentGroupId)), [series, currentGroupId]);
+  const currentBatches = useMemo(() => (batches || []).filter(b => String(b.groupId) === String(currentGroupId)), [batches, currentGroupId]);
+  const currentChannels = useMemo(() => (channels || []), [channels]);
+  const currentTypes = useMemo(() => (types || []), [types]);
+  const currentSubunits = useMemo(() => (subunits || []).filter(s => String(s.groupId) === String(currentGroupId)), [subunits, currentGroupId]);
+  const currentCards = useMemo(() => (cards || []).filter(c => String(c.groupId) === String(currentGroupId)), [cards, currentGroupId]);
+  const currentBulkRecords = useMemo(() => (bulkRecords || []).filter(r => String(r.groupId) === String(currentGroupId)), [bulkRecords, currentGroupId]);
+
+  const currentInventory = useMemo(() => {
+      const cardIds = new Set(currentCards.map(c => c.id));
+      const bulkIds = new Set(currentBulkRecords.map(r => r.id));
+      const albumIds = new Set(currentSeries.filter(s => s.type === '專輯').map(s => s.id));
+
+      return (inventory || []).filter(inv => {
+          if (inv.cardId && cardIds.has(inv.cardId)) return true;
+          if (inv.bulkRecordId && bulkIds.has(inv.bulkRecordId)) return true;
+          if (inv.albumId && albumIds.has(inv.albumId)) return true;
+          return false;
+      });
+  }, [inventory, currentCards, currentBulkRecords, currentSeries]);
+
+  const currentSales = useMemo(() => {
+      const cardIds = new Set(currentCards.map(c => c.id));
+      return (sales || []).filter(s => cardIds.has(s.cardId));
+  }, [sales, currentCards]);
+
   // 🌟 強化版：子類 (Type) 依照你設定的 sortOrder 排序
   // 🌟 1. 強化版：子類 (Type) 依照你設定的 sortOrder 排序
   const combinedTypes = useMemo(() => {
-      const currentTypes = (types || []).filter(t => t.groupId === currentGroupId);
       const dynamicTypeIds = new Set([
-          ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.type),
-          ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.type)
+          ...currentCards.map(c => c.type),
+          ...currentBatches.map(b => b.type)
       ].filter(Boolean));
       
       const combined = [...currentTypes];
@@ -5728,22 +5928,21 @@ export default function App() {
       });
       // 依照 sortOrder 數字大小排序
       return combined.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
-  }, [types, cards, batches, currentGroupId]);
+  }, [currentTypes, currentCards, currentBatches]);
 
   // 🌟 2. 恢復不小心被刪掉的 uniqueTypes
   const uniqueTypes = useMemo(() => 
     [...new Set([
-        ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.type),
-        ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.type)
+        ...currentCards.map(c => c.type),
+        ...currentBatches.map(b => b.type)
     ].filter(Boolean))], 
-  [cards, batches, currentGroupId]);
+  [currentCards, currentBatches]);
 
   // 🌟 3. 強化版：通路 (Channel) 依照「使用頻率 (卡片數量)」由多到少排序
   const combinedChannels = useMemo(() => {
-      const currentChannels = (channels || []).filter(c => c.groupId === currentGroupId);
       const dynamicChannelIds = new Set([
-          ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.channel),
-          ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.channel)
+          ...currentCards.map(c => c.channel),
+          ...currentBatches.map(b => b.channel)
       ].filter(Boolean));
       
       const combined = [...currentChannels];
@@ -5755,7 +5954,7 @@ export default function App() {
 
       // 計算各通路的使用頻率
       const freqMap = {};
-      (cards || []).filter(c => c.groupId === currentGroupId).forEach(c => {
+      currentCards.forEach(c => {
           if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1;
       });
 
@@ -5765,19 +5964,19 @@ export default function App() {
           const freqB = freqMap[b.id] || freqMap[b.name] || 0;
           return freqB - freqA;
       });
-  }, [channels, cards, batches, currentGroupId]);
+  }, [currentChannels, currentCards, currentBatches]);
 
   // 🌟 4. 恢復不小心被刪掉的 uniqueChannels
   const uniqueChannels = useMemo(() => 
     [...new Set([
-        ...(cards || []).filter(c => c.groupId === currentGroupId).map(c => c.channel),
-        ...(batches || []).filter(b => b.groupId === currentGroupId).map(b => b.channel)
+        ...currentCards.map(c => c.channel),
+        ...currentBatches.map(b => b.channel)
     ].filter(Boolean))], 
-  [cards, batches, currentGroupId]);
+  [currentCards, currentBatches]);
 
   const uniqueSeriesTypes = useMemo(() =>
-    [...new Set((series || []).filter(s => s.groupId === currentGroupId).map(s => s.type).filter(Boolean))],
-  [series, currentGroupId]);
+    [...new Set(currentSeries.map(s => s.type).filter(Boolean))],
+  [currentSeries]);
 
   const openModal = (type, data = {}) => setModalState({ type, data });
   const closeModal = () => setModalState({ type: null, data: null });
@@ -5962,6 +6161,25 @@ export default function App() {
           // 🌟 排序
           setSubunits(prev => { const next = prev.filter(s => s.id !== payload.id); return [...next, payload].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999)); });
       }
+      
+      if (type === 'batch' && isEdit) {
+          const updatedCards = cards.map(c => {
+              if (c.batchId === payload.id) {
+                  return { ...c, seriesId: payload.seriesId !== undefined ? payload.seriesId : c.seriesId, channel: payload.channel !== undefined ? payload.channel : c.channel, type: payload.type !== undefined ? payload.type : c.type };
+              }
+              return c;
+          });
+          setCards(updatedCards);
+          
+          const cardPayload = {};
+          if (payload.seriesId !== undefined) cardPayload.series_id = payload.seriesId;
+          if (payload.channel !== undefined) cardPayload.channel = payload.channel;
+          if (payload.type !== undefined) cardPayload.type = payload.type;
+          
+          if (Object.keys(cardPayload).length > 0) {
+              supabase.from('ui_cards').update(cardPayload).eq('batch_id', payload.id).then();
+          }
+      }
 
       const dbPayload = toSnakeCase(cleanData(payload));
       const { error } = await supabase.from(table).upsert(dbPayload);
@@ -6024,6 +6242,30 @@ export default function App() {
       await supabase.from(tableMap[type]).delete().eq('id', id);
   };
 
+  // 🌟 資料同步功能 (Crawler)
+  const fetchCardData = async () => {
+    if (!confirm('確定要執行資料同步嗎？這將會呼叫後端爬蟲 API。')) return;
+
+    try {
+        // 呼叫自己的 Vercel 伺服器，由伺服器代為抓取，徹底避開 CORS 限制
+        const response = await fetch('/api/crawler?planets=cravity');
+        
+        if (!response.ok) {
+            throw new Error('伺服器代理請求失敗');
+        }
+
+        const data = await response.json();
+        console.log("成功抓取到資料：", data);
+        alert(`成功抓取到 ${Array.isArray(data) ? data.length : 0} 筆資料，詳細內容請查看 Console`);
+        
+        // 取得資料後，您可以在此處撰寫整理資料並寫入 Supabase 的邏輯
+        
+    } catch (error) {
+        console.error("抓取失敗：", error);
+        alert("抓取失敗，請檢查 Console");
+    }
+  };
+
   // 🌟 批量入庫
   const handleBulkOwn = async (items) => {
       // 確保每一筆資料都有獨立的 ID 與預設數量 1
@@ -6059,48 +6301,97 @@ export default function App() {
       
       // 🌟 轉換：從 selectedItems 提取出所有不重複的 cardId
       const uniqueSelectedCardIds = [...new Set(selectedItems.map(item => item.cardId))];
+      const uniqueSelectedBatchIds = [...new Set(selectedBatches || [])];
       
-      const cardsToUpdate = [];
-      const updatedCards = (cards || []).map(c => {
-          // 🌟 這裡改用 uniqueSelectedCardIds 來判斷
+      const cardsToUpdateDb = [];
+      const batchesToUpdateDb = [];
+      
+      let nextCards = [...(cards || [])];
+      let nextBatches = [...(batches || [])];
+
+      // 1. 若歸類目標為「系列」，且有選取「批次」，則先將這些批次移動至該系列
+      if (type === 'seriesId' && uniqueSelectedBatchIds.length > 0) {
+          nextBatches = nextBatches.map(b => {
+              if (uniqueSelectedBatchIds.includes(b.id)) {
+                  const newBatch = { ...b, seriesId: value };
+                  batchesToUpdateDb.push(newBatch);
+                  return newBatch;
+              }
+              return b;
+          });
+          
+          nextCards = nextCards.map(c => {
+              if (uniqueSelectedBatchIds.includes(c.batchId) && c.seriesId !== value) {
+                  const newCard = { ...c, seriesId: value };
+                  cardsToUpdateDb.push(newCard);
+                  return newCard;
+              }
+              return c;
+          });
+      }
+
+      // 2. 處理選取的「卡片」
+      nextCards = nextCards.map(c => {
           const isSelected = uniqueSelectedCardIds.includes(c.id);
-          const wasInBatch = c[type] === value;
+          const wasInBatch = c[type] === value && (!categorizeSubBatchId || c.batchId === categorizeSubBatchId);
           
           if (isSelected && !wasInBatch) {
               const newCard = { ...c, [type]: value };
-              if (type === 'batchId' && value) {
-                  const targetBatch = batches.find(b => b.id === value);
+              if (type === 'seriesId' && categorizeSubBatchId) {
+                  newCard.batchId = categorizeSubBatchId;
+                  const targetBatch = nextBatches.find(b => b.id === categorizeSubBatchId);
+                  if (targetBatch) {
+                      if (targetBatch.channel) newCard.channel = targetBatch.channel;
+                      if (targetBatch.type) newCard.type = targetBatch.type;
+                  }
+              } else if (type === 'batchId' && value) {
+                  const targetBatch = nextBatches.find(b => b.id === value);
                   if (targetBatch) {
                       if (targetBatch.seriesId) newCard.seriesId = targetBatch.seriesId;
                       if (targetBatch.channel) newCard.channel = targetBatch.channel;
                       if (targetBatch.type) newCard.type = targetBatch.type;
                   }
               }
-              cardsToUpdate.push(newCard);
+              const existingIdx = cardsToUpdateDb.findIndex(cu => cu.id === newCard.id);
+              if (existingIdx !== -1) cardsToUpdateDb[existingIdx] = newCard;
+              else cardsToUpdateDb.push(newCard);
               return newCard;
           } else if (!isSelected && wasInBatch) {
               const newCard = { ...c, [type]: '' };
-              cardsToUpdate.push(newCard);
+              if (type === 'seriesId' && categorizeSubBatchId) {
+                  newCard.batchId = '';
+              }
+              const existingIdx = cardsToUpdateDb.findIndex(cu => cu.id === newCard.id);
+              if (existingIdx !== -1) cardsToUpdateDb[existingIdx] = newCard;
+              else cardsToUpdateDb.push(newCard);
               return newCard;
           }
           return c;
       });
       
-      setCards(updatedCards);
+      setCards(nextCards);
+      setBatches(nextBatches);
       
-      for(const c of cardsToUpdate) {
-          const payload = { [type]: c[type] };
-          if (type === 'batchId' && c[type]) {
-              if (c.seriesId) payload.seriesId = c.seriesId;
-              if (c.channel) payload.channel = c.channel;
-              if (c.type) payload.type = c.type;
-          }
-          await supabase.from('ui_cards').update(toSnakeCase(payload)).eq('id', c.id);
+      // 3. 寫入資料庫
+      for(const b of batchesToUpdateDb) {
+          await supabase.from('batches').update({ series_id: b.seriesId }).eq('id', b.id);
+      }
+      
+      for(const c of cardsToUpdateDb) {
+          const payload = {
+              series_id: c.seriesId || null,
+              batch_id: c.batchId || null,
+              channel: c.channel || null,
+              type: c.type || null
+          };
+          await supabase.from('ui_cards').update(payload).eq('id', c.id);
       }
 
       // 🌟 改為清空 selectedItems
       setSelectedItems([]);
+      setSelectedBatches([]);
       setBatchCategorizeTarget(null);
+      setCategorizeSubBatchId('');
       setIsSelectionMode(false);
       alert("歸類更新完成！");
   };
@@ -6210,16 +6501,16 @@ export default function App() {
     switch(activeTab) {
       case 'library': 
         return <LibraryTab 
-          cards={cards} 
+          cards={currentCards} 
           currentGroupId={currentGroupId}
-          members={members} setMembers={setMembers}
-          series={series} 
-          batches={batches}
-          channels={channels}
-          types={types}
+          members={currentMembers} setMembers={setMembers}
+          series={currentSeries} 
+          batches={currentBatches}
+          channels={currentChannels}
+          types={currentTypes}
           setViewingCard={setViewingCard}
-          inventory={inventory}
-          sales={sales}
+          inventory={currentInventory}
+          sales={currentSales}
           openModal={openModal}
           uniqueTypes={uniqueTypes}
           combinedTypes={combinedTypes}
@@ -6230,57 +6521,60 @@ export default function App() {
           setIsSelectionMode={setIsSelectionMode}
           selectedItems={selectedItems}
           setSelectedItems={setSelectedItems}
+          selectedBatches={selectedBatches}
+          setSelectedBatches={setSelectedBatches}
           batchCategorizeTarget={batchCategorizeTarget}
           setBatchCategorizeTarget={setBatchCategorizeTarget}
           
-          allCards={cards}
+          allCards={currentCards}
           setGroups={setGroups}
           setSeries={setSeries}
           setBatches={setBatches}
           setCards={setCards}
           cols={libraryCols}           // 🌟 修正：對應 libraryCols
           setCols={setLibraryCols}     // 🌟 修正：對應 setLibraryCols
-          subunits={subunits}          // 🌟 傳入 subunits
+          subunits={currentSubunits}   // 🌟 傳入 subunits
           setSubunits={setSubunits}    // 🌟 傳入 setSubunits
         />;
       case 'collection': 
         return <CollectionTab 
-          cards={cards} inventory={inventory} setViewingCard={setViewingCard} 
-          members={members} series={series} batches={batches} channels={channels} 
-          types={types} sales={sales} 
+          cards={currentCards} inventory={currentInventory} setViewingCard={setViewingCard} 
+          members={currentMembers} series={currentSeries} batches={currentBatches} channels={currentChannels} 
+          types={currentTypes} sales={currentSales} 
           cols={collectionCols}       // 🌟 致命錯誤修正：把 cols 換成 collectionCols
           setCols={setCollectionCols} // 🌟 致命錯誤修正：把 setCols 換成 setCollectionCols
-          subunits={subunits}         // 🌟 傳入 subunits
+          subunits={currentSubunits}  // 🌟 傳入 subunits
         />;
       case 'bulk':
         return <BulkTab 
-            cards={cards}
-            records={(bulkRecords || []).filter(r => r.groupId === currentGroupId)} 
-            allRecords={bulkRecords}
+            cards={currentCards}
+            records={currentBulkRecords} 
+            allRecords={currentBulkRecords}
             onAdd={() => setEditingBulkRecord('new')} 
             onEdit={(record) => setEditingBulkRecord(record)} 
-            inventory={inventory}
-            series={series}
+            inventory={currentInventory}
+            series={currentSeries}
             setInventory={setInventory}
             setSales={setSales}
-            members={members}
+            members={currentMembers}
             onViewCard={setViewingCard}
-            bulkRecords={bulkRecords}
+            bulkRecords={currentBulkRecords}
             setBulkRecords={setBulkRecords}
             uniqueSources={uniqueSources}
             onRenameSource={handleRenameSource}
             onDeleteSource={handleDeleteSource}
+            onSyncData={fetchCardData}
         />;
         case 'inventory': 
         return <InventoryTab 
-            cards={cards} 
-            inventory={inventory} 
+            cards={currentCards} 
+            inventory={currentInventory} 
             setViewingCard={setViewingCard} 
-            series={series} 
-            bulkRecords={bulkRecords} 
-            batches={batches} 
-            channels={channels} 
-            types={types} 
+            series={currentSeries} 
+            bulkRecords={currentBulkRecords} 
+            batches={currentBatches} 
+            channels={currentChannels} 
+            types={currentTypes} 
             onEditBulkRecord={(record) => setEditingBulkRecord(record)} 
             onDeleteInventory={async (id) => {
                 const targetItem = inventory.find(i => i.id === id);
@@ -6352,6 +6646,7 @@ export default function App() {
                       setActiveTab(tab.id);
                       setIsSelectionMode(false);
                       setSelectedItems([]);
+                      setSelectedBatches([]);
                       setBatchCategorizeTarget(null);
                   }}
                   className={`px-3 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
@@ -6437,12 +6732,12 @@ export default function App() {
               onClose={() => setEditingBulkRecord(null)}
               onSave={handleSaveBulkRecord}
               onDelete={handleDeleteBulkRecord}
-              cards={(cards || []).filter(c => c.groupId === currentGroupId)}
-              members={(members || []).filter(m => m.groupId === currentGroupId)}
-              series={(series || []).filter(s => s.groupId === currentGroupId)}
-              batches={(batches || []).filter(b => b.groupId === currentGroupId)}
-              channels={(channels || []).filter(c => c.groupId === currentGroupId)}
-              types={(types || []).filter(t => t.groupId === currentGroupId)}
+              cards={currentCards}
+              members={currentMembers}
+              series={currentSeries}
+              batches={currentBatches}
+              channels={currentChannels}
+              types={currentTypes}
               uniqueTypes={uniqueTypes}
               uniqueChannels={uniqueChannels}
               uniqueSeriesTypes={uniqueSeriesTypes}
@@ -6461,13 +6756,13 @@ export default function App() {
           type={modalState.type}
           initialData={{ groupId: currentGroupId, ...modalState.data }}
           extraOptions={{ 
-            members: (members || []).filter(m => m.groupId === currentGroupId && (
+            members: (members || []).filter(m => String(m.groupId) === String(currentGroupId) && (
                 !modalState.data?._filterSubunit || modalState.data._filterSubunit === 'All' || m.subunit === modalState.data._filterSubunit
             )),
-            series: (series || []).filter(s => s.groupId === currentGroupId && (
+            series: (series || []).filter(s => String(s.groupId) === String(currentGroupId) && (
                 !modalState.data?._filterSubunit || modalState.data._filterSubunit === 'All' || s.subunit === modalState.data._filterSubunit
             )),
-            batches: (batches || []).filter(b => b.groupId === currentGroupId),
+            batches: (batches || []).filter(b => String(b.groupId) === String(currentGroupId)),
             channels: combinedChannels,
             types: combinedTypes,
             seriesTypes: uniqueSeriesTypes
@@ -6543,15 +6838,32 @@ export default function App() {
 
       {isSelectionMode && (
           <div className="fixed bottom-0 inset-x-0 bg-white border-t p-4 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-between animate-slide-up">
-              <div className="font-bold text-gray-700">
+              <div className="font-bold text-gray-700 flex flex-col sm:flex-row sm:items-center gap-2">
                   {batchCategorizeTarget ? (
-                      <span className="text-indigo-600">管理「{batchCategorizeTarget.name}」的卡片</span>
+                      <div className="flex items-center gap-2">
+                          <span className="text-indigo-600">歸類至「{batchCategorizeTarget.name}」</span>
+                          <span className="text-[10px] text-gray-500 font-normal bg-gray-100 px-1.5 py-0.5 rounded">
+                              已選 {selectedItems.length} 卡{selectedBatches?.length > 0 ? `, ${selectedBatches.length} 批次` : ''}
+                          </span>
+                          {batchCategorizeTarget.type === 'seriesId' && (
+                              <select 
+                                  className="text-xs border border-gray-300 rounded p-1 outline-none text-gray-600 font-normal"
+                                  value={categorizeSubBatchId}
+                                  onChange={(e) => setCategorizeSubBatchId(e.target.value)}
+                              >
+                                  <option value="">(不指定批次)</option>
+                                  {(batches || []).filter(b => String(b.seriesId) === String(batchCategorizeTarget.value)).map(b => (
+                                      <option key={b.id} value={b.id}>{b.name}</option>
+                                  ))}
+                              </select>
+                          )}
+                      </div>
                   ) : (
-                      <span>已選 {selectedItems.length} 張</span>
+                      <span>已選 {selectedItems.length} 張卡片{selectedBatches?.length > 0 ? `, ${selectedBatches.length} 批次` : ''}</span>
                   )}
               </div>
               <div className="flex gap-3">
-                  <button onClick={() => { setIsSelectionMode(false); setSelectedItems([]); setBatchCategorizeTarget(null); }} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 font-bold">取消</button>
+                  <button onClick={() => { setIsSelectionMode(false); setSelectedItems([]); setSelectedBatches([]); setBatchCategorizeTarget(null); }} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 font-bold">取消</button>
                   {batchCategorizeTarget ? (
                       <button 
                         onClick={handleBatchCategorize} 
@@ -6573,6 +6885,7 @@ export default function App() {
                                 }
                                 setIsSelectionMode(false);
                                 setSelectedItems([]);
+                                setSelectedBatches([]);
                                 alert("已更新想要狀態");
                             }}
                             disabled={selectedItems.length === 0}
@@ -6615,6 +6928,7 @@ export default function App() {
                               setActiveModal(null);
                               setIsSelectionMode(false);
                               setSelectedItems([]);
+                              setSelectedBatches([]);
                           }}
                           className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
                       >
