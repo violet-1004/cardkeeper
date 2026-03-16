@@ -1513,25 +1513,28 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       setIsSelectionMode(true);
       setBatchCategorizeTarget({ type, value, name });
       
-      const itemsToSelect = (allCards || []).filter(c => c.groupId === currentGroupId && String(c[type]) === String(value));
-      
-      // 🌟 恢復合併邏輯：保留使用者「先手動選好的卡片」，並補上「原屬於該分類的卡片」，解決「選取後會被重置」的問題！
-      setSelectedItems(prevItems => {
-          const existingCardIds = new Set(prevItems.map(item => String(item.cardId)));
-          const itemsToAdd = itemsToSelect.filter(item => !existingCardIds.has(String(item.id))).map(c => ({
-              uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-              cardId: c.id
-          }));
-          return [...prevItems, ...itemsToAdd];
+      const itemsToSelect = (allCards || []).filter(c => {
+          if (c.groupId !== currentGroupId) return false;
+          if (type === 'type' || type === 'channel') {
+              // 🌟 修正：相容舊版直接儲存「名稱」與新版儲存「ID」的差異
+              const arr = type === 'type' ? types : channels;
+              const obj = (arr || []).find(x => String(x.id) === String(value));
+              return String(c[type]) === String(value) || (obj && c[type] === obj.name);
+          }
+          return String(c[type]) === String(value);
       });
+      
+      // 🌟 精準覆蓋邏輯：確保進入歸類模式時，只選取該分類的卡片，解決狀態混亂問題
+      setSelectedItems(itemsToSelect.map(c => ({
+          uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          cardId: c.id
+      })));
       
       if (type === 'seriesId') {
           const batchesToSelect = (batches || []).filter(b => b.groupId === currentGroupId && String(b.seriesId) === String(value));
-          setSelectedBatches(prevBatches => {
-              const existingBatchIds = new Set(prevBatches.map(id => String(id)));
-              const batchesToAdd = batchesToSelect.filter(b => !existingBatchIds.has(String(b.id))).map(b => b.id);
-              return [...prevBatches, ...batchesToAdd];
-          });
+          setSelectedBatches(batchesToSelect.map(b => b.id));
+      } else {
+          setSelectedBatches([]);
       }
   };
 
@@ -6332,7 +6335,18 @@ export default function App() {
           }
 
           const isSelected = uniqueSelectedCardIds.includes(String(c.id));
-          const wasInBatch = String(c[type]) === String(value) && (!categorizeSubBatchId || String(c.batchId) === String(categorizeSubBatchId));
+          
+          const wasInBatch = (() => {
+              let baseMatch = false;
+              if (type === 'type' || type === 'channel') {
+                  const arr = type === 'type' ? types : channels;
+                  const obj = (arr || []).find(x => String(x.id) === String(value));
+                  baseMatch = String(c[type]) === String(value) || (obj && c[type] === obj.name);
+              } else {
+                  baseMatch = String(c[type]) === String(value);
+              }
+              return baseMatch && (!categorizeSubBatchId || String(c.batchId) === String(categorizeSubBatchId));
+          })();
           
           if (isSelected && !wasInBatch) {
               const newCard = { ...c, [type]: value };
