@@ -1497,24 +1497,42 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       }
   }, [uniqueSubunits, filterSubunit]);
 
+  // 🌟 核心選取邏輯：支援完美切換 (點擊已選取則取消，點擊未選取則加入)
+  const handleSelectAdd = (cardId) => {
+      setSelectedItems(prev => {
+          const isSelected = prev.some(item => String(item.cardId) === String(cardId));
+          if (isSelected) {
+              return prev.filter(item => String(item.cardId) !== String(cardId));
+          } else {
+              return [...prev, { uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, cardId }];
+          }
+      });
+  };
+
   const handleLongPress = (type, value, name) => {
       setIsSelectionMode(true);
       setBatchCategorizeTarget({ type, value, name });
       
-      // 🌟 升級：把撈出來的卡片加上專屬的 uid，轉換成新的物件陣列格式
-      const itemsToSelect = (allCards || [])
-        .filter(c => c.groupId === currentGroupId && c[type] === value)
-        .map(c => ({
-            uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-            cardId: c.id
-        }));
+      const itemsToSelect = (allCards || []).filter(c => c.groupId === currentGroupId && String(c[type]) === String(value));
       
-      // 🌟 升級：將新選中的項目加入現有選取列表，而不是覆蓋
+      // 🌟 恢復合併邏輯：保留使用者「先手動選好的卡片」，並補上「原屬於該分類的卡片」，解決「選取後會被重置」的問題！
       setSelectedItems(prevItems => {
-          const existingCardIds = new Set(prevItems.map(item => item.cardId));
-          const itemsToAdd = itemsToSelect.filter(item => !existingCardIds.has(item.cardId));
+          const existingCardIds = new Set(prevItems.map(item => String(item.cardId)));
+          const itemsToAdd = itemsToSelect.filter(item => !existingCardIds.has(String(item.id))).map(c => ({
+              uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              cardId: c.id
+          }));
           return [...prevItems, ...itemsToAdd];
       });
+      
+      if (type === 'seriesId') {
+          const batchesToSelect = (batches || []).filter(b => b.groupId === currentGroupId && String(b.seriesId) === String(value));
+          setSelectedBatches(prevBatches => {
+              const existingBatchIds = new Set(prevBatches.map(id => String(id)));
+              const batchesToAdd = batchesToSelect.filter(b => !existingBatchIds.has(String(b.id))).map(b => b.id);
+              return [...prevBatches, ...batchesToAdd];
+          });
+      }
   };
 
   const handleOptionDoubleClick = (type, data) => {
@@ -1655,42 +1673,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 
   const getCardQuantity = (cardId) => inventoryMap[cardId] || 0;
   
-  // 🌟 升級版：支援重複卡片的選取大腦
-  const pressTimer = useRef(null);
-  const hasLongPressed = useRef(false);
-
-  const handleSelectAdd = (cardId) => {
-      setSelectedItems(prev => {
-          const isSelected = prev.some(item => item.cardId === cardId);
-          if (isSelected) {
-              return prev.filter(item => item.cardId !== cardId);
-          } else {
-              return [...prev, { uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, cardId }];
-          }
-      });
-  };
-
-  const startPress = (cardId) => {
-      hasLongPressed.current = false;
-      pressTimer.current = setTimeout(() => {
-          hasLongPressed.current = true;
-          setSelectedItems(prev => {
-              let lastIdx = -1;
-              for (let i = prev.length - 1; i >= 0; i--) {
-                  if (prev[i].cardId === cardId) { lastIdx = i; break; }
-              }
-              if (lastIdx !== -1) {
-                  const next = [...prev];
-                  next.splice(lastIdx, 1); // 長按移除最後一次加入的該卡片
-                  return next;
-              }
-              return prev;
-          });
-      }, 500); 
-  };
-  
-  const cancelPress = () => clearTimeout(pressTimer.current);
-
   const handleAddNewCard = () => {
     openModal('card', {
       memberId: filterMemberId !== 'All' ? filterMemberId : '',
@@ -1740,7 +1722,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
              <MemberItem 
                 key={m.id} 
                 member={m} 
-                isSelected={filterMemberId === m.id} 
+                isSelected={filterMemberId === m.id}
                 onClick={() => setFilterMemberId(filterMemberId === m.id ? 'All' : m.id)}
                 onLongPress={(m) => handleLongPress('memberId', m.id, m.name)}
                 onDoubleClick={() => openModal('member', m)}
@@ -1788,8 +1770,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                     series={s} 
                     isSelected={filterSeriesId === s.id}
                     onClick={() => {
-                      setFilterSeriesId(filterSeriesId === s.id ? 'All' : s.id);
-                      setFilterBatchId('All'); 
+                        setFilterSeriesId(filterSeriesId === s.id ? 'All' : s.id);
+                        setFilterBatchId('All'); 
                     }}
                     onLongPress={(s) => handleLongPress('seriesId', s.id, s.name)}
                     onDoubleClick={() => handleOptionDoubleClick('series', s)}
@@ -1803,6 +1785,27 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             <div className="flex justify-between items-center">
                  <h3 className="font-bold text-gray-800 flex items-center gap-1">圖鑑 <span className="text-xs font-normal text-gray-500">{filteredCards.length}</span></h3>
                  <div className="flex gap-2 items-center">
+                     {isSelectionMode && (
+                         <button 
+                             onClick={() => {
+                                 const existingCardIds = new Set(selectedItems.map(item => String(item.cardId)));
+                                 const allDisplayedSelected = filteredCards.length > 0 && filteredCards.every(c => existingCardIds.has(String(c.id)));
+                                 if (allDisplayedSelected) {
+                                     const idsToRemove = new Set(filteredCards.map(c => String(c.id)));
+                                     setSelectedItems(prev => prev.filter(item => !idsToRemove.has(String(item.cardId))));
+                                 } else {
+                                     const itemsToAdd = filteredCards.filter(c => !existingCardIds.has(String(c.id))).map(c => ({
+                                         uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                                         cardId: c.id
+                                     }));
+                                     setSelectedItems(prev => [...prev, ...itemsToAdd]);
+                                 }
+                             }}
+                             className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+                         >
+                             <CheckSquare className="w-3 h-3" /> 全選顯示
+                         </button>
+                     )}
                      <div className="flex bg-gray-100 p-1 rounded-full items-center h-8 shadow-sm">
                        <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
                        <select 
@@ -1814,10 +1817,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                        </select>
                     </div>
                      <button 
-                        onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedItems([]); setSelectedBatches([]); }}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-colors ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-white border hover:bg-gray-50'}`}
+                        onClick={() => { 
+                            if (isSelectionMode) {
+                                setIsSelectionMode(false); setSelectedItems([]); setSelectedBatches([]); setBatchCategorizeTarget(null);
+                            } else {
+                                setIsSelectionMode(true);
+                            }
+                        }}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-colors ${isSelectionMode ? 'bg-gray-800 text-white' : 'bg-white border hover:bg-gray-50'}`}
                      >
-                        <CheckSquare className="w-3 h-3" /> 批量選取
+                        <CheckSquare className="w-3 h-3" /> {isSelectionMode ? '取消選取' : '批量選取'}
                      </button>
                      <button onClick={handleAddNewCard} className="flex items-center gap-1 bg-black text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-gray-800">
                         <Plus className="w-3 h-3" /> 新增
@@ -1894,8 +1903,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
         >
             {filteredCards.map(card => {
-                        const selCount = selectedItems.filter(i => i.cardId === card.id).length;
-                        const isSelected = selCount > 0;
+                        const isSelected = selectedItems.some(i => String(i.cardId) === String(card.id));
                         const qty = inventoryMap[card.id] || 0;
                         const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
 
@@ -1921,13 +1929,9 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                             <div key={card.id} 
                                 className={`cursor-pointer group relative select-none ${isSelected ? 'scale-95' : ''}`}
                                 style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
-                                onMouseDown={() => { if(isSelectionMode) startPress(card.id); }} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-                                onTouchStart={() => { if(isSelectionMode) startPress(card.id); }} onTouchEnd={cancelPress} onTouchMove={cancelPress}
-                                onContextMenu={(e) => { if(isSelectionMode) { e.preventDefault(); cancelPress(); } }}
                                 onClick={(e) => {
                                     if (isSelectionMode) {
-                                        if (hasLongPressed.current) { e.preventDefault(); e.stopPropagation(); }
-                                        else { handleSelectAdd(card.id); }
+                                        handleSelectAdd(card.id);
                                     } else {
                                         setViewingCard(card);
                                     }
@@ -1946,8 +1950,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                         {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                     </div>
                                     {isSelectionMode && (
-                                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white text-[10px] font-bold' : 'bg-white/50 border-gray-400'}`}>
-                                        {isSelected && selCount}
+                                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white/50 border-gray-400'}`}>
+                                        {isSelected && <Check className="w-3 h-3" />}
                                     </div>
                                 )}
                                 {qty > 0 && (
@@ -5743,36 +5747,8 @@ export default function App() {
   const [modalState, setModalState] = useState({ type: null, data: null });
   
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  // 🌟 升級版：支援重複卡片的選取狀態 (存陣列物件)
     const [selectedItems, setSelectedItems] = useState([]);
     const [selectedBatches, setSelectedBatches] = useState([]);
-    const pressTimer = useRef(null);
-    const hasLongPressed = useRef(false);
-
-    const handleSelectAdd = (cardId) => {
-        setSelectedItems(prev => [...prev, { uid: `sel_${Date.now()}_${Math.random()}`, cardId }]);
-    };
-
-    const startPress = (cardId) => {
-        hasLongPressed.current = false;
-        pressTimer.current = setTimeout(() => {
-            hasLongPressed.current = true;
-            setSelectedItems(prev => {
-                let lastIdx = -1;
-                // 從後面找，找到最後一次加進來的該卡片
-                for (let i = prev.length - 1; i >= 0; i--) {
-                    if (prev[i].cardId === cardId) { lastIdx = i; break; }
-                }
-                if (lastIdx !== -1) {
-                    const next = [...prev];
-                    next.splice(lastIdx, 1); // 刪除它 (長按 -1)
-                    return next;
-                }
-                return prev;
-            });
-        }, 500); 
-    };
-    const cancelPress = () => clearTimeout(pressTimer.current);
   const [batchCategorizeTarget, setBatchCategorizeTarget] = useState(null); 
   const [categorizeSubBatchId, setCategorizeSubBatchId] = useState('');
 
@@ -6299,9 +6275,9 @@ export default function App() {
       if (!batchCategorizeTarget) return;
       const { type, value } = batchCategorizeTarget;
       
-      // 🌟 轉換：從 selectedItems 提取出所有不重複的 cardId
-      const uniqueSelectedCardIds = [...new Set(selectedItems.map(item => item.cardId))];
-      const uniqueSelectedBatchIds = [...new Set(selectedBatches || [])];
+      // 🌟 確保所有 ID 比對都是嚴格字串，避免型別不一致導致判定失敗
+      const uniqueSelectedCardIds = [...new Set(selectedItems.map(item => String(item.cardId)))];
+      const uniqueSelectedBatchIds = [...new Set((selectedBatches || []).map(id => String(id)))];
       
       const cardsToUpdateDb = [];
       const batchesToUpdateDb = [];
@@ -6309,11 +6285,18 @@ export default function App() {
       let nextCards = [...(cards || [])];
       let nextBatches = [...(batches || [])];
 
-      // 1. 若歸類目標為「系列」，且有選取「批次」，則先將這些批次移動至該系列
-      if (type === 'seriesId' && uniqueSelectedBatchIds.length > 0) {
+      // 1. 若歸類目標為「系列」，處理批次的加入與移除
+      if (type === 'seriesId') {
           nextBatches = nextBatches.map(b => {
-              if (uniqueSelectedBatchIds.includes(b.id)) {
+              const isSelected = uniqueSelectedBatchIds.includes(String(b.id));
+              const wasInSeries = String(b.seriesId) === String(value);
+              
+              if (isSelected && !wasInSeries) {
                   const newBatch = { ...b, seriesId: value };
+                  batchesToUpdateDb.push(newBatch);
+                  return newBatch;
+              } else if (!isSelected && wasInSeries) {
+                  const newBatch = { ...b, seriesId: '' }; // 移出該歸類
                   batchesToUpdateDb.push(newBatch);
                   return newBatch;
               }
@@ -6321,47 +6304,63 @@ export default function App() {
           });
           
           nextCards = nextCards.map(c => {
-              if (uniqueSelectedBatchIds.includes(c.batchId) && c.seriesId !== value) {
-                  const newCard = { ...c, seriesId: value };
-                  cardsToUpdateDb.push(newCard);
-                  return newCard;
+              if (c.batchId) {
+                  const isSelectedBatch = uniqueSelectedBatchIds.includes(String(c.batchId));
+                  const wasSelectedBatch = batches.find(b => String(b.id) === String(c.batchId))?.seriesId === value;
+
+                  if (isSelectedBatch && String(c.seriesId) !== String(value)) {
+                      const newCard = { ...c, seriesId: value };
+                      cardsToUpdateDb.push(newCard);
+                      return newCard;
+                  } else if (!isSelectedBatch && wasSelectedBatch && String(c.seriesId) === String(value)) {
+                      const newCard = { ...c, seriesId: '' };
+                      cardsToUpdateDb.push(newCard);
+                      return newCard;
+                  }
               }
               return c;
           });
       }
 
-      // 2. 處理選取的「卡片」
+      // 2. 處理獨立選取的「卡片」的加入與移除
       nextCards = nextCards.map(c => {
-          const isSelected = uniqueSelectedCardIds.includes(c.id);
-          const wasInBatch = c[type] === value && (!categorizeSubBatchId || c.batchId === categorizeSubBatchId);
+          // 如果卡片屬於某個剛被操作的批次，就不重複處理，交給上面的批次邏輯
+          if (type === 'seriesId' && c.batchId) {
+              const batchInTarget = nextBatches.find(b => String(b.id) === String(c.batchId))?.seriesId === value;
+              const batchWasInTarget = batches.find(b => String(b.id) === String(c.batchId))?.seriesId === value;
+              if (batchInTarget || batchWasInTarget) return c; 
+          }
+
+          const isSelected = uniqueSelectedCardIds.includes(String(c.id));
+          const wasInBatch = String(c[type]) === String(value) && (!categorizeSubBatchId || String(c.batchId) === String(categorizeSubBatchId));
           
           if (isSelected && !wasInBatch) {
               const newCard = { ...c, [type]: value };
               if (type === 'seriesId' && categorizeSubBatchId) {
                   newCard.batchId = categorizeSubBatchId;
-                  const targetBatch = nextBatches.find(b => b.id === categorizeSubBatchId);
+                  const targetBatch = nextBatches.find(b => String(b.id) === String(categorizeSubBatchId));
                   if (targetBatch) {
                       if (targetBatch.channel) newCard.channel = targetBatch.channel;
                       if (targetBatch.type) newCard.type = targetBatch.type;
                   }
               } else if (type === 'batchId' && value) {
-                  const targetBatch = nextBatches.find(b => b.id === value);
+                  const targetBatch = nextBatches.find(b => String(b.id) === String(value));
                   if (targetBatch) {
                       if (targetBatch.seriesId) newCard.seriesId = targetBatch.seriesId;
                       if (targetBatch.channel) newCard.channel = targetBatch.channel;
                       if (targetBatch.type) newCard.type = targetBatch.type;
                   }
               }
-              const existingIdx = cardsToUpdateDb.findIndex(cu => cu.id === newCard.id);
+              const existingIdx = cardsToUpdateDb.findIndex(cu => String(cu.id) === String(newCard.id));
               if (existingIdx !== -1) cardsToUpdateDb[existingIdx] = newCard;
               else cardsToUpdateDb.push(newCard);
               return newCard;
           } else if (!isSelected && wasInBatch) {
               const newCard = { ...c, [type]: '' };
-              if (type === 'seriesId' && categorizeSubBatchId) {
-                  newCard.batchId = '';
+              if (type === 'seriesId') {
+                  newCard.batchId = ''; // 移出系列時，連同批次一併清空
               }
-              const existingIdx = cardsToUpdateDb.findIndex(cu => cu.id === newCard.id);
+              const existingIdx = cardsToUpdateDb.findIndex(cu => String(cu.id) === String(newCard.id));
               if (existingIdx !== -1) cardsToUpdateDb[existingIdx] = newCard;
               else cardsToUpdateDb.push(newCard);
               return newCard;
@@ -6382,7 +6381,8 @@ export default function App() {
               series_id: c.seriesId || null,
               batch_id: c.batchId || null,
               channel: c.channel || null,
-              type: c.type || null
+              type: c.type || null,
+              member_id: c.memberId || null
           };
           await supabase.from('ui_cards').update(payload).eq('id', c.id);
       }

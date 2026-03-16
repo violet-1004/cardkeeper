@@ -1,7 +1,9 @@
 git add .
-git commit -m "0312 玻璃ui2"
+git commit -m "0314"
 git push
 
 npx vercel --prod
 
 npm run dev
+
+圖鑑的批量選取 原屬於該歸貴的卡要顯示框 如果選取已選取的取消選取 如果選取未選取的選取 不管新舊只要是選取狀態的都要匡
