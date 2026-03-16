@@ -276,18 +276,29 @@ const toCamelCase = (obj) => {
 // --- 2. Hooks & Utilities ---
 const getInitialCols = () => typeof window !== 'undefined' && window.innerWidth < 768 ? 4 : 6;
 
-const useLongPress = (callback = () => {}, ms = 600) => {
-  const [startLongPress, setStartLongPress] = useState(false);
+const useLongPress = (onLongPress, onClick, ms = 600) => {
   const timerRef = useRef(null);
+  const isLongPress = useRef(false);
 
   const start = () => {
-    setStartLongPress(true);
-    timerRef.current = setTimeout(callback, ms);
+    isLongPress.current = false;
+    timerRef.current = setTimeout(() => {
+        isLongPress.current = true;
+        if (onLongPress) onLongPress();
+    }, ms);
   };
 
   const stop = () => {
-    setStartLongPress(false);
     clearTimeout(timerRef.current);
+  };
+
+  const handleClick = (e) => {
+      if (isLongPress.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+      }
+      if (onClick) onClick(e);
   };
 
   return {
@@ -296,6 +307,7 @@ const useLongPress = (callback = () => {}, ms = 600) => {
     onMouseLeave: stop,
     onTouchStart: start,
     onTouchEnd: stop,
+    onClick: handleClick
   };
 };
 
@@ -486,11 +498,10 @@ const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allo
 
 // --- 4. 列表項目組件 ---
 const MemberItem = ({ member, isSelected, onClick, onLongPress, onDoubleClick }) => {
-  const bind = useLongPress(() => onLongPress(member));
+  const bind = useLongPress(() => onLongPress(member), onClick);
   return (
     <div 
       {...bind}
-      onClick={onClick}
       onDoubleClick={onDoubleClick}
       className="flex flex-col items-center gap-1 cursor-pointer min-w-[64px] select-none active:scale-95 transition-transform"
     >
@@ -503,11 +514,10 @@ const MemberItem = ({ member, isSelected, onClick, onLongPress, onDoubleClick })
 };
 
 const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick }) => {
-  const bind = useLongPress(() => onLongPress(series));
+  const bind = useLongPress(() => onLongPress(series), onClick);
   return (
     <div 
       {...bind}
-      onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
     >
@@ -528,11 +538,10 @@ const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick })
 };
 
 const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) => {
-  const bind = useLongPress(() => onLongPress(batch));
+  const bind = useLongPress(() => onLongPress(batch), onClick);
   return (
     <div 
       {...bind}
-      onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
     >
@@ -552,11 +561,10 @@ const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) =
 };
 
 const FilterTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }) => {
-  const bind = useLongPress(() => onLongPress(text));
+  const bind = useLongPress(() => onLongPress(text), onClick);
   return (
     <button 
         {...bind}
-        onClick={onClick} 
         onDoubleClick={onDoubleClick}
         className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
     >
@@ -566,12 +574,10 @@ const FilterTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }
 };
 
 const SubunitTagItem = ({ text, isSelected, onClick, onLongPress }) => {
-  // 🌟 修正：onLongPress 直接觸發，不需傳參數，因為父層已經用 closure 綁定好了
-  const bind = useLongPress(() => onLongPress && onLongPress());
+  const bind = useLongPress(() => onLongPress && onLongPress(), onClick);
   return (
     <button
         {...bind}
-        onClick={onClick}
         className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
     >
         {text}
@@ -979,7 +985,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
         .filter(i => i.cardId === card.id)
         .sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
         
-    const currentSale = sales.find(s => s.cardId === card.id); 
+    const currentSale = sales.find(s => String(s.cardId) === String(card.id)); 
 
     const totalQty = getOwnedQuantity(inventory, card.id); 
     // 1. 先濾出還沒售出的庫存
@@ -1125,10 +1131,10 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     const handleUpdateSale = async (key, value) => {
         let payloadToSave;
         setSales(prev => {
-            const existing = prev.find(s => s.cardId === card.id);
+            const existing = prev.find(s => String(s.cardId) === String(card.id));
             if (existing) {
                 payloadToSave = { ...existing, [key]: value };
-                return prev.map(s => s.cardId === card.id ? payloadToSave : s);
+                return prev.map(s => String(s.cardId) === String(card.id) ? payloadToSave : s);
             } else {
                 payloadToSave = { id: Date.now().toString(), cardId: card.id, [key]: value, date: new Date().toISOString().split('T')[0], quantity: 1, price: 0, color: 'bg-black/70' };
                 return [...prev, payloadToSave];
@@ -1514,27 +1520,33 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       setBatchCategorizeTarget({ type, value, name });
       
       const itemsToSelect = (allCards || []).filter(c => {
-          if (c.groupId !== currentGroupId) return false;
+          if (String(c.groupId) !== String(currentGroupId)) return false; // 🌟 致命修正：強制轉字串比對，解決卡片全數被錯誤過濾的問題
           if (type === 'type' || type === 'channel') {
               // 🌟 修正：相容舊版直接儲存「名稱」與新版儲存「ID」的差異
               const arr = type === 'type' ? types : channels;
               const obj = (arr || []).find(x => String(x.id) === String(value));
-              return String(c[type]) === String(value) || (obj && c[type] === obj.name);
+              return String(c[type]) === String(value) || (obj && String(c[type]) === String(obj.name));
           }
           return String(c[type]) === String(value);
       });
       
-      // 🌟 精準覆蓋邏輯：確保進入歸類模式時，只選取該分類的卡片，解決狀態混亂問題
-      setSelectedItems(itemsToSelect.map(c => ({
-          uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          cardId: c.id
-      })));
+      // 🌟 恢復合併邏輯：保留使用者「先手動選好的卡片」，並補上「原屬於該分類的卡片」，完美解決「選取後被重置」與「踢出原卡片」的問題！
+      setSelectedItems(prevItems => {
+          const existingCardIds = new Set(prevItems.map(item => String(item.cardId)));
+          const itemsToAdd = itemsToSelect.filter(item => !existingCardIds.has(String(item.id))).map(c => ({
+              uid: `sel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              cardId: c.id
+          }));
+          return [...prevItems, ...itemsToAdd];
+      });
       
       if (type === 'seriesId') {
-          const batchesToSelect = (batches || []).filter(b => b.groupId === currentGroupId && String(b.seriesId) === String(value));
-          setSelectedBatches(batchesToSelect.map(b => b.id));
-      } else {
-          setSelectedBatches([]);
+          const batchesToSelect = (batches || []).filter(b => String(b.groupId) === String(currentGroupId) && String(b.seriesId) === String(value)); // 🌟 這裡也補上防禦
+          setSelectedBatches(prevBatches => {
+              const existingBatchIds = new Set(prevBatches.map(id => String(id)));
+              const batchesToAdd = batchesToSelect.filter(b => !existingBatchIds.has(String(b.id))).map(b => b.id);
+              return [...prevBatches, ...batchesToAdd];
+          });
       }
   };
 
@@ -1908,7 +1920,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             {filteredCards.map(card => {
                         const isSelected = selectedItems.some(i => String(i.cardId) === String(card.id));
                         const qty = inventoryMap[card.id] || 0;
-                        const isSelling = (sales || []).some(s => s.cardId === card.id && s.quantity > 0);
+                        const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
 
                         const memberName = (members || []).find(m => String(m.id) === String(card.memberId))?.name;
                         // 🌟 補回名稱顯示邏輯
@@ -2010,7 +2022,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   const salesMap = useMemo(() => {
       const map = {};
-      (sales || []).forEach(s => { if (s.quantity > 0) map[String(s.cardId)] = true; });
+      (sales || []).forEach(s => { if (Number(s.quantity) > 0) map[String(s.cardId)] = true; });
       return map;
   }, [sales]);
 
@@ -2355,7 +2367,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
             {filteredCards.map(card => {
                 const qty = inventoryMap[String(card.id)] || 0;
                 const isOwned = qty > 0;
-                const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && s.quantity > 0);
+                const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
                 
                 const memberName = memberMap[String(card.memberId)]?.name;
                 const cardSeries = seriesMap[String(card.seriesId)];
@@ -4904,7 +4916,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const salesMap = useMemo(() => {
         const map = {};
         (sales || []).forEach(s => {
-            if (s.quantity > 0) map[s.cardId] = s;
+            if (Number(s.quantity) > 0) map[String(s.cardId)] = s;
         });
         return map;
     }, [sales]);
@@ -4913,7 +4925,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         if (!activeView) return [];
         if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
         if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
-        if (activeView === 'selling') return (cards || []).filter(c => salesMap[c.id]);
+        if (activeView === 'selling') return (cards || []).filter(c => salesMap[String(c.id)]);
         if (typeof activeView === 'object' && activeView.items) {
             return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
@@ -4973,7 +4985,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         if (activeView !== 'selling') return [];
         const colors = new Set();
         subunitFilteredCards.forEach(c => {
-            const s = salesMap[c.id];
+            const s = salesMap[String(c.id)];
             if (s) colors.add(s.color || 'bg-black/70');
         });
         return [...colors];
@@ -5020,14 +5032,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             if (filterTypes.length > 0 && !filterTypes.some(id => String(id) === String(c.type))) return false;
             
             if (activeView === 'selling' && filterColors.length > 0) {
-                 const saleRecord = salesMap[c.id];
+                 const saleRecord = salesMap[String(c.id)];
                  const color = saleRecord?.color || 'bg-black/70';
                  if (!filterColors.includes(color)) return false;
             }
             return true;
         }).map(c => {
             if (activeView === 'selling') {
-                const saleRecord = salesMap[c.id];
+                const saleRecord = salesMap[String(c.id)];
                 return { ...c, note: `$${saleRecord?.price || 0}`, noteColor: saleRecord?.color || 'bg-black/70' };
             }
             if (typeof activeView === 'object' && activeView.items) {
@@ -5446,7 +5458,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                 // 🌟 計算販售數量
-                const saleRecord = activeView === 'selling' ? salesMap[card.id] : null;
+                const saleRecord = activeView === 'selling' ? salesMap[String(card.id)] : null;
                 const sellQty = saleRecord ? (Number(saleRecord.quantity) || 0) : 0;
 
                 return (
@@ -5874,21 +5886,21 @@ export default function App() {
   const currentBulkRecords = useMemo(() => (bulkRecords || []).filter(r => String(r.groupId) === String(currentGroupId)), [bulkRecords, currentGroupId]);
 
   const currentInventory = useMemo(() => {
-      const cardIds = new Set(currentCards.map(c => c.id));
-      const bulkIds = new Set(currentBulkRecords.map(r => r.id));
-      const albumIds = new Set(currentSeries.filter(s => s.type === '專輯').map(s => s.id));
+      const cardIds = new Set(currentCards.map(c => String(c.id)));
+      const bulkIds = new Set(currentBulkRecords.map(r => String(r.id)));
+      const albumIds = new Set(currentSeries.filter(s => s.type === '專輯').map(s => String(s.id)));
 
       return (inventory || []).filter(inv => {
-          if (inv.cardId && cardIds.has(inv.cardId)) return true;
-          if (inv.bulkRecordId && bulkIds.has(inv.bulkRecordId)) return true;
-          if (inv.albumId && albumIds.has(inv.albumId)) return true;
+          if (inv.cardId && cardIds.has(String(inv.cardId))) return true;
+          if (inv.bulkRecordId && bulkIds.has(String(inv.bulkRecordId))) return true;
+          if (inv.albumId && albumIds.has(String(inv.albumId))) return true;
           return false;
       });
   }, [inventory, currentCards, currentBulkRecords, currentSeries]);
 
   const currentSales = useMemo(() => {
-      const cardIds = new Set(currentCards.map(c => c.id));
-      return (sales || []).filter(s => cardIds.has(s.cardId));
+      const cardIds = new Set(currentCards.map(c => String(c.id)));
+      return (sales || []).filter(s => cardIds.has(String(s.cardId)));
   }, [sales, currentCards]);
 
   // 🌟 強化版：子類 (Type) 依照你設定的 sortOrder 排序
@@ -6341,7 +6353,7 @@ export default function App() {
               if (type === 'type' || type === 'channel') {
                   const arr = type === 'type' ? types : channels;
                   const obj = (arr || []).find(x => String(x.id) === String(value));
-                  baseMatch = String(c[type]) === String(value) || (obj && c[type] === obj.name);
+                  baseMatch = String(c[type]) === String(value) || (obj && String(c[type]) === String(obj.name));
               } else {
                   baseMatch = String(c[type]) === String(value);
               }
