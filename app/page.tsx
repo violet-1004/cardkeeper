@@ -1154,11 +1154,24 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     };
 
     const handleDeleteInventory = async (invId) => {
+        const targetItem = inventory.find(i => i.id === invId);
         setInventory(prev => prev.filter(i => i.id !== invId));
         setActiveModal(null);
         setTempInvData(null);
         // 💾 刪除 Supabase 紀錄
         await supabase.from('ui_inventory').delete().eq('id', invId);
+        
+        // 🌟 如果這筆資料來自盤收/套收，同步移除父級紀錄內的該項目
+        if (targetItem && targetItem.bulkRecordId && setBulkRecords) {
+            setBulkRecords(prev => prev.map(record => {
+                if (record.id === targetItem.bulkRecordId) {
+                    const newItems = (record.items || []).filter(item => String(item.id) !== String(invId));
+                    supabase.from('bulk_records').update({ items: newItems }).eq('id', record.id).then();
+                    return { ...record, items: newItems };
+                }
+                return record;
+            }));
+        }
     };
 
     const handleAddToList = async (listId, note) => {
@@ -1384,22 +1397,28 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                         <span className="flex items-center gap-2">
                             {activeModal === 'own' ? "新增購買紀錄" : "編輯紀錄"}
                             {tempInvData?.bulkRecordId && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
-                                    }}
-                                    className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
-                                >
-                                    <Package className="w-3 h-3" />
-                                    編輯盤收
-                                </button>
+                                (() => {
+                                    const parentBulkRecord = (bulkRecords || []).find(r => r.id === tempInvData.bulkRecordId);
+                                    const isParentSet = parentBulkRecord && (parentBulkRecord.isSetMode || parentBulkRecord.items?.some(i => i.isSet));
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
+                                            }}
+                                            className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
+                                        >
+                                            <Package className="w-3 h-3" />
+                                            {isParentSet ? '編輯套收' : '編輯盤收'}
+                                        </button>
+                                    );
+                                })()
                             )}
                         </span>
                     } 
                     headerAction={
-                        activeModal === 'editInv' && !tempInvData?.bulkRecordId && (
+                        activeModal === 'editInv' && (
                             <button 
                                 onClick={() => handleDeleteInventory(tempInvData.id)}
                                 className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
@@ -2084,8 +2103,8 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   useEffect(() => {
       if (availableSubunits.length > 0) {
           const availableIds = availableSubunits.map(s => s.id);
-          if (filterSubunit === 'All' || !availableIds.includes(filterSubunit)) {
-              setFilterSubunit(availableSubunits[0].id);
+          if (filterSubunit !== 'All' && !availableIds.includes(filterSubunit)) {
+              setFilterSubunit('All'); // 🌟 修復：預設改為顯示全部，不再強制綁架第一個分隊
           }
       } else {
           setFilterSubunit('All');
@@ -2215,8 +2234,8 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
-     if (viewMode === 'selling' && !salesMap[String(card.id)]) return false;
-     if (viewMode === 'owned' && (inventoryMap[String(card.id)] || 0) <= 0) return false;
+     if (viewMode === 'selling' && !salesMap[card.id] && !salesMap[String(card.id)]) return false;
+     if (viewMode === 'owned' && !(inventoryMap[card.id] > 0) && !(inventoryMap[String(card.id)] > 0)) return false; // 🌟 雙重比對，徹底消滅型別遺失
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
@@ -2259,9 +2278,9 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
   });
   
-  const totalCount = filteredCards.length;
-  // 🌟 只計算「目前已擁有」的數量，不受 viewMode 影響
-  const ownedCount = filteredCards.filter(c => (inventoryMap[String(c.id)] || 0) > 0).length;
+  // 🌟 修復進度條計算：以當前篩選範圍 (cardsInScope) 為基準，避免切換「擁有」時永遠顯示 100%
+  const totalCount = cardsInScope.length;
+  const ownedCount = cardsInScope.filter(c => (inventoryMap[c.id] || inventoryMap[String(c.id)] || 0) > 0).length; // 🌟 雙重比對
   const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
   const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
@@ -2329,7 +2348,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />
+            {/* 🌟 補上「全部」的選項 */}
+            {availableSubunits.length > 0 && (
+                <RenderFilterSection label="分隊" options={[{id: 'All', name: '全部'}, ...availableSubunits]} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />
+            )}
             <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />
             <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />
             <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />
@@ -2517,7 +2539,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
         };
 
         (inventory || []).forEach(inv => {
-            if (inv.buyDate && isDateInRange(inv.buyDate)) {
+            // 🌟 修正：若小卡屬於盤收/套收包裹，購買支出已經在包裹總金額中算過一次了，這裡不能重複加總！
+            if (inv.buyDate && isDateInRange(inv.buyDate) && !inv.bulkRecordId) {
                 if (filterType === 'all' || filterType === 'expense') {
                     items.push({ ...inv, _virtualId: `${inv.id}_buy`, _type: 'expense', _displayPrice: inv.buyPrice, _displayDate: inv.buyDate });
                 }
@@ -2559,9 +2582,8 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
             });
         });
 
-        const filteredItems = items.filter(item => !(item.bulkRecordId && item._type === 'expense'));
-        filteredItems.sort((a, b) => new Date(b._displayDate) - new Date(a._displayDate));
-        return { displayItems: filteredItems, totalIncome: income, totalExpense: expense };
+        items.sort((a, b) => new Date(b._displayDate) - new Date(a._displayDate));
+        return { displayItems: items, totalIncome: income, totalExpense: expense };
     }, [inventory, year, month, filterType, bulkRecords, dateFilterMode, startDate, endDate]);
 
     return (
@@ -2707,12 +2729,98 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     );
 }
 
-function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series, setInventory, setSales, members, onViewCard, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource, onSyncData }) {
-    const [viewMode, setViewMode] = useState('bulk'); // 'bulk' | 'album'
+function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventory, series, batches, setInventory, setSales, members, onViewCard, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource, onSyncData, subunits, types }) {
+    const [viewMode, setViewMode] = useState('set'); // 'bulk' | 'album' | 'set'
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
+    const [filterSetSeries, setFilterSetSeries] = useState('All');
     const [albumPrices, setAlbumPrices] = useState({});
     const [viewingAlbum, setViewingAlbum] = useState(null);
+    const [showBatchSelector, setShowBatchSelector] = useState(false);
+    
+    // 🌟 新增：批次選擇器的篩選狀態
+    const [filterBatchSubunit, setFilterBatchSubunit] = useState('All');
+    const [filterBatchSeriesType, setFilterBatchSeriesType] = useState('All');
+    const [filterBatchSeries, setFilterBatchSeries] = useState('All');
+    
+    const availableSubunits = useMemo(() => {
+        const usedNames = new Set((series || []).map(s => s.subunit).filter(Boolean));
+        const subunitSortMap = new Map();
+        (subunits || []).forEach(s => {
+            if (s.sortOrder !== undefined && s.sortOrder !== null) {
+                subunitSortMap.set(s.name, s.sortOrder);
+            }
+        });
+        return Array.from(usedNames).map(name => ({
+            id: name,
+            name: name,
+            sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
+        })).sort((a, b) => a.sortOrder - b.sortOrder);
+    }, [series, subunits]);
+
+    // 🌟 批次選擇器的篩選邏輯
+    const uniqueSeriesTypes = useMemo(() => {
+        let list = series || [];
+        if (filterBatchSubunit !== 'All') list = list.filter(s => s.subunit === filterBatchSubunit);
+        return [...new Set(list.map(s => s.type).filter(Boolean))];
+    }, [series, filterBatchSubunit]);
+
+    const availableSeriesList = useMemo(() => {
+        let list = [...(series || [])]; // 🌟 確保複製陣列，避免改動到原始資料導致畫面錯誤
+        if (filterBatchSubunit !== 'All') list = list.filter(s => s.subunit === filterBatchSubunit);
+        if (filterBatchSeriesType !== 'All') list = list.filter(s => s.type === filterBatchSeriesType);
+        
+        // 🌟 使用 getTime() 確保在所有瀏覽器環境 (含 Safari/iOS) 都能正確比較日期
+        return list.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 253402214400000; // 如果沒日期放到最後
+            const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
+            return dateA - dateB;
+        });
+    }, [series, filterBatchSeriesType, filterBatchSubunit]);
+
+    const filteredBatches = useMemo(() => {
+        return (batches || []).filter(b => {
+            const s = (series || []).find(ser => String(ser.id) === String(b.seriesId));
+            if (filterBatchSubunit !== 'All' && (!s || s.subunit !== filterBatchSubunit)) return false;
+            if (filterBatchSeries !== 'All') {
+                if (String(b.seriesId) !== String(filterBatchSeries)) return false;
+            } else if (filterBatchSeriesType !== 'All') {
+                if (!s || s.type !== filterBatchSeriesType) return false;
+            }
+            return true;
+        }).sort((a, b) => {
+            // 🌟 完美對齊圖鑑的批次排序邏輯：1. 子類排序 -> 2. 發行日期 -> 3. 名稱
+            const typeA = (types || []).find(t => String(t.id) === String(a.type) || t.name === a.type);
+            const typeB = (types || []).find(t => String(t.id) === String(b.type) || t.name === b.type);
+            const sortOrderA = typeA ? (Number(typeA.sortOrder) || 0) : 999;
+            const sortOrderB = typeB ? (Number(typeB.sortOrder) || 0) : 999;
+            
+            if (sortOrderA !== sortOrderB) {
+                return sortOrderA - sortOrderB;
+            }
+            
+            const dateA = a.date ? new Date(a.date).getTime() : 253402214400000;
+            const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
+            if (dateA !== dateB) return dateA - dateB;
+            const nameA = a.name || '';
+            const nameB = b.name || '';
+            return nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+        });
+    }, [batches, series, filterBatchSeriesType, filterBatchSeries, filterBatchSubunit, types]);
+
+    useEffect(() => {
+        if (filterBatchSeries !== 'All') {
+            const s = (series || []).find(ser => String(ser.id) === String(filterBatchSeries));
+            if (s) {
+                if (filterBatchSeriesType !== 'All' && s.type !== filterBatchSeriesType) {
+                    setFilterBatchSeries('All');
+                }
+                if (filterBatchSubunit !== 'All' && s.subunit !== filterBatchSubunit) {
+                    setFilterBatchSeries('All');
+                }
+            }
+        }
+    }, [filterBatchSeries, filterBatchSeriesType, filterBatchSubunit, series]);
 
     // 🌟 讀取記憶的售價
     useEffect(() => {
@@ -2725,14 +2833,39 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
     const availableStatuses = ['未發貨', '囤貨', '到貨'];
     const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r.source).filter(Boolean))], [allRecords, records]);
 
+    const setRecords = useMemo(() => (records || []).filter(r => r.items?.some(i => i.isSet)), [records]);
+    const bulkRecordsOnly = useMemo(() => (records || []).filter(r => !r.items?.some(i => i.isSet)), [records]);
+
+    // 🌟 計算套收紀錄中包含的所有系列
+    const availableSetSeries = useMemo(() => {
+        const seriesIds = new Set();
+        setRecords.forEach(r => {
+            (r.items || []).forEach(item => {
+                if (item.cardId) {
+                    const card = (cards || []).find(c => String(c.id) === String(item.cardId));
+                    if (card && card.seriesId) seriesIds.add(String(card.seriesId));
+                }
+            });
+        });
+        return (series || []).filter(s => seriesIds.has(String(s.id)));
+    }, [setRecords, cards, series]);
+
     const filteredRecords = useMemo(() => {
-        const filtered = (records || []).filter(r => {
+        const sourceRecords = viewMode === 'set' ? setRecords : bulkRecordsOnly;
+        const filtered = (sourceRecords || []).filter(r => {
             if (filterStatus !== 'All' && r.status !== filterStatus) return false;
             if (filterSource !== 'All' && r.source !== filterSource) return false;
+            if (viewMode === 'set' && filterSetSeries !== 'All') {
+                const hasMatch = (r.items || []).some(item => {
+                    const card = (cards || []).find(c => String(c.id) === String(item.cardId));
+                    return card && String(card.seriesId) === String(filterSetSeries);
+                });
+                if (!hasMatch) return false;
+            }
             return true;
         });
         return [...filtered].sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
-    }, [records, filterStatus, filterSource]);
+    }, [setRecords, bulkRecordsOnly, filterStatus, filterSource, viewMode, filterSetSeries, cards]);
 
     const getStatusStyle = (status) => {
         switch(status) {
@@ -2855,23 +2988,53 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
         <div className="space-y-6 pb-24">
             <div className="px-2 space-y-2">
                 <div className="bg-gray-100 p-1 rounded-lg flex items-center w-fit">
+                    <button onClick={() => setViewMode('set')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'set' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>套收</button>
                     <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>盤收</button>
                     <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
                 </div>
                 <div className="flex justify-between items-center">
-                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />{viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
-                    {viewMode === 'bulk' && (
+                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />{viewMode === 'set' ? '套收管理' : viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
+                    {(viewMode === 'bulk' || viewMode === 'set') && (
                         <div className="flex gap-2">
-                            <button onClick={onSyncData} className="bg-white text-indigo-600 border border-indigo-100 px-3 py-2 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 transition-all flex items-center gap-1">
-                                <RefreshCw className="w-3.5 h-3.5" /> 同步資料
-                            </button>
-                            <button onClick={onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>
+                            {viewMode === 'bulk' && (
+                                <button onClick={onSyncData} className="bg-white text-indigo-600 border border-indigo-100 px-3 py-2 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 transition-all flex items-center gap-1">
+                                    <RefreshCw className="w-3.5 h-3.5" /> 同步資料
+                                </button>
+                            )}
+                            <button onClick={viewMode === 'set' ? () => setShowBatchSelector(true) : onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>
                         </div>
                     )}
                 </div>
             </div>
             
-            {viewMode === 'bulk' ? (
+            {viewMode === 'set' ? (
+                <>
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
+                        <RenderFilterSection label="狀態" options={availableStatuses} current={filterStatus} onChange={setFilterStatus} />
+                        {availableSources.length > 0 && <RenderFilterSection label="來源" options={availableSources} current={filterSource} onChange={setFilterSource} />}
+                        {availableSetSeries.length > 0 && <RenderFilterSection label="系列" options={availableSetSeries} current={filterSetSeries} onChange={setFilterSetSeries} mapName={s => s.name} />}
+                    </div>
+                    <div className="space-y-3">
+                        {filteredRecords.map(record => (
+                            <div key={record.id} onClick={() => onEdit(record)} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-indigo-300 group active:scale-95 transition-transform">
+                                <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border relative">
+                                    {record.image ? <Image src={record.image} alt={record.name || 'set'} fill sizes="48px" className="object-cover" unoptimized={true} /> : <Package className="w-6 h-6 text-gray-300 m-auto mt-3" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-gray-800 text-sm truncate">{record.name}</div>
+                                    <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 truncate mt-0.5"><span className="text-red-500">${Number(record.totalAmount).toLocaleString()}</span><span>· {(record.items || []).filter(i => !i.isMisc && !i.isAlbum).length} 張卡片</span></div>
+                                </div>
+                                <div className="flex gap-1.5 flex-wrap flex-shrink-0">
+                                    {record.status && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${getStatusStyle(record.status)}`}>{record.status}</span>}
+                                    {record.source && <span className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 font-bold truncate max-w-[80px]">{record.source}</span>}
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 transition-colors" />
+                            </div>
+                        ))}
+                        {filteredRecords.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有符合條件的套收記錄</div>}
+                    </div>
+                </>
+            ) : viewMode === 'bulk' ? (
                 <>
                     <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
                         <RenderFilterSection label="狀態" options={availableStatuses} current={filterStatus} onChange={setFilterStatus} />
@@ -2920,6 +3083,65 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, inventory, series,
                     </div>
                     {viewingAlbum && <AlbumDetailModal album={viewingAlbum} onClose={() => setViewingAlbum(null)} cards={cards} members={members} series={series} setInventory={setInventory} setSales={setSales} albumPrices={albumPrices} setAlbumPrices={setAlbumPrices} onViewCard={onViewCard} bulkRecords={allRecords} setBulkRecords={setBulkRecords} uniqueSources={uniqueSources} onRenameSource={onRenameSource} onDeleteSource={onDeleteSource} />}
                 </>
+            )}
+
+            {showBatchSelector && (
+                <Modal title="選擇批次建立套收" onClose={() => setShowBatchSelector(false)} className="max-w-3xl" mobileFullScreen={true}>
+                    <div className="flex flex-col h-full sm:max-h-[70vh]">
+                        <div className="p-4 border-b border-gray-100 space-y-3 flex-shrink-0 bg-white sticky top-0 z-10">
+                            {availableSubunits.length > 0 && (
+                                <RenderFilterSection 
+                                    label="分隊" 
+                                    options={[{ id: 'All', name: '全部' }, ...availableSubunits]} 
+                                    current={filterBatchSubunit} 
+                                    onChange={val => {
+                                        setFilterBatchSubunit(val);
+                                        setFilterBatchSeriesType('All');
+                                        setFilterBatchSeries('All');
+                                    }} 
+                                    mapName={s => s.name}
+                                    disableToggleOff={true}
+                                />
+                            )}
+                            <RenderFilterSection 
+                                label="系列類型" 
+                                options={[{ id: 'All', name: '全部' }, ...uniqueSeriesTypes.map(t => ({ id: t, name: t }))]} 
+                                current={filterBatchSeriesType} 
+                                onChange={val => {
+                                    setFilterBatchSeriesType(val);
+                                    if (val === 'All') setFilterBatchSeries('All');
+                                }} 
+                                mapName={t => t.name}
+                                disableToggleOff={true}
+                            />
+                            <RenderFilterSection 
+                                label="系列" 
+                                options={[{ id: 'All', name: '全部' }, ...availableSeriesList]} 
+                                current={filterBatchSeries} 
+                                onChange={setFilterBatchSeries} 
+                                mapName={s => s.name}
+                                disableToggleOff={true}
+                            />
+                        </div>
+                        <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 overflow-y-auto no-scrollbar flex-1 bg-gray-50">
+                            {filteredBatches.map(b => (
+                                <div key={b.id} className="flex flex-col items-center gap-1 cursor-pointer group hover:scale-95 transition-transform active:scale-90">
+                                    <BatchItem 
+                                        batch={b} 
+                                        isSelected={false} 
+                                        onClick={() => {
+                                            setShowBatchSelector(false);
+                                            const batchCards = (cards || []).filter(c => String(c.batchId) === String(b.id));
+                                            onAddSet(b, batchCards);
+                                        }} 
+                                        onLongPress={() => {}} 
+                                    />
+                                </div>
+                            ))}
+                            {filteredBatches.length === 0 && <div className="col-span-full py-10 text-center text-gray-400">目前沒有符合條件的批次</div>}
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );
@@ -3597,8 +3819,12 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
 }
 
 function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, members, series, batches, channels, types, uniqueTypes, uniqueChannels, uniqueSeriesTypes, uniqueSources, onRenameSource, onDeleteSource, onViewCard, inventory, subunits }) {
-    const isEdit = !!record;
+    const isEdit = !!record?.id;
+    const isSetMode = record?.isSetMode || record?.items?.some(i => i.isSet);
     const albumOptions = useMemo(() => (series || []).filter(s => s.type === '專輯'), [series]);
+
+    // 🌟 核心修復：在元件一掛載時，就固定這個紀錄的 ID，避免每次編輯都因為尚未有 ID 而產生全新的一筆
+    const [localRecordId] = useState(() => record?.id || Date.now().toString());
 
     const [form, setForm] = useState({
         name: record?.name || '', image: record?.image || null, status: record?.status || '未發貨',
@@ -3607,13 +3833,27 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     const [totalAmount, setTotalAmount] = useState(record?.totalAmount || '');
     
+    // 🌟 排序小卡的輔助函式：依照成員 sortOrder 由小到大排序
+    const sortItemsByMember = (items) => {
+        return [...items].sort((a, b) => {
+            const cardA = (cards || []).find(c => String(c.id) === String(a.cardId));
+            const cardB = (cards || []).find(c => String(c.id) === String(b.cardId));
+            const memA = cardA ? (members || []).find(m => String(m.id) === String(cardA.memberId)) : null;
+            const memB = cardB ? (members || []).find(m => String(m.id) === String(cardB.memberId)) : null;
+            const orderA = memA && memA.sortOrder !== undefined && memA.sortOrder !== null ? Number(memA.sortOrder) : 999;
+            const orderB = memB && memB.sortOrder !== undefined && memB.sortOrder !== null ? Number(memB.sortOrder) : 999;
+            if (orderA !== orderB) return orderA - orderB;
+            return String(a.cardId).localeCompare(String(b.cardId)); // 若同成員則以卡片ID穩定排序
+        });
+    };
+
     // 🌟 將舊有的歸戶物件，攤平成純陣列，每張卡都是獨立的物件 (包含 uid, buyPrice, sellPrice)
     const [cardItems, setCardItems] = useState(() => {
         // 🌟 修正：過濾掉雜物與純專輯項目
         const items = (record?.items || []).filter(i => !i.isMisc && !i.isAlbum);
         let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === record?.id && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
         
-        return items.flatMap(item => {
+        const initialItems = items.flatMap(item => {
             const qty = Number(item.quantity) || 1; 
             return Array.from({ length: qty }).map(() => {
                 let invIdx = availableInv.findIndex(inv => inv.cardId === item.cardId);
@@ -3629,10 +3869,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     sellPrice: matchedInv?.sellPrice || '',
                     sellDate: matchedInv?.sellDate || '', // 🌟 初始化售出日期
                     isManual: item.isManual,
+                    isSet: isSetMode || item.isSet || false
                     // 🌟 移除卡片綁定專輯的欄位初始化
                 };
             });
         });
+        
+        return sortItemsByMember(initialItems);
     });
     
     // 🌟 新增：獨立的專輯列表狀態
@@ -3659,38 +3902,54 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         return cardSellSum + miscSellSum + albumSellSum;
     }, [cardItems, miscItems, albumItems]);
 
-    const recordIdRef = useRef(record?.id);
-    useEffect(() => { recordIdRef.current = record?.id; }, [record?.id]);
+    // 🌟 新增：如果是新建狀態且有預設名稱 (例如套收)，則在一載入時就觸發一次儲存
+    // 確保資料不會因為使用者只看一眼就關閉視窗而遺失
+    useEffect(() => {
+        if (!isEdit && form.name.trim()) {
+            syncToParent(form, totalAmount, cardItems, miscItems, albumItems);
+        }
+    }, []);
+
+    // 🌟 加入防抖機制，避免打字時瘋狂觸發 DB 儲存
+    const syncTimer = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (syncTimer.current) clearTimeout(syncTimer.current);
+        };
+    }, []);
 
     const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems, updatedAlbumItems) => {
-        if (!updatedForm.name.trim() && !recordIdRef.current) return;
+        if (!updatedForm.name.trim() && !isSetMode) return;
         
-        const finalCardItems = updatedCardItems.map(item => ({
-            id: item.uid, // 回傳 inventory ID 給 App
-            cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate, // 🌟 傳遞售出日期
-            isManual: item.isManual, isMisc: false,
-            // 🌟 移除卡片綁定專輯的欄位
-        }));
+        if (syncTimer.current) clearTimeout(syncTimer.current);
+        
+        syncTimer.current = setTimeout(() => {
+            const finalCardItems = updatedCardItems.map(item => ({
+                id: item.uid, // 回傳 inventory ID 給 App
+                cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate,
+                isManual: item.isManual, isMisc: false, isSet: isSetMode || item.isSet || false
+            }));
 
-        const finalMiscItems = updatedMiscItems.map(m => ({
-            id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
-            sellDate: m.sellDate, isMisc: true, isManual: true
-        }));
+            const finalMiscItems = updatedMiscItems.map(m => ({
+                id: m.id, name: m.name, quantity: 1, buyPrice: Number(m.buyPrice) || 0, sellPrice: Number(m.sellPrice) || 0,
+                sellDate: m.sellDate, isMisc: true, isManual: true
+            }));
 
-        // 🌟 處理專輯項目
-        const finalAlbumItems = updatedAlbumItems.map(a => ({
-            id: a.id || a.uid,
-            albumId: a.albumId,
-            albumStatus: a.albumStatus || '未拆',
-            albumQuantity: Number(a.albumQuantity) || 0,
-            buyPrice: Number(a.buyPrice) || 0,
-            sellPrice: Number(a.sellPrice) || 0,
-            sellDate: a.sellDate,
-            isAlbum: true,
-            isManual: true // 專輯視為手動定價
-        }));
+            const finalAlbumItems = updatedAlbumItems.map(a => ({
+                id: a.id || a.uid,
+                albumId: a.albumId,
+                albumStatus: a.albumStatus || '未拆',
+                albumQuantity: Number(a.albumQuantity) || 0,
+                buyPrice: Number(a.buyPrice) || 0,
+                sellPrice: Number(a.sellPrice) || 0,
+                sellDate: a.sellDate,
+                isAlbum: true,
+                isManual: true 
+            }));
 
-        onSave({ ...updatedForm, id: recordIdRef.current, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
+            onSave({ ...updatedForm, id: localRecordId, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
+        }, 600); // 延遲 600ms，避免頻繁寫入資料庫
     };
 
     // 🌟 新版均價計算 (加入專輯成本扣除)
@@ -3890,9 +4149,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         const nextCardItems = newSelectedItems.map(newItem => {
             const existing = cardItems.find(c => c.uid === newItem.uid);
             if (existing) return existing;
-            return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false };
+            return { uid: newItem.uid, cardId: newItem.cardId, buyPrice: '', sellPrice: '', sellDate: '', isManual: false, isSet: isSetMode };
         });
-        const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, nextCardItems, miscItems, albumItems);
+        const sortedNextCardItems = sortItemsByMember(nextCardItems);
+        const { nextCards, nextMisc, nextAlbums } = recalculatePrices(totalAmount, sortedNextCardItems, miscItems, albumItems);
         setCardItems(nextCards); 
         setMiscItems(nextMisc);
         setAlbumItems(nextAlbums);
@@ -3920,7 +4180,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         <div className="fixed inset-0 z-[150] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up" {...swipeHandlers}>
             <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0 shadow-sm">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
-                <div className="font-bold text-lg">{isEdit ? '編輯盤收記錄' : '新增盤收記錄'}</div>
+                <div className="font-bold text-lg">{isEdit ? (isSetMode ? '編輯套收記錄' : '編輯盤收記錄') : (isSetMode ? '新增套收記錄' : '新增盤收記錄')}</div>
                 <div className="flex gap-1 items-center">
                     {isEdit && <button onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }} className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>}
                 </div>
@@ -3932,7 +4192,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <input type="text" placeholder="輸入盤收名稱" value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300" />
+                        <input type="text" placeholder={isSetMode ? "輸入套收名稱" : "輸入盤收名稱"} value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300" />
                         <div className="grid grid-cols-2 gap-2 mt-2">
                              <div className="relative">
                                 <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200">
@@ -4064,6 +4324,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     </div>
 
                     {/* 🌟 專輯內容區塊 (移到下方) */}
+                    {!isSetMode && (
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
@@ -4157,7 +4418,9 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未包含專輯。</div>}
                         </div>
                     </div>
+                    )}
 
+                    {!isSetMode && (
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
@@ -4219,6 +4482,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             {miscItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未新增任何雜物。</div>}
                         </div>
                     </div>
+                    )}
                 </div>
             </div>
 
@@ -6453,10 +6717,10 @@ export default function App() {
           let invIdx = -1;
           if (item.isAlbum) {
               // 專輯對應邏輯：找同 bulkRecordId 且有 albumId 的項目
-              invIdx = availableInv.findIndex(i => i.id === item.id || (i.albumId === item.albumId && i.albumStatus === item.albumStatus));
+              invIdx = availableInv.findIndex(i => String(i.id) === String(item.id) || (String(i.albumId) === String(item.albumId) && i.albumStatus === item.albumStatus));
           } else {
               // 卡片對應邏輯
-              invIdx = availableInv.findIndex(i => i.id === item.id || i.cardId === item.cardId);
+              invIdx = availableInv.findIndex(i => String(i.id) === String(item.id) || String(i.cardId) === String(item.cardId));
           }
           
           let existing = null;
@@ -6468,8 +6732,17 @@ export default function App() {
           let nextNote = existing?.note || `來自盤收: ${dataToSave.name}`;
           if (nextNote.startsWith('來自盤收:')) nextNote = `來自盤收: ${dataToSave.name}`;
 
+          // 🌟 致命修復：確保庫存 ID 絕對不包含 temp_，強制產生標準的資料庫可用 ID，避免資料庫拒絕或丟失
+          let finalId = item.id;
+          if (!finalId || String(finalId).startsWith('temp_') || String(finalId).startsWith('sel_') || String(finalId).startsWith('album_')) {
+              finalId = existing?.id || `bulk_inv_${savedRecordId}_${idx}_${Math.random().toString(36).substring(2, 9)}`;
+          }
+          
+          // 🌟 2. 致命修復：把更新後的真實 ID 寫回 dataToSave.items，確保資料庫與前端的庫存關聯完美吻合
+          item.id = finalId;
+
           return {
-              id: item.id || existing?.id || `bulk_inv_${savedRecordId}_${idx}_${Date.now()}`,
+              id: finalId,
               cardId: item.isAlbum ? null : item.cardId, // 🌟 專輯沒有 cardId
               bulkRecordId: savedRecordId,
               buyDate: dataToSave.buyDate,
@@ -6487,12 +6760,37 @@ export default function App() {
           };
       });
 
-      setInventory(prevInv => [...prevInv.filter(i => i.bulkRecordId !== savedRecordId), ...newBulkInvItems]);
+      // 🌟 1. 精準寫入本地狀態：如果存在就更新，不存在就新增，絕對不會丟失全新建立的資料
+      // 🌟 核心修復：確保寫入前，dataToSave.items 已經獲得了正確的 finalId，避免 UI 關聯脫鉤
+      setBulkRecords(prev => {
+          if (prev.some(r => String(r.id) === String(savedRecordId))) {
+              return prev.map(r => String(r.id) === String(savedRecordId) ? { ...r, ...dataToSave } : r);
+          } else {
+              return [...prev, dataToSave];
+          }
+      });
+      setEditingBulkRecord(prev => prev ? { ...prev, ...dataToSave } : prev);
+
+      setInventory(prevInv => [...prevInv.filter(i => String(i.bulkRecordId) !== String(savedRecordId)), ...newBulkInvItems]);
       
       await supabase.from('bulk_records').upsert(toSnakeCase(dataToSave));
-      await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
-      if(newBulkInvItems.length > 0) {
-          await supabase.from('ui_inventory').insert(newBulkInvItems.map(toSnakeCase));
+      
+      const finalIds = newBulkInvItems.map(i => i.id);
+      
+      // 🌟 終極修復：先撈取資料庫既有 ID，比對後精準刪除，避免 .not('in') 字串陣列語法錯誤導致儲存中斷
+      const { data: existingInv } = await supabase.from('ui_inventory').select('id').eq('bulk_record_id', savedRecordId);
+      if (existingInv) {
+          const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
+          if (idsToDelete.length > 0) {
+              await supabase.from('ui_inventory').delete().in('id', idsToDelete);
+          }
+      } else if (finalIds.length === 0) {
+          // 如果完全沒有卡片，保險起見直接清空該盤收的庫存
+          await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
+      }
+      
+      if (newBulkInvItems.length > 0) {
+          await supabase.from('ui_inventory').upsert(newBulkInvItems.map(toSnakeCase));
       }
   };
 
@@ -6578,8 +6876,24 @@ export default function App() {
             allRecords={currentBulkRecords}
             onAdd={() => setEditingBulkRecord('new')} 
             onEdit={(record) => setEditingBulkRecord(record)} 
+            onAddSet={(batch, batchCards) => {
+                setEditingBulkRecord({
+                    isSetMode: true,
+                    name: `${batch.name} 套收`,
+                    image: batch.image,
+                    items: batchCards.map((c, idx) => ({
+                        uid: `temp_${Date.now()}_${idx}`,
+                        cardId: c.id,
+                        buyPrice: '',
+                        sellPrice: '',
+                        isSet: true,
+                        isManual: false
+                    }))
+                });
+            }}
             inventory={currentInventory}
             series={currentSeries}
+            batches={currentBatches}
             setInventory={setInventory}
             setSales={setSales}
             members={currentMembers}
@@ -6590,6 +6904,8 @@ export default function App() {
             onRenameSource={handleRenameSource}
             onDeleteSource={handleDeleteSource}
             onSyncData={fetchCardData}
+                subunits={currentSubunits}
+                types={currentTypes}
         />;
         case 'inventory': 
         return <InventoryTab 
@@ -6628,15 +6944,15 @@ export default function App() {
         />;
            case 'export': 
         return <ExportTab 
-          cards={cards} customLists={customLists} setCustomLists={setCustomLists} 
+          cards={currentCards} customLists={customLists} setCustomLists={setCustomLists} 
           setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} 
-          sales={sales} inventory={inventory} members={members} series={series} 
-          batches={batches} channels={channels} types={types} 
+          sales={currentSales} inventory={currentInventory} members={currentMembers} series={currentSeries} 
+          batches={currentBatches} channels={currentChannels} types={currentTypes} 
           cols={exportCols}                     // 🌟 修正：把 cols 換成 exportCols
           setCols={setExportCols}               // 🌟 修正：把 setCols 換成 setExportCols
           showDetails={exportShowDetails}       // 🌟 順手修正：把 showDetails 換成 exportShowDetails
           setShowDetails={setExportShowDetails} // 🌟 順手修正
-          subunits={subunits}                   // 🌟 傳入 subunits
+          subunits={currentSubunits}            // 🌟 傳入 subunits
           appSettings={appSettings}             // 🌟 傳入設定資料
           onUpdateSetting={handleUpdateAppSetting} // 🌟 傳入更新函式
           showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
