@@ -28,7 +28,7 @@ export default function AdminPage() {
         member_id: memberIdMap[card.artistName] || null,
         image: card.thumbnailUrl,
         type: card.typeId,
-        series_id: 1773422939616,
+        series_id: 1773423260306,
         group_id: 1773331625412
     });
 

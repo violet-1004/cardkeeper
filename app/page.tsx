@@ -1611,7 +1611,12 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (filterSeriesId !== 'All' && String(b.seriesId) !== String(filterSeriesId)) return false;
       // 🌟 修正：不再因為選擇子類或通路而隱藏批次 (因為批次本身可能沒有設定類型，導致被錯誤過濾)
       // if (filterType !== 'All' && b.type !== filterType) return false;
-      // if (filterChannel !== 'All' && b.channel !== filterChannel) return false;
+      
+      // 🌟 應要求恢復「通路」篩選批次，並加入相容舊版資料的判斷 (ID 或 名稱)
+      if (filterChannel !== 'All') {
+          const ch = (channels || []).find(c => String(c.id) === String(filterChannel));
+          if (String(b.channel) !== String(filterChannel) && (!ch || String(b.channel) !== String(ch.name))) return false;
+      }
       return true;
   }).sort((a, b) => {
       const typeA = (types || []).find(t => t.id === a.type || t.name === a.type);
@@ -1879,7 +1884,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                             key={t.id}
                             text={t.name}
                             isSelected={filterType === t.id}
-                            onClick={() => setFilterType(filterType === t.id ? 'All' : t.id)}
+                           onClick={() => {
+                               setFilterType(filterType === t.id ? 'All' : t.id);
+                               setFilterBatchId('All');
+                           }}
                             onLongPress={(val) => handleLongPress('type', t.id, t.name)}
                             onDoubleClick={() => handleOptionDoubleClick('type', t)}
                        />
@@ -1895,7 +1903,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                             key={c.id}
                             text={c.name}
                             isSelected={filterChannel === c.id}
-                            onClick={() => setFilterChannel(filterChannel === c.id ? 'All' : c.id)}
+                           onClick={() => {
+                               setFilterChannel(filterChannel === c.id ? 'All' : c.id);
+                               setFilterBatchId('All');
+                           }}
                             onLongPress={(val) => handleLongPress('channel', c.id, c.name)}
                             onDoubleClick={() => handleOptionDoubleClick('channel', c)}
                        />
