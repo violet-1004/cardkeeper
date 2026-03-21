@@ -8,7 +8,7 @@ export async function GET(request) {
     const cursor = searchParams.get('cursor') || '';
 
     // 根據是否有 cursor 來決定請求網址
-    let targetUrl = `https://koca.shop/api/series/439/items?type=idol_card`;
+    let targetUrl = `https://koca.shop/api/series/438/items?type=idol_card`;
     if (cursor && cursor !== 'null') {
         targetUrl += `&cursor=${cursor}`;
     }

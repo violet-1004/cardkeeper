@@ -349,7 +349,7 @@ function getModalTitle(type) {
 
 const getOwnedQuantity = (invList, cardId) => {
     return (invList || [])
-        .filter(i => i.cardId === cardId && (!i.sellPrice || i.sellPrice <= 0))
+        .filter(i => String(i.cardId) === String(cardId) && (!i.sellPrice || i.sellPrice <= 0))
         .reduce((s, i) => s + Number(i.quantity), 0);
 };
 
@@ -982,7 +982,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
     const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
     const myInventory = (inventory || [])
-        .filter(i => i.cardId === card.id)
+        .filter(i => String(i.cardId) === String(card.id))
         .sort((a, b) => new Date(b.buyDate || 0) - new Date(a.buyDate || 0));
         
     const currentSale = sales.find(s => String(s.cardId) === String(card.id)); 
@@ -1398,7 +1398,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                             {activeModal === 'own' ? "新增購買紀錄" : "編輯紀錄"}
                             {tempInvData?.bulkRecordId && (
                                 (() => {
-                                    const parentBulkRecord = (bulkRecords || []).find(r => r.id === tempInvData.bulkRecordId);
+                                    const parentBulkRecord = (bulkRecords || []).find(r => String(r.id) === String(tempInvData.bulkRecordId));
                                     const isParentSet = parentBulkRecord && (parentBulkRecord.isSetMode || parentBulkRecord.items?.some(i => i.isSet));
                                     return (
                                         <button
@@ -1704,13 +1704,19 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       const map = {};
       (inventory || []).forEach(inv => {
           if (!inv.sellPrice || inv.sellPrice <= 0) {
-              map[inv.cardId] = (map[inv.cardId] || 0) + Number(inv.quantity || 1);
+              const key = String(inv.cardId);
+              if (!map[key]) map[key] = { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+              const qty = Number(inv.quantity || 1);
+              map[key].total += qty;
+              if (inv.status === '未發貨') map[key].unshipped += qty;
+              else if (inv.status === '囤貨') map[key].hoarded += qty;
+              else map[key].arrived += qty; // 若無設定或到貨，皆歸類至到貨
           }
       });
       return map;
   }, [inventory]);
 
-  const getCardQuantity = (cardId) => inventoryMap[cardId] || 0;
+  const getCardQuantity = (cardId) => inventoryMap[String(cardId)]?.total || 0;
   
   const handleAddNewCard = () => {
     openModal('card', {
@@ -1949,7 +1955,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         >
             {filteredCards.map(card => {
                         const isSelected = selectedItems.some(i => String(i.cardId) === String(card.id));
-                        const qty = inventoryMap[card.id] || 0;
+                        const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+                        const { arrived, unshipped, hoarded, total } = invStats;
                         const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
 
                         const memberName = (members || []).find(m => String(m.id) === String(card.memberId))?.name;
@@ -1999,9 +2006,11 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                         {isSelected && <Check className="w-3 h-3" />}
                                     </div>
                                 )}
-                                {qty > 0 && (
-                                    <div className={`absolute top-1 sm:top-2 ${isSelectionMode ? 'right-8' : 'right-1 sm:right-2'} bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow z-10 transition-all`}>
-                                        {qty}
+                                {total > 0 && (
+                                    <div className={`absolute top-1 sm:top-2 ${isSelectionMode ? 'right-8' : 'right-1 sm:right-2'} flex flex-col gap-0.5 z-10 items-end transition-all`}>
+                                        {arrived > 0 && <div className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="到貨">{arrived}</div>}
+                                        {hoarded > 0 && <div className="bg-blue-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="囤貨">{hoarded}</div>}
+                                        {unshipped > 0 && <div className="bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未發貨">{unshipped}</div>}
                                     </div>
                                 )}
                                 </div>
@@ -2044,7 +2053,12 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       (inventory || []).forEach(inv => {
           if (!inv.sellPrice || inv.sellPrice <= 0) {
               const key = String(inv.cardId);
-              map[key] = (map[key] || 0) + Number(inv.quantity || 1);
+              if (!map[key]) map[key] = { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+              const qty = Number(inv.quantity || 1);
+              map[key].total += qty;
+              if (inv.status === '未發貨') map[key].unshipped += qty;
+              else if (inv.status === '囤貨') map[key].hoarded += qty;
+              else map[key].arrived += qty;
           }
       });
       return map;
@@ -2246,7 +2260,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
      if (viewMode === 'selling' && !salesMap[card.id] && !salesMap[String(card.id)]) return false;
-     if (viewMode === 'owned' && !(inventoryMap[card.id] > 0) && !(inventoryMap[String(card.id)] > 0)) return false; // 🌟 雙重比對，徹底消滅型別遺失
+     if (viewMode === 'owned' && !(inventoryMap[card.id]?.total > 0) && !(inventoryMap[String(card.id)]?.total > 0)) return false; // 🌟 雙重比對，徹底消滅型別遺失
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
@@ -2291,7 +2305,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   
   // 🌟 修復進度條計算：以當前篩選範圍 (cardsInScope) 為基準，避免切換「擁有」時永遠顯示 100%
   const totalCount = cardsInScope.length;
-  const ownedCount = cardsInScope.filter(c => (inventoryMap[c.id] || inventoryMap[String(c.id)] || 0) > 0).length; // 🌟 雙重比對
+  const ownedCount = cardsInScope.filter(c => (inventoryMap[c.id]?.total || inventoryMap[String(c.id)]?.total || 0) > 0).length; // 🌟 雙重比對
   const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
   const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
@@ -2398,8 +2412,9 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
         <div className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
             {filteredCards.map(card => {
-                const qty = inventoryMap[String(card.id)] || 0;
-                const isOwned = qty > 0;
+                const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+                const { arrived, unshipped, hoarded, total } = invStats;
+                const isOwned = total > 0;
                 const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
                 
                 const memberName = memberMap[String(card.memberId)]?.name;
@@ -2436,7 +2451,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                                 {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                             </div>
 
-                        {qty > 0 && <div className="absolute top-1 sm:top-2 right-1 sm:right-2 bg-indigo-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow">{qty}</div>}
+                        {total > 0 && (
+                            <div className="absolute top-1 sm:top-2 right-1 sm:right-2 flex flex-col gap-0.5 z-10 items-end">
+                                {arrived > 0 && <div className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="到貨">{arrived}</div>}
+                                {hoarded > 0 && <div className="bg-blue-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="囤貨">{hoarded}</div>}
+                                {unshipped > 0 && <div className="bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未發貨">{unshipped}</div>}
+                            </div>
+                        )}
                         </div>
                         {showDetails && (
                             <div className="px-0.5 sm:px-1">
@@ -3092,7 +3113,13 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                         ))}
                         {albumList.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有專輯庫存</div>}
                     </div>
-                    {viewingAlbum && <AlbumDetailModal album={viewingAlbum} onClose={() => setViewingAlbum(null)} cards={cards} members={members} series={series} setInventory={setInventory} setSales={setSales} albumPrices={albumPrices} setAlbumPrices={setAlbumPrices} onViewCard={onViewCard} bulkRecords={allRecords} setBulkRecords={setBulkRecords} uniqueSources={uniqueSources} onRenameSource={onRenameSource} onDeleteSource={onDeleteSource} />}
+                    {viewingAlbum && <AlbumDetailModal album={viewingAlbum} onClose={() => setViewingAlbum(null)} cards={cards} members={members} series={series} setInventory={setInventory} setSales={setSales} albumPrices={albumPrices} setAlbumPrices={setAlbumPrices} onViewCard={onViewCard} bulkRecords={allRecords} setBulkRecords={setBulkRecords} uniqueSources={uniqueSources} onRenameSource={onRenameSource} onDeleteSource={onDeleteSource} onOpenBulkRecord={(bulkId) => {
+                        const record = (allRecords || []).find(r => String(r.id) === String(bulkId));
+                        if (record) {
+                            setViewingAlbum(null);
+                            onEdit(record);
+                        }
+                    }} />}
                 </>
             )}
 
@@ -3158,7 +3185,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
     );
 }
 
-function AlbumDetailModal({ album, onClose, cards, members, series, setInventory, setSales, albumPrices, setAlbumPrices, onViewCard, bulkRecords, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource }) {
+function AlbumDetailModal({ album, onClose, cards, members, series, setInventory, setSales, albumPrices, setAlbumPrices, onViewCard, bulkRecords, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource, onOpenBulkRecord }) {
     if (!album) return null;
 
     const [activeStatus, setActiveStatus] = useState('未拆');
@@ -3376,7 +3403,30 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
 
             {activeModal === 'editInv' && (
                 <Modal 
-                    title="編輯紀錄"
+                    title={
+                        <span className="flex items-center gap-2">
+                            編輯紀錄
+                            {tempInvData?.bulkRecordId && (
+                                (() => {
+                                    const parentBulkRecord = (bulkRecords || []).find(r => String(r.id) === String(tempInvData.bulkRecordId));
+                                    const isParentSet = parentBulkRecord && (parentBulkRecord.isSetMode || parentBulkRecord.items?.some(i => i.isSet));
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
+                                            }}
+                                            className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
+                                        >
+                                            <Package className="w-3 h-3" />
+                                            {isParentSet ? '編輯套收' : '編輯盤收'}
+                                        </button>
+                                    );
+                                })()
+                            )}
+                        </span>
+                    }
                     headerAction={<button onClick={() => handleDeleteInventory(tempInvData.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title="刪除紀錄"><Trash2 className="w-5 h-5" /></button>}
                     onClose={() => { setActiveModal(null); setTempInvData(null); }} 
                     className="max-w-sm"
@@ -3834,6 +3884,19 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const isSetMode = record?.isSetMode || record?.items?.some(i => i.isSet);
     const albumOptions = useMemo(() => (series || []).filter(s => s.type === '專輯'), [series]);
 
+    // 🌟 讀取 localStorage 記憶的專輯預設價格 (快速售出的價格) 作為購入成本預設值
+    const getSavedAlbumPrice = (albumId, status) => {
+        if (!albumId) return '';
+        try {
+            const saved = localStorage.getItem('album_prices');
+            if (saved) {
+                const prices = JSON.parse(saved);
+                return prices[`${albumId}_${status}`] || '';
+            }
+        } catch (e) { console.error(e); }
+        return '';
+    };
+
     // 🌟 核心修復：在元件一掛載時，就固定這個紀錄的 ID，避免每次編輯都因為尚未有 ID 而產生全新的一筆
     const [localRecordId] = useState(() => record?.id || Date.now().toString());
 
@@ -3862,12 +3925,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [cardItems, setCardItems] = useState(() => {
         // 🌟 修正：過濾掉雜物與純專輯項目
         const items = (record?.items || []).filter(i => !i.isMisc && !i.isAlbum);
-        let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === record?.id && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
+        let availableInv = [...(inventory || []).filter(i => String(i.bulkRecordId) === String(record?.id) && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
         
         const initialItems = items.flatMap(item => {
             const qty = Number(item.quantity) || 1; 
             return Array.from({ length: qty }).map(() => {
-                let invIdx = availableInv.findIndex(inv => inv.cardId === item.cardId);
+                let invIdx = availableInv.findIndex(inv => String(inv.cardId) === String(item.cardId));
                 let matchedInv = null;
                 if (invIdx !== -1) {
                     matchedInv = availableInv[invIdx];
@@ -3913,6 +3976,80 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         return cardSellSum + miscSellSum + albumSellSum;
     }, [cardItems, miscItems, albumItems]);
 
+    // 🌟 監聽外部 inventory 的變化，實時同步到盤收記錄內的小卡與專輯清單
+    // 確保在卡片詳情中編輯的售出價格等，能立即反應到此畫面
+    useEffect(() => {
+        if (!record?.id) return;
+        
+        setCardItems(prev => {
+            let hasChange = false;
+            // 取得此盤收專屬的所有小卡庫存
+            const availableInv = [...inventory.filter(i => String(i.bulkRecordId) === String(record.id) && !i.albumId)];
+            
+            const next = prev.map(item => {
+                let invIdx = availableInv.findIndex(i => String(i.id) === String(item.uid));
+                
+                // 🌟 核心修復：如果是剛加入的卡片 (uid 為 temp_ 或 sel_)，改用 cardId 來尋找對應的真實庫存紀錄
+                if (invIdx === -1 && (String(item.uid).startsWith('temp_') || String(item.uid).startsWith('sel_'))) {
+                    invIdx = availableInv.findIndex(i => String(i.cardId) === String(item.cardId));
+                }
+                
+                let inv = null;
+                if (invIdx !== -1) {
+                    inv = availableInv[invIdx];
+                    availableInv.splice(invIdx, 1); // 消耗掉，確保重複的同款卡片能對應到不同的庫存
+                }
+
+                if (inv) {
+                    const newUid = inv.id; // 🌟 升級為真實 ID，確保未來的配對永不脫鉤
+                    const newSellPrice = inv.sellPrice ? inv.sellPrice : '';
+                    const newBuyPrice = inv.buyPrice !== undefined ? inv.buyPrice : item.buyPrice;
+                    const newSellDate = inv.sellDate || '';
+                    
+                    if (String(newSellPrice) !== String(item.sellPrice) || newSellDate !== item.sellDate || String(newBuyPrice) !== String(item.buyPrice) || item.uid !== newUid) {
+                        hasChange = true;
+                        return { ...item, uid: newUid, sellPrice: newSellPrice, sellDate: newSellDate, buyPrice: newBuyPrice };
+                    }
+                }
+                return item;
+            });
+            return hasChange ? next : prev;
+        });
+
+        setAlbumItems(prev => {
+            let hasChange = false;
+            const availableInv = [...inventory.filter(i => String(i.bulkRecordId) === String(record.id) && i.albumId)];
+            
+            const next = prev.map(item => {
+                let invIdx = availableInv.findIndex(i => String(i.id) === String(item.uid));
+                
+                if (invIdx === -1 && String(item.uid).startsWith('album_')) {
+                    invIdx = availableInv.findIndex(i => String(i.albumId) === String(item.albumId) && i.albumStatus === item.albumStatus);
+                }
+                
+                let inv = null;
+                if (invIdx !== -1) {
+                    inv = availableInv[invIdx];
+                    availableInv.splice(invIdx, 1);
+                }
+
+                if (inv) {
+                    const newUid = inv.id;
+                    const newSellPrice = inv.sellPrice ? inv.sellPrice : '';
+                    const newBuyPrice = inv.buyPrice !== undefined ? inv.buyPrice : item.buyPrice;
+                    const newSellDate = inv.sellDate || '';
+                    
+                    if (String(newSellPrice) !== String(item.sellPrice) || newSellDate !== item.sellDate || String(newBuyPrice) !== String(item.buyPrice) || item.uid !== newUid) {
+                        hasChange = true;
+                        return { ...item, uid: newUid, sellPrice: newSellPrice, sellDate: newSellDate, buyPrice: newBuyPrice };
+                    }
+                }
+                return item;
+            });
+            return hasChange ? next : prev;
+        });
+    }, [inventory, record?.id]);
+
     // 🌟 新增：如果是新建狀態且有預設名稱 (例如套收)，則在一載入時就觸發一次儲存
     // 確保資料不會因為使用者只看一眼就關閉視窗而遺失
     useEffect(() => {
@@ -3956,7 +4093,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 sellPrice: Number(a.sellPrice) || 0,
                 sellDate: a.sellDate,
                 isAlbum: true,
-                isManual: true 
+            isManual: a.isManual !== undefined ? a.isManual : true
             }));
 
             onSave({ ...updatedForm, id: localRecordId, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
@@ -3977,12 +4114,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         let manualSum = 0; 
         let autoQty = 0;
         
-        // 🌟 專輯成本：數量 x 單價
-        let albumSum = 0; 
-        currentAlbumItems.forEach(a => { 
-            albumSum += (Number(a.buyPrice) || 0) * (Number(a.albumQuantity) || 0); 
-        });
-        
         // Cards
         currentCardItems.forEach(c => {
             if (c.isManual) manualSum += Number(c.buyPrice) || 0;
@@ -3995,7 +4126,16 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
              else autoQty += 1;
         });
         
-        const remaining = Math.max(0, total - manualSum - albumSum);
+        // Albums
+        currentAlbumItems.forEach(a => { 
+            if (a.isManual) {
+                manualSum += (Number(a.buyPrice) || 0) * (Number(a.albumQuantity) || 0); 
+            } else {
+                autoQty += (Number(a.albumQuantity) || 0);
+            }
+        });
+        
+        const remaining = Math.max(0, total - manualSum);
         const autoPrice = autoQty > 0 ? Math.round(remaining / autoQty) : 0;
         
         const nextCards = currentCardItems.map(c => {
@@ -4080,26 +4220,67 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     // 🌟 專輯操作函式
     const handleAddAlbum = () => {
+        let defaultAlbumId = '';
+        // 如果是套收且有卡片，試著從卡片的系列中找出對應的專輯
+        if (isSetMode && cardItems.length > 0) {
+            const firstCardId = cardItems[0].cardId;
+            const card = (cards || []).find(c => String(c.id) === String(firstCardId));
+            if (card && card.seriesId) {
+                const s = (series || []).find(ser => String(ser.id) === String(card.seriesId));
+                if (s && s.type === '專輯') {
+                    defaultAlbumId = s.id;
+                }
+            }
+        }
+
+        const defaultPrice = getSavedAlbumPrice(defaultAlbumId, '未拆');
+
         const newAlbum = { 
             uid: `album_${Date.now()}_${Math.random()}`, 
-            albumId: '', 
+            albumId: defaultAlbumId, 
             albumStatus: '未拆', 
             albumQuantity: 1, 
-            buyPrice: '', 
+            buyPrice: defaultPrice, 
             sellPrice: '', 
             sellDate: new Date().toISOString().split('T')[0],
-            isAlbum: true 
+            isAlbum: true,
+            isManual: !!defaultPrice
         };
         const nextAlbums = [...albumItems, newAlbum];
         setAlbumItems(nextAlbums);
-        syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
+        
+        if (defaultPrice) {
+            const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
+            setCardItems(nextCards);
+            setMiscItems(nextMisc);
+            setAlbumItems(recalculatedAlbums);
+            syncToParent(form, totalAmount, nextCards, nextMisc, recalculatedAlbums);
+        } else {
+            syncToParent(form, totalAmount, cardItems, miscItems, nextAlbums);
+        }
     };
 
     const handleAlbumChange = (uid, field, value) => {
-        let nextAlbums = albumItems.map(a => a.uid === uid ? { ...a, [field]: value } : a);
+        let nextAlbums = albumItems.map(a => {
+            if (a.uid === uid) {
+                const updated = { ...a, [field]: value };
+                // 🌟 當更換專輯或切換狀態時，自動讀取該狀態的記憶售價
+                if (field === 'albumId' || field === 'albumStatus') {
+                    const defaultPrice = getSavedAlbumPrice(updated.albumId, updated.albumStatus);
+                    if (defaultPrice) {
+                        updated.buyPrice = defaultPrice;
+                        updated.isManual = true;
+                    }
+                } else if (field === 'buyPrice') {
+                    updated.isManual = (value !== '' && Number(value) !== 0);
+                }
+                return updated;
+            }
+            return a;
+        });
         setAlbumItems(nextAlbums);
         // 🌟 專輯數量或單價變更時，重新計算總金額分配
-        if (field === 'buyPrice' || field === 'albumQuantity') {
+        if (field === 'buyPrice' || field === 'albumQuantity' || field === 'albumId' || field === 'albumStatus') {
             const { nextCards, nextMisc, nextAlbums: recalculatedAlbums } = recalculatePrices(totalAmount, cardItems, miscItems, nextAlbums);
             setCardItems(nextCards);
             setMiscItems(nextMisc);
@@ -4335,7 +4516,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     </div>
 
                     {/* 🌟 專輯內容區塊 (移到下方) */}
-                    {!isSetMode && (
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
@@ -4388,15 +4568,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                             >
                                                 {item.albumStatus}
                                             </button>
-                                            <div className="flex items-center border rounded-lg bg-white overflow-hidden w-16 flex-shrink-0">
-                                                <input 
-                                                    type="number" 
-                                                    value={item.albumQuantity} 
-                                                    onChange={e => handleAlbumChange(item.uid, 'albumQuantity', Math.max(0, Number(e.target.value)))}
-                                                    className="w-full text-center text-xs font-bold outline-none appearance-none h-full py-1.5" 
-                                                    placeholder="數量"
-                                                />
-                                            </div>
                                             <div className="flex flex-col items-end">
                                                 <label className="text-[9px] text-green-500 font-bold uppercase mb-0.5">售出</label>
                                                 <div className="flex items-baseline">
@@ -4426,12 +4597,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         </div>
                                 )
                             })}
-                            {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未包含專輯。</div>}
+                            {albumItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此{isSetMode ? '套' : '盤'}收未包含專輯。</div>}
                         </div>
                     </div>
-                    )}
 
-                    {!isSetMode && (
                     <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-4">
                         <div className="flex justify-between items-end mb-3 px-1">
                             <div className="font-bold text-gray-800 text-sm flex items-center gap-1">
@@ -4490,10 +4659,9 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                     </div>
                                 </div>
                             ))}
-                            {miscItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此盤收未新增任何雜物。</div>}
+                            {miscItems.length === 0 && <div className="text-center py-6 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white text-xs">此{isSetMode ? '套' : '盤'}收未新增任何雜物。</div>}
                         </div>
                     </div>
-                    )}
                 </div>
             </div>
 
@@ -6761,7 +6929,7 @@ export default function App() {
               quantity: item.isAlbum ? 0 : 1, // 🌟 專輯不計入卡片數量，但計入庫存項目
               source: dataToSave.source,
               status: dataToSave.status,
-              sellPrice: item.sellPrice !== undefined && item.sellPrice !== '' ? Number(item.sellPrice) : (existing?.sellPrice || 0),
+              sellPrice: item.sellPrice !== undefined ? (item.sellPrice === '' ? 0 : Number(item.sellPrice)) : (existing?.sellPrice || 0),
               sellDate: item.sellDate !== undefined ? item.sellDate : (existing?.sellDate || ''), // 🌟 優先使用表單傳來的日期
               condition: existing?.condition || '無損',
               note: nextNote,
@@ -7171,12 +7339,12 @@ export default function App() {
               openModal('card', currentCard || viewingCard);
           }}
           onOpenBulkRecord={(bulkId) => {
-              const record = (bulkRecords || []).find(r => r.id === bulkId);
+                      const record = (bulkRecords || []).find(r => String(r.id) === String(bulkId));
               if (record) {
                   setEditingBulkRecord(record);
                   setViewingCard(null);
                   setActiveTab('bulk');
-                  if (record.groupId && record.groupId !== currentGroupId) {
+                          if (record.groupId && String(record.groupId) !== String(currentGroupId)) {
                       setCurrentGroupId(record.groupId);
                   }
               }
