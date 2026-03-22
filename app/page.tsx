@@ -2033,6 +2033,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits }) {
   const [viewMode, setViewMode] = useState('all');
   const [showDetails, setShowDetails] = useState(true);
+  const [hideSelling, setHideSelling] = useState(false);
 
   const [filterSubunit, setFilterSubunit] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
@@ -2260,7 +2261,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
      if (viewMode === 'selling' && !salesMap[card.id] && !salesMap[String(card.id)]) return false;
-     if (viewMode === 'owned' && !(inventoryMap[card.id]?.total > 0) && !(inventoryMap[String(card.id)]?.total > 0)) return false; // 🌟 雙重比對，徹底消滅型別遺失
+     if (viewMode === 'owned') {
+         if (!(inventoryMap[card.id]?.total > 0) && !(inventoryMap[String(card.id)]?.total > 0)) return false;
+         if (hideSelling && (salesMap[card.id] || salesMap[String(card.id)])) return false;
+     }
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
@@ -2345,6 +2349,18 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
             </h2>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                  <div className="flex items-center gap-2">
+                     {viewMode === 'owned' && (
+                         <button
+                             onClick={() => setHideSelling(!hideSelling)}
+                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${hideSelling ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                             title={hideSelling ? "點擊顯示販售中的卡片" : "點擊隱藏販售中的卡片"}
+                         >
+                             <div className="relative flex items-center justify-center">
+                                 <Coins className={`w-4 h-4 ${hideSelling ? 'opacity-50' : ''}`} />
+                                 {hideSelling && <div className="absolute top-1/2 left-1/2 w-[120%] h-[1.5px] bg-indigo-700 -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full" />}
+                             </div>
+                         </button>
+                     )}
                      <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0 flex-1 sm:flex-none">
                        <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
                        <select 
