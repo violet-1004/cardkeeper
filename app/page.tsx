@@ -1663,11 +1663,31 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           return isNaN(n) ? defaultVal : n;
       };
 
+      const hasBatchA = !!cardA.batchId;
+      const hasBatchB = !!cardB.batchId;
+
+      // 🌟 0. 無批次的小卡排在有批次的小卡後
+      if (hasBatchA !== hasBatchB) return hasBatchA ? -1 : 1;
+
       // 1. 系列時間 (越舊越前)
       const sA = (series || []).find(s => String(s.id) === String(cardA.seriesId));
       const sB = (series || []).find(s => String(s.id) === String(cardB.seriesId));
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
       const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+
+      if (!hasBatchA && !hasBatchB) {
+          // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
+          if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+          const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+          const mA = (members || []).find(m => String(m.id) === String(cardA.memberId));
+          const mB = (members || []).find(m => String(m.id) === String(cardB.memberId));
+          const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+          const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+          if (mSortA !== mSortB) return mSortA - mSortB;
+          return safeString(cardA.id).localeCompare(safeString(cardB.id));
+      }
+
       if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
       // 2. 子類排序 (數字越小排越前面)
@@ -2270,11 +2290,31 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       const safeString = (val) => val ? String(val) : '';
       const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
+      const hasBatchA = !!cardA.batchId;
+      const hasBatchB = !!cardB.batchId;
+
+      // 🌟 0. 無批次的小卡排在有批次的小卡後
+      if (hasBatchA !== hasBatchB) return hasBatchA ? -1 : 1;
+
       // 1. 系列時間 (越舊越前)
       const sA = seriesMap[String(cardA.seriesId)];
       const sB = seriesMap[String(cardB.seriesId)];
       const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
       const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+
+      if (!hasBatchA && !hasBatchB) {
+          // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
+          if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+          const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+          const mA = memberMap[String(cardA.memberId)];
+          const mB = memberMap[String(cardB.memberId)];
+          const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+          const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+          if (mSortA !== mSortB) return mSortA - mSortB;
+          return safeString(cardA.id).localeCompare(safeString(cardB.id));
+      }
+
       if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
       // 2. 子類排序 (數字越小排越前面)
@@ -3669,11 +3709,31 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             const safeString = (val) => val ? String(val) : '';
             const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
+            const hasBatchA = !!cardA.batchId;
+            const hasBatchB = !!cardB.batchId;
+
+            // 🌟 0. 無批次的小卡排在有批次的小卡後
+            if (hasBatchA !== hasBatchB) return hasBatchA ? -1 : 1;
+
             // 1. 系列時間 (越舊越前)
             const sA = seriesMap[String(cardA.seriesId)];
             const sB = seriesMap[String(cardB.seriesId)];
             const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
             const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+
+            if (!hasBatchA && !hasBatchB) {
+                // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
+                if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+                const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
+                if (nameCompare !== 0) return nameCompare;
+                const mA = memberMap[String(cardA.memberId)];
+                const mB = memberMap[String(cardB.memberId)];
+                const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+                const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+                if (mSortA !== mSortB) return mSortA - mSortB;
+                return safeString(cardA.id).localeCompare(safeString(cardB.id));
+            }
+
             if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
             // 2. 子類排序 (數字越小排越前面)
@@ -5513,26 +5573,46 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const safeString = (val) => val ? String(val) : '';
             const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
+            const hasBatchA = !!cardA.batchId;
+            const hasBatchB = !!cardB.batchId;
+
+            // 🌟 0. 無批次的小卡排在有批次的小卡後
+            if (hasBatchA !== hasBatchB) return hasBatchA ? -1 : 1;
+
             const sA = (series || []).find(s => s.id === cardA.seriesId);
             const sB = (series || []).find(s => s.id === cardB.seriesId);
             const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
             const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+
+            if (!hasBatchA && !hasBatchB) {
+                // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
+                if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+                const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
+                if (nameCompare !== 0) return nameCompare;
+                const mA = (members || []).find(m => String(m.id) === String(cardA.memberId));
+                const mB = (members || []).find(m => String(m.id) === String(cardB.memberId));
+                const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+                const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+                if (mSortA !== mSortB) return mSortA - mSortB;
+                return safeString(cardA.id).localeCompare(safeString(cardB.id));
+            }
+
             if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
-            const bA = (batches || []).find(b => b.id === cardA.batchId);
-            const bB = (batches || []).find(b => b.id === cardB.batchId);
-            if (bA && bB && bA.id !== bB.id) {
-                const typeA = (types || []).find(t => t.id === bA.type || t.name === bA.type);
-                const typeB = (types || []).find(t => t.id === bB.type || t.name === bB.type);
-                const sortA = typeA ? safeNum(typeA.sortOrder, 999) : 999;
-                const sortB = typeB ? safeNum(typeB.sortOrder, 999) : 999;
-                if (sortA !== sortB) return sortA - sortB;
-                const dB_A = bA.date ? new Date(bA.date).getTime() : 253402214400000;
-                const dB_B = bB.date ? new Date(bB.date).getTime() : 253402214400000;
-                if (dB_A !== dB_B) return dB_A - dB_B;
-                return safeString(bA.name).localeCompare(safeString(bB.name), 'zh-TW', { numeric: true });
-            } else if (bA && !bB) return -1;
-            else if (!bA && bB) return 1;
+            const typeA = (types || []).find(t => String(t.id) === String(cardA.type) || t.name === cardA.type);
+            const typeB = (types || []).find(t => String(t.id) === String(cardB.type) || t.name === cardB.type);
+            const sortA_type = typeA ? safeNum(typeA.sortOrder, 999) : 999;
+            const sortB_type = typeB ? safeNum(typeB.sortOrder, 999) : 999;
+            if (sortA_type !== sortB_type) return sortA_type - sortB_type;
+            const bA = (batches || []).find(b => String(b.id) === String(cardA.batchId));
+            const bB = (batches || []).find(b => String(b.id) === String(cardB.batchId));
+            const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
+            const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+            if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+            const nameA = safeString(bA?.name);
+            const nameB = safeString(bB?.name);
+            const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+            if (nameCompare !== 0) return nameCompare;
 
             const mA = (members || []).find(m => m.id === cardA.memberId);
             const mB = (members || []).find(m => m.id === cardB.memberId);
@@ -5601,7 +5681,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 payload.id = editingListId;
                 setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
             } else {
-                payload.id = generateUUID(); // 🌟 改用 UUID 避免格式問題
+                payload.id = Date.now().toString(); // 🌟 復原為純數字，相容資料庫的 bigint 格式
                 payload.items = [];
                 setCustomLists([...(customLists || []), payload]);
             }
@@ -6568,7 +6648,7 @@ export default function App() {
       }
 
       // 🌟 3. 處理單筆新增/編輯
-      const payload = { ...data, id: data.id || (type === 'subunit' ? generateUUID() : Date.now().toString()) };
+      const payload = { ...data, id: data.id || Date.now().toString() }; // 🌟 復原為純數字字串
       
       const updateList = (list, setList) => {
            setList(prev => {
