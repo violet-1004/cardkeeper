@@ -1,12 +1,45 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
 
 export default function AdminPage() {
     const [status, setStatus] = useState("等待同步...");
     const [fetchPages, setFetchPages] = useState(5); // 預設一次抓 5 頁 (500筆)
     const [currentCursor, setCurrentCursor] = useState(""); // 記錄當前指標，方便中斷後繼續
+
+    // 系列選擇相關狀態
+    const [seriesList, setSeriesList] = useState([]);
+    const [selectedSeriesId, setSelectedSeriesId] = useState("");
+    const [apiIdInput, setApiIdInput] = useState("");
+
+    useEffect(() => {
+        const fetchSeries = async () => {
+            const { data } = await supabase.from('series').select('*');
+            if (data) setSeriesList(data);
+        };
+        fetchSeries();
+    }, []);
+
+    const handleSeriesChange = (e) => {
+        const id = e.target.value;
+        setSelectedSeriesId(id);
+        const targetSeries = seriesList.find(s => String(s.id) === String(id));
+        setApiIdInput(targetSeries?.api_id || "");
+    };
+
+    const handleSaveApiId = async () => {
+        if (!selectedSeriesId) return alert("請先選擇系列！");
+        if (!apiIdInput) return alert("請輸入 API ID！");
+        
+        const { error } = await supabase.from('series').update({ api_id: apiIdInput }).eq('id', selectedSeriesId);
+        if (error) {
+            alert(`儲存失敗: ${error.message}`);
+        } else {
+            alert("系列 API ID 儲存成功！");
+            setSeriesList(prev => prev.map(s => String(s.id) === String(selectedSeriesId) ? { ...s, api_id: apiIdInput } : s));
+        }
+    };
 
     const memberIdMap = {
         "SERIM": 1773335539939,
@@ -22,13 +55,13 @@ export default function AdminPage() {
 
 
     // 小卡資料轉換規則
-    const formatCard = (card) => ({
+    const formatCard = (card, targetSeriesId) => ({
         id: card.id,
         name: card.name,
         member_id: memberIdMap[card.artistName] || null,
         image: card.thumbnailUrl,
         type: card.typeId,
-        series_id: 1773423448829,
+        series_id: targetSeriesId,
         group_id: 1773331625412
     });
 
@@ -94,6 +127,14 @@ export default function AdminPage() {
     const syncCards = async () => {
         try {
             if (fetchPages < 1) return;
+            if (!selectedSeriesId) {
+                setStatus("錯誤：請先在上方選擇要匯入的「系列」！");
+                return;
+            }
+            if (!apiIdInput) {
+                setStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
+                return;
+            }
 
             let allFormattedCards = [];
             let tempCursor = currentCursor;
@@ -101,7 +142,9 @@ export default function AdminPage() {
             for (let i = 0; i < fetchPages; i++) {
                 setStatus(`正在抓取小卡第 ${i + 1} 頁 (已累積 ${allFormattedCards.length} 筆)...`);
                 
-                const url = tempCursor ? `/api/crawler/card?cursor=${tempCursor}` : '/api/crawler/card';
+                const url = tempCursor 
+                    ? `/api/crawler/card?cursor=${tempCursor}&api_id=${apiIdInput}` 
+                    : `/api/crawler/card?api_id=${apiIdInput}`;
                 const response = await fetch(url);
 
                 if (!response.ok) {
@@ -115,7 +158,7 @@ export default function AdminPage() {
                     break;
                 }
 
-                const formattedBatch = data.records.map(formatCard);
+                const formattedBatch = data.records.map(record => formatCard(record, selectedSeriesId));
 
                 allFormattedCards = allFormattedCards.concat(formattedBatch);
                 tempCursor = data.next || null;
@@ -266,6 +309,38 @@ export default function AdminPage() {
                         重置進度 (從頭抓取)
                     </button>
                     {currentCursor && <span className="text-xs text-gray-500">已有暫存進度，下次將接續抓取。</span>}
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-gray-200 w-full">
+                    <h3 className="text-sm font-bold text-gray-700 mb-2">小卡匯入系列設定</h3>
+                    <div className="flex flex-col gap-2">
+                        <select 
+                            value={selectedSeriesId} 
+                            onChange={handleSeriesChange}
+                            className="w-full px-2 py-1.5 border rounded text-sm bg-white"
+                        >
+                            <option value="">-- 請選擇要匯入的系列 --</option>
+                            {seriesList.map(s => (
+                                <option key={s.id} value={s.id}>{s.name} {s.shortName ? `(${s.shortName})` : ''}</option>
+                            ))}
+                        </select>
+                        
+                        <div className="flex gap-2 items-center">
+                            <input 
+                                type="text" 
+                                placeholder="輸入 KOCA API 數字 (例如: 565)"
+                                value={apiIdInput}
+                                onChange={(e) => setApiIdInput(e.target.value)}
+                                className="flex-1 px-2 py-1.5 border rounded text-sm"
+                            />
+                            <button 
+                                onClick={handleSaveApiId}
+                                className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded hover:bg-gray-700 whitespace-nowrap font-bold"
+                            >
+                                儲存 API ID
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

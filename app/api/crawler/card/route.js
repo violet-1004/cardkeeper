@@ -6,9 +6,14 @@ export const revalidate = 0;
 export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const cursor = searchParams.get('cursor') || '';
+    const apiId = searchParams.get('api_id');
+
+    if (!apiId) {
+        return NextResponse.json({ error: 'Missing api_id parameter' }, { status: 400 });
+    }
 
     // 根據是否有 cursor 來決定請求網址
-    let targetUrl = `https://koca.shop/api/series/568/items?type=idol_card`;
+    let targetUrl = `https://koca.shop/api/series/${apiId}/items?type=idol_card`;
     if (cursor && cursor !== 'null') {
         targetUrl += `&cursor=${cursor}`;
     }
