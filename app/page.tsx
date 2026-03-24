@@ -6332,7 +6332,7 @@ export default function App() {
                   window.history.pushState(null, '', newUrl.toString());
               }
           }
-      } else if (urlParams.has('group') && groups.length === 0) {
+      } else if (urlParams.has('group') && groups.length > 0) {
           const newUrl = new URL(window.location.href);
           newUrl.searchParams.delete('group');
           window.history.replaceState(null, '', newUrl.toString());
