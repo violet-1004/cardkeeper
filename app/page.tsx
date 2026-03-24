@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 import Image from 'next/image';
+import Link from 'next/link';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient'; // 🌟 引入資料庫連線
 import { 
@@ -12,7 +13,6 @@ import {
   ChevronLeft, Folder, Package, Copy, Disc, RefreshCw
 } from 'lucide-react';
 
-import Link from 'next/link';
 import * as htmlToImage from 'html-to-image';
 // --- 🌟 資料庫欄位名稱轉換工具 (處理 JS 駝峰命名與資料庫底線命名的差異) ---
 const toSnakeCase = (obj) => {
@@ -2056,10 +2056,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const [showDetails, setShowDetails] = useState(true);
   const [hideSelling, setHideSelling] = useState(false);
 
-  const [filterSubunit, setFilterSubunit] = useState('All');
-  const [filterMember, setFilterMember] = useState('All');
-  const [filterType, setFilterType] = useState('All');
-  const [filterChannel, setFilterChannel] = useState('All');
+  const [filterSubunits, setFilterSubunits] = useState([]);
+  const [filterMembers, setFilterMembers] = useState([]);
+  const [filterTypes, setFilterTypes] = useState([]);
+  const [filterChannels, setFilterChannels] = useState([]);
 
   const [showSeriesModal, setShowSeriesModal] = useState(false);
   const [filterSeriesType, setFilterSeriesType] = useState('All');
@@ -2150,23 +2150,21 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   useEffect(() => {
       if (availableSubunits.length > 0) {
           const availableIds = availableSubunits.map(s => s.id);
-          if (filterSubunit !== 'All' && !availableIds.includes(filterSubunit)) {
-              setFilterSubunit('All'); // 🌟 修復：預設改為顯示全部，不再強制綁架第一個分隊
-          }
+          setFilterSubunits(prev => prev.filter(id => availableIds.includes(id)));
       } else {
-          setFilterSubunit('All');
+          setFilterSubunits([]);
       }
-  }, [availableSubunits, filterSubunit]);
+  }, [availableSubunits]);
 
   const subunitFilteredCards = useMemo(() => {
-      if (filterSubunit === 'All') return baseCards;
+      if (filterSubunits.length === 0) return baseCards;
       return baseCards.filter(c => {
           const m = memberMap[String(c.memberId)];
           const s = seriesMap[String(c.seriesId)];
           // 🌟 雙重判斷：如果 member 沒有資料(例如批次卡)，則看 series 是否屬於該分隊
-          return (m && m.subunit === filterSubunit) || (s && s.subunit === filterSubunit);
+          return (m && filterSubunits.includes(m.subunit)) || (s && filterSubunits.includes(s.subunit));
       });
-  }, [baseCards, filterSubunit, memberMap, seriesMap]);
+  }, [baseCards, filterSubunits, memberMap, seriesMap]);
 
   const availableMembers = useMemo(() => {
       const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
@@ -2202,26 +2200,26 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   
   const availableSeriesList = useMemo(() => {
       let filtered = (series || []).filter(s => baseCards.some(c => String(c.seriesId) === String(s.id)));
-      if (filterSubunit !== 'All') {
-          filtered = filtered.filter(s => s.subunit === filterSubunit);
+      if (filterSubunits.length > 0) {
+          filtered = filtered.filter(s => filterSubunits.includes(s.subunit));
       }
       if (filterSeriesType !== 'All') {
           filtered = filtered.filter(s => s.type === filterSeriesType);
       }
       return filtered;
-  }, [baseCards, series, filterSeriesType, filterSubunit]);
+  }, [baseCards, series, filterSeriesType, filterSubunits]);
 
   const availableBatchesList = useMemo(() => {
       let filtered = (batches || []).filter(b => baseCards.some(c => String(c.batchId) === String(b.id)));
-      if (filterSubunit !== 'All') {
-          const validSeriesIds = new Set((series || []).filter(s => s.subunit === filterSubunit).map(s => String(s.id)));
+      if (filterSubunits.length > 0) {
+          const validSeriesIds = new Set((series || []).filter(s => filterSubunits.includes(s.subunit)).map(s => String(s.id)));
           filtered = filtered.filter(b => validSeriesIds.has(String(b.seriesId)));
       }
       if (filterSeries !== 'All') {
           filtered = filtered.filter(b => String(b.seriesId) === String(filterSeries));
       }
       return filtered;
-  }, [baseCards, batches, filterSeries, filterSubunit, series]);
+  }, [baseCards, batches, filterSeries, filterSubunits, series]);
 
   useEffect(() => {
       if (filterSeries !== 'All') {
@@ -2256,14 +2254,14 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const cardsInScope = useMemo(() => {
     return baseCards.filter(card => {
          // 🌟 修正批次卡篩選：檢查卡片的 memberId 或是 seriesId 所屬分隊
-         if (filterSubunit !== 'All' && filterMember === 'All') {
+         if (filterSubunits.length > 0 && filterMembers.length === 0) {
              const mem = memberMap[String(card.memberId)];
              const ser = seriesMap[String(card.seriesId)];
-             const belongsToSubunit = (mem && mem.subunit === filterSubunit) || (ser && ser.subunit === filterSubunit);
+             const belongsToSubunit = (mem && filterSubunits.includes(mem.subunit)) || (ser && filterSubunits.includes(ser.subunit));
              if (!belongsToSubunit) return false;
          }
 
-         if (filterMember !== 'All' && String(card.memberId) !== String(filterMember)) return false;
+         if (filterMembers.length > 0 && !filterMembers.includes(String(card.memberId))) return false;
          if (filterSeries !== 'All' && String(card.seriesId) !== String(filterSeries)) return false;
          
          if (filterSeriesType !== 'All' && filterSeries === 'All') {
@@ -2271,13 +2269,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
             if (!s || s.type !== filterSeriesType) return false;
          }
 
-         if (filterType !== 'All' && String(card.type) !== String(filterType)) return false;
-         if (filterChannel !== 'All' && String(card.channel) !== String(filterChannel)) return false;
+         if (filterTypes.length > 0 && !filterTypes.includes(String(card.type))) return false;
+         if (filterChannels.length > 0 && !filterChannels.includes(String(card.channel))) return false;
          if (filterBatch !== 'All' && String(card.batchId) !== String(filterBatch)) return false;
          
          return true;
     });
-  }, [baseCards, filterMember, filterType, filterChannel, filterSeriesType, filterSeries, filterBatch, memberMap, seriesMap, filterSubunit]);
+  }, [baseCards, filterMembers, filterTypes, filterChannels, filterSeriesType, filterSeries, filterBatch, memberMap, seriesMap, filterSubunits]);
 
   const filteredCards = cardsInScope.filter(card => {
      if (viewMode === 'wishlist' && !card.isWishlist) return false;
@@ -2353,23 +2351,20 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const ownedCount = cardsInScope.filter(c => (inventoryMap[c.id]?.total || inventoryMap[String(c.id)]?.total || 0) > 0).length; // 🌟 雙重比對
   const percentage = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
-  const RenderFilterSection = ({ label, options, current, onChange, mapName, disableToggleOff = false }) => (
+  const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
      <div className="flex items-center gap-3 overflow-hidden">
         <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
             {(options || []).map(opt => {
                 const id = typeof opt === 'object' ? opt.id : opt;
                 const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
-                const isSelected = String(current) === String(id);
+                const isSelected = current.includes(String(id));
                 return (
                     <FilterTagItem 
                         key={id}
                         text={name}
                         isSelected={isSelected}
-                        onClick={() => {
-                            if (disableToggleOff && isSelected) return; 
-                            onChange(isSelected ? 'All' : id);
-                        }}
+                        onClick={() => onChange(String(id))}
                         onLongPress={() => {}} 
                         onDoubleClick={() => {}}
                     />
@@ -2378,6 +2373,10 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
      </div>
   );
+
+  const toggleFilter = (setFunc, val) => {
+      setFunc(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -2430,13 +2429,18 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
         </div>
         
         <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm space-y-3 sm:space-y-4">
-            {/* 🌟 補上「全部」的選項 */}
             {availableSubunits.length > 0 && (
-                <RenderFilterSection label="分隊" options={[{id: 'All', name: '全部'}, ...availableSubunits]} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />
+                <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => { toggleFilter(setFilterSubunits, val); setFilterMembers([]); }} mapName={s => s.name} />
             )}
-            <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />
-            <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />
-            <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />
+            {availableMembers.length > 0 && (
+                <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
+            )}
+            {availableTypes.length > 0 && (
+                <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
+            )}
+            {availableChannels.length > 0 && (
+                <RenderFilterSection label="通路" options={availableChannels} current={filterChannels} onChange={(val) => toggleFilter(setFilterChannels, val)} mapName={c => c.name} />
+            )}
             <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
@@ -3080,6 +3084,19 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                     <button onClick={() => setViewMode('set')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'set' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>套收</button>
                     <button onClick={() => setViewMode('bulk')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'bulk' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>盤收</button>
                     <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
+                </div>
+                <div className="flex justify-between items-center">
+                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />{viewMode === 'set' ? '套收管理' : viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
+                    {(viewMode === 'bulk' || viewMode === 'set') && (
+                        <div className="flex gap-2">
+                            {viewMode === 'bulk' && (
+                                <button onClick={onSyncData} className="bg-white text-indigo-600 border border-indigo-100 px-3 py-2 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 transition-all flex items-center gap-1">
+                                    <RefreshCw className="w-3.5 h-3.5" /> 同步資料
+                                </button>
+                            )}
+                            <button onClick={viewMode === 'set' ? () => setShowBatchSelector(true) : onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>
+                        </div>
+                    )}
                 </div>
             </div>
             
@@ -4816,7 +4833,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
   const [form, setForm] = useState({ 
     name: '', shortName: '', batchNumber: '', image: null, type: '', date: '', 
     seriesId: '', batchId: '', memberId: '', channel: '', memberIds: [], 
-    sortOrder: 0, // 🌟 補上這個
+    sortOrder: 0, api: '', // 🌟 補上這個
     ...initialData,
     // 🌟 強制修正日期格式，避免 ISO String 導致 input date 顯示空白
     date: initialData.date ? String(initialData.date).split('T')[0] : ''
@@ -4881,7 +4898,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                      <Trash2 className="w-4 h-4" /> 刪除
                  </button>
              )}
-             {isEdit && type === 'batch' && (
+             {isEdit && (type === 'batch' || type === 'series') && (
                  <button 
                     onClick={handleDuplicate} 
                     className="px-4 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center gap-1 text-sm font-bold"
@@ -5056,6 +5073,10 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
               <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">發行日期</label>
                   <input type="date" className="w-full border p-2 rounded-lg" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
+              </div>
+              <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">KOCA API ID (選填)</label>
+                  <input type="text" className="w-full border p-2 rounded-lg" placeholder="Ex. 565" value={form.api || ''} onChange={e => setForm({...form, api: e.target.value})} />
               </div>
            </div>
         )}
@@ -6298,6 +6319,39 @@ export default function App() {
       setCategorizeSubBatchId('');
   }, [batchCategorizeTarget]);
 
+  // 🌟 新增：監聽 currentGroupId 改變，同步更新網址，讓不同團體有獨立網址
+  useEffect(() => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (currentGroupId) {
+          if (urlParams.get('group') !== String(currentGroupId)) {
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.set('group', currentGroupId);
+              if (!urlParams.has('group')) {
+                  window.history.replaceState(null, '', newUrl.toString());
+              } else {
+                  window.history.pushState(null, '', newUrl.toString());
+              }
+          }
+      } else if (urlParams.has('group') && groups.length === 0) {
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('group');
+          window.history.replaceState(null, '', newUrl.toString());
+      }
+  }, [currentGroupId, groups.length]);
+
+  // 🌟 新增：監聽瀏覽器上一頁/下一頁動作，同步切換團體
+  useEffect(() => {
+      const handlePopState = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlGroupId = urlParams.get('group');
+          if (urlGroupId && urlGroupId !== String(currentGroupId)) {
+              setCurrentGroupId(urlGroupId);
+          }
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentGroupId]);
+
   // 🌟 新增：主頁左右滑動切換分頁
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -6351,7 +6405,10 @@ export default function App() {
         // 🌟 加上錯誤警告，抓出連線或權限問題
         if (error) {
          console.error(`🚨 [${t}] 讀取失敗:`, error.message);
-         if (!silent) alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+         // 🌟 隱藏 React Strict Mode 或併發請求造成的 AbortError 鎖定錯誤
+         if (!silent && !error.message?.includes('AbortError') && !error.message?.includes('Lock was stolen')) {
+             alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+         }
         } else {
              console.log(`✅ [${t}] 成功讀取 ${data?.length || 0} 筆資料`);
         }
@@ -6360,7 +6417,14 @@ export default function App() {
         };
         const fetchedGroups = await fetchTable('groups');
         setGroups(fetchedGroups);
-        if (fetchedGroups.length > 0 && !currentGroupId) setCurrentGroupId(fetchedGroups[0].id);
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlGroupId = urlParams.get('group');
+        if (urlGroupId && fetchedGroups.some(g => String(g.id) === String(urlGroupId))) {
+            setCurrentGroupId(urlGroupId);
+        } else if (fetchedGroups.length > 0 && !currentGroupId) {
+            setCurrentGroupId(fetchedGroups[0].id);
+        }
 
         // 🌟 改為並行讀取，確保分隊資訊與成員同時到位，避免預設選取錯誤
         const [fetchedMembers, fetchedSubunits] = await Promise.all([
@@ -6575,7 +6639,7 @@ export default function App() {
       const allowedKeys = {
           group: ['id', 'name', 'image'],
           member: ['id', 'groupId', 'name', 'image','sortOrder', 'subunit'],
-          series: ['id', 'groupId', 'name', 'type', 'date', 'shortName', 'image', 'subunit'],
+          series: ['id', 'groupId', 'name', 'type', 'date', 'shortName', 'image', 'subunit', 'api'],
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
@@ -7229,14 +7293,12 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20 md:pb-0">
       <nav className="bg-white/70 backdrop-blur-lg border-b border-white/20 shadow-sm sticky top-0 z-40 px-4">
         <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Link href="/admin" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="bg-indigo-600 p-2 rounded-lg">
-                <Grid className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-bold text-xl text-indigo-900 hidden sm:block">小卡管家</span>
-            </Link>
-          </div>
+          <Link href="/admin" className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+            <div className="bg-indigo-600 p-2 rounded-lg">
+              <Grid className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-xl text-indigo-900 hidden sm:block">小卡管家</span>
+          </Link>
 
           {groups.length > 0 && (
             <div className="flex space-x-1 overflow-x-auto no-scrollbar mx-4">
@@ -7302,9 +7364,10 @@ export default function App() {
                         <div className="p-2 border-b bg-gray-50 text-xs font-bold text-gray-500">切換團體</div>
                         <div className="max-h-60 overflow-y-auto no-scrollbar">
                             {(groups || []).map(g => (
-                                <div 
+                                <Link 
+                                    href={`/?group=${g.id}`}
                                     key={g.id}
-                                    onDoubleClick={() => { setShowGroupSelector(false); openModal('group', g); }} 
+                                    onDoubleClick={(e) => { e.preventDefault(); setShowGroupSelector(false); openModal('group', g); }} 
                                     onClick={() => { setCurrentGroupId(g.id); setShowGroupSelector(false); }}
                                     className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'}`}
                                 >
@@ -7313,7 +7376,7 @@ export default function App() {
                                     </div>
                                     <span className="font-bold text-sm">{g.name}</span>
                                     {currentGroupId === g.id && <Check className="w-4 h-4 ml-auto" />}
-                                </div>
+                                </Link>
                             ))}
                         </div>
                         <div 

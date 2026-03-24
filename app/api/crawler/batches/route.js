@@ -6,9 +6,14 @@ export const revalidate = 0;
 export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const cursor = searchParams.get('cursor') || '';
+    const apiId = searchParams.get('api_id');
+
+    if (!apiId) {
+        return NextResponse.json({ error: 'Missing api_id parameter' }, { status: 400 });
+    }
 
     // 目標：批次資料 API
-    let targetUrl = `https://koca.shop/api/planets/cravity/batches?`;
+    let targetUrl = `https://koca.shop/api/series/${apiId}/batches?`;
     if (cursor && cursor !== 'null') {
         targetUrl += `&cursor=${cursor}`;
     }
