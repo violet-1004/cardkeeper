@@ -6838,9 +6838,10 @@ export default function App() {
 
         const data = await response.json();
         console.log("成功抓取到資料：", data);
-        alert(`成功抓取到 ${Array.isArray(data) ? data.length : 0} 筆資料，詳細內容請查看 Console`);
+        alert(`同步完成！請點擊確定以重新整理網頁載入最新卡片。`);
         
-        // 取得資料後，您可以在此處撰寫整理資料並寫入 Supabase 的邏輯
+        // 🌟 自動重新載入頁面，讓最新的資料能立刻顯示在畫面上
+        window.location.reload();
         
     } catch (error) {
         console.error("抓取失敗：", error);
