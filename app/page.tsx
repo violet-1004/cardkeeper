@@ -6399,8 +6399,49 @@ export default function App() {
   // 🌟 從 Supabase 抓取所有資料
   useEffect(() => {
     async function fetchAllData() {
-        const fetchTable = async (t, silent = false) => { 
-        const { data, error } = await supabase.from(t).select('*').limit(10000); 
+        const fetchTable = async (t, silent = false, options = {}) => { 
+        if (options.paginate) {
+            let allData = [];
+            let from = 0;
+            const step = 1000;
+            let hasMore = true;
+
+            while (hasMore) {
+                let query = supabase.from(t).select('*').range(from, from + step - 1);
+                if (options.orderBy) {
+                    query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+                }
+                const { data, error } = await query;
+                
+                if (error) {
+                     console.error(`🚨 [${t}] 讀取失敗:`, error.message);
+                     if (!silent && !error.message?.includes('AbortError') && !error.message?.includes('Lock was stolen')) {
+                         alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
+                     }
+                     break;
+                }
+
+                if (data && data.length > 0) {
+                    allData = [...allData, ...data];
+                    from += step;
+                }
+
+                if (!data || data.length < step) {
+                    hasMore = false;
+                }
+            }
+            
+            console.log(`✅ [${t}] 成功讀取 ${allData.length} 筆資料`);
+            return allData.map(toCamelCase);
+        }
+
+        let query = supabase.from(t).select('*');
+        
+        if (options.orderBy) {
+            query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+        }
+        query = query.limit(options.limit || 10000);
+        const { data, error } = await query; 
     
         // 🌟 加上錯誤警告，抓出連線或權限問題
         if (error) {
@@ -6440,7 +6481,8 @@ export default function App() {
         setBatches(await fetchTable('batches'));
         setChannels(await fetchTable('channels'));
         setTypes(await fetchTable('types'));
-        setCards(await fetchTable('ui_cards'));
+        // 🌟 針對小卡使用分頁抓取所有資料，突破 10,000 筆限制
+        setCards(await fetchTable('ui_cards', false, { paginate: true }));
         setInventory(await fetchTable('ui_inventory'));
         setBulkRecords(await fetchTable('bulk_records'));
         setCustomLists(await fetchTable('custom_lists'));
