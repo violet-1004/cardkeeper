@@ -2056,6 +2056,37 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const [showDetails, setShowDetails] = useState(true);
   const [hideSelling, setHideSelling] = useState(false);
 
+  const [isMarkMode, setIsMarkMode] = useState(false);
+  const [cardMarks, setCardMarks] = useState({});
+  const pressTimer = useRef(null);
+  const hasCardLongPressed = useRef(false);
+
+  const startPress = (cardId) => {
+      if (!isMarkMode) return;
+      hasCardLongPressed.current = false;
+      pressTimer.current = setTimeout(() => {
+          hasCardLongPressed.current = true;
+          setCardMarks(prev => {
+              const current = prev[cardId] || 0;
+              if (current <= 1) {
+                  const next = { ...prev };
+                  delete next[cardId];
+                  return next;
+              }
+              return { ...prev, [cardId]: current - 1 };
+          });
+      }, 500);
+  };
+  const cancelPress = () => clearTimeout(pressTimer.current);
+
+  useEffect(() => {
+      return () => clearTimeout(pressTimer.current);
+  }, []);
+
+  useEffect(() => {
+      setCardMarks({});
+  }, [viewMode]);
+
   const [filterSubunits, setFilterSubunits] = useState([]);
   const [filterMembers, setFilterMembers] = useState([]);
   const [filterTypes, setFilterTypes] = useState([]);
@@ -2401,6 +2432,13 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                              </div>
                          </button>
                      )}
+                     <button
+                         onClick={() => { setIsMarkMode(!isMarkMode); if (!isMarkMode) setCardMarks({}); }}
+                         className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${isMarkMode ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                         title="標記模式 (點擊+1，長按或右鍵-1)"
+                     >
+                         <PenTool className="w-4 h-4" />
+                     </button>
                      <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0 flex-1 sm:flex-none">
                        <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
                        <select 
@@ -2496,7 +2534,44 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                 return (
-                    <div key={card.id} onClick={() => setViewingCard(card)} className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'}`}>
+                    <div 
+                        key={card.id} 
+                        className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'} ${isMarkMode ? 'ring-2 ring-transparent hover:ring-indigo-300 rounded-lg' : ''}`}
+                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                        onMouseDown={() => startPress(card.id)}
+                        onMouseUp={cancelPress}
+                        onMouseLeave={cancelPress}
+                        onTouchStart={() => startPress(card.id)}
+                        onTouchEnd={cancelPress}
+                        onTouchMove={cancelPress}
+                        onContextMenu={(e) => {
+                            if (isMarkMode) {
+                                e.preventDefault();
+                                cancelPress();
+                                setCardMarks(prev => {
+                                    const current = prev[card.id] || 0;
+                                    if (current <= 1) {
+                                        const next = { ...prev };
+                                        delete next[card.id];
+                                        return next;
+                                    }
+                                    return { ...prev, [card.id]: current - 1 };
+                                });
+                            }
+                        }}
+                        onClick={(e) => {
+                            if (isMarkMode) {
+                                if (hasCardLongPressed.current) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                } else {
+                                    setCardMarks(prev => ({ ...prev, [card.id]: (prev[card.id] || 0) + 1 }));
+                                }
+                            } else {
+                                setViewingCard(card);
+                            }
+                        }}
+                    >
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
                             {card.image ? (
@@ -2508,6 +2583,11 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                             )}
                             
                             <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
+                                {cardMarks[card.id] > 0 && (
+                                    <div className="bg-indigo-600 text-white w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full shadow-md text-xs font-bold z-20">
+                                        {cardMarks[card.id]}
+                                    </div>
+                                )}
                                 {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                 {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                             </div>
