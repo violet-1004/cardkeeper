@@ -2217,6 +2217,20 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
       return map;
   }, [channels]);
 
+  const cardToListsMap = useMemo(() => {
+      const map = {};
+      (customLists || []).filter(l => !String(l.id).startsWith('sys_sort_')).forEach(list => {
+          (list.items || []).forEach(item => {
+              const cardId = String(item.cardId);
+              if (!map[cardId]) {
+                  map[cardId] = [];
+              }
+              map[cardId].push(list.title);
+          });
+      });
+      return map;
+  }, [customLists]);
+
   // 🌟 修正分隊清單：從所有卡片的 Member 與 Series 推導出存在的分隊
   const availableSubunits = useMemo(() => {
       const usedNames = new Set();
@@ -2541,12 +2555,15 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                        </select>
                     </div>
 
-                    <button
-                        onClick={() => setShowDetails(!showDetails)}
-                        className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                     <button
+                        onClick={() => setDetailLevel(prev => (prev + 2) % 3)}
+                        className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${detailLevel > 0 ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                        title={detailLevel === 2 ? "顯示部分資訊" : detailLevel === 1 ? "隱藏所有資訊" : "顯示完整資訊"}
                     >
-                        {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
+                        {detailLevel === 2 && <Eye className="w-4 h-4" />}
+                        {detailLevel === 1 && <Eye className="w-4 h-4 opacity-50" />}
+                        {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
+                     </button>
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
                     <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
@@ -2605,6 +2622,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                 const { arrived, unshipped, hoarded, total } = invStats;
                 const isOwned = total > 0;
                 const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
+                const cardCustomLists = cardToListsMap[String(card.id)];
                 
                 const memberName = memberMap[String(card.memberId)]?.name;
                 const cardSeries = seriesMap[String(card.seriesId)];
@@ -2690,9 +2708,16 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                             </div>
                         )}
                         </div>
-                        {showDetails && (
+                        {detailLevel > 0 && (
                             <div className="px-0.5 sm:px-1">
-                                <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
+                                <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 flex items-center gap-1 flex-wrap">
+                                    <span>{memberName}</span>
+                                    {detailLevel === 2 && cardCustomLists && (
+                                        <span className="text-indigo-500 bg-indigo-50 px-1 rounded truncate font-medium normal-case">
+                                            {cardCustomLists.join(', ')}
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
                                 {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                             </div>
@@ -5652,6 +5677,18 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         return map;
     }, [batches]);
 
+    const memberMap = useMemo(() => {
+        const map = {};
+        (members || []).forEach(m => map[String(m.id)] = m);
+        return map;
+    }, [members]);
+
+    const typeMap = useMemo(() => {
+        const map = {};
+        (types || []).forEach(t => { map[String(t.id)] = t; map[String(t.name)] = t; });
+        return map;
+    }, [types]);
+
     const poolCards = useMemo(() => {
         if (!activeView) return [];
         if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
@@ -5689,10 +5726,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const subunitFilteredCards = useMemo(() => {
         if (filterSubunits.length === 0) return poolCards;
         return poolCards.filter(c => {
-            const m = (members || []).find(mem => String(mem.id) === String(c.memberId));
-            return m && filterSubunits.includes(m.subunit);
+            const m = memberMap[String(c.memberId)];
+            const s = seriesMap[String(c.seriesId)];
+            return (m && filterSubunits.includes(m.subunit)) || (s && filterSubunits.includes(s.subunit));
         });
-    }, [poolCards, filterSubunits, members]);
+    }, [poolCards, filterSubunits, memberMap, seriesMap]);
 
     const availableMembers = useMemo(() => {
         const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
@@ -5797,7 +5835,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         if (activeView) {
             let savedOrder = [];
             if (typeof activeView === 'string') {
-                const pref = (customLists || []).find(l => l.id === `sys_sort_${activeView}`);
+                const pref = (customLists || []).find(l => String(l.id) === `sys_sort_${activeView}`);
                 if (pref && pref.items) {
                     savedOrder = pref.items.map(i => typeof i === 'object' ? i.cardId : i);
                 }
@@ -5835,8 +5873,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
     const getDisplayCards = () => {
         const filtered = subunitFilteredCards.filter(c => {
-            if (filterMembers.length > 0 && !filterMembers.some(id => String(id) === String(c.memberId))) return false;
-            if (filterTypes.length > 0 && !filterTypes.some(id => String(id) === String(c.type))) return false;
+            if (filterMembers.length > 0 && !filterMembers.includes(String(c.memberId))) return false;
+            if (filterTypes.length > 0) {
+                const typeValue = String(c.type);
+                const typeObj = typeMap[typeValue];
+                // 檢查卡片的 type (可能是 id 或 name) 是否對應到任何一個被選中的篩選項目
+                const cardTypeMatches = typeObj ? (filterTypes.includes(String(typeObj.id)) || filterTypes.includes(typeObj.name)) : filterTypes.includes(typeValue);
+                if (!cardTypeMatches) return false;
+            }
             
             if (filterSeries.length > 0 && !filterSeries.includes(String(c.seriesId))) return false;
             if (filterSeriesType !== 'All' && filterSeries.length === 0) {
@@ -5874,8 +5918,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             // 🌟 0. 無批次的小卡排在有批次的小卡後
             if (hasBatchA !== hasBatchB) return hasBatchA ? -1 : 1;
 
-            const sA = (series || []).find(s => s.id === cardA.seriesId);
-            const sB = (series || []).find(s => s.id === cardB.seriesId);
+            const sA = seriesMap[String(cardA.seriesId)];
+            const sB = seriesMap[String(cardB.seriesId)];
             const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
             const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
 
@@ -5884,8 +5928,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (dateA_series !== dateB_series) return dateA_series - dateB_series;
                 const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
                 if (nameCompare !== 0) return nameCompare;
-                const mA = (members || []).find(m => String(m.id) === String(cardA.memberId));
-                const mB = (members || []).find(m => String(m.id) === String(cardB.memberId));
+                const mA = memberMap[String(cardA.memberId)];
+                const mB = memberMap[String(cardB.memberId)];
                 const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
                 const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
                 if (mSortA !== mSortB) return mSortA - mSortB;
@@ -5894,13 +5938,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
             if (dateA_series !== dateB_series) return dateA_series - dateB_series;
 
-            const typeA = (types || []).find(t => String(t.id) === String(cardA.type) || t.name === cardA.type);
-            const typeB = (types || []).find(t => String(t.id) === String(cardB.type) || t.name === cardB.type);
+            const typeA = typeMap[String(cardA.type)];
+            const typeB = typeMap[String(cardB.type)];
             const sortA_type = typeA ? safeNum(typeA.sortOrder, 999) : 999;
             const sortB_type = typeB ? safeNum(typeB.sortOrder, 999) : 999;
             if (sortA_type !== sortB_type) return sortA_type - sortB_type;
-            const bA = (batches || []).find(b => String(b.id) === String(cardA.batchId));
-            const bB = (batches || []).find(b => String(b.id) === String(cardB.batchId));
+            const bA = batchMap[String(cardA.batchId)];
+            const bB = batchMap[String(cardB.batchId)];
             const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
             const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
             if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
@@ -5909,8 +5953,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
             if (nameCompare !== 0) return nameCompare;
 
-            const mA = (members || []).find(m => m.id === cardA.memberId);
-            const mB = (members || []).find(m => m.id === cardB.memberId);
+            const mA = memberMap[String(cardA.memberId)];
+            const mB = memberMap[String(cardB.memberId)];
             const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
             const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
             if (mSortA !== mSortB) return mSortA - mSortB;
@@ -5977,13 +6021,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
             } else {
                 const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
-                    alert("您尚未登入，無法儲存。");
-                    return;
-                }
                 payload.id = Date.now().toString(); // 🌟 復原為純數字，相容資料庫的 bigint 格式
                 payload.items = [];
-                payload.userId = user.id;
+                if (user) {
+                    payload.userId = user.id;
+                }
                 setCustomLists([...(customLists || []), payload]);
             }
             
@@ -6182,10 +6224,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                         items: newList.map(cid => ({ cardId: cid })) 
                     };
                     
-                    if (!(customLists || []).some(l => l.id === prefId)) {
+                    if (!(customLists || []).some(l => String(l.id) === prefId)) {
                         setCustomLists([...(customLists || []), payload]);
                     } else {
-                        setCustomLists((customLists || []).map(l => l.id === prefId ? payload : l));
+                        setCustomLists((customLists || []).map(l => String(l.id) === prefId ? payload : l));
                     }
                     await supabase.from('custom_lists').upsert(toSnakeCase(payload));
                 } else {
@@ -6210,7 +6252,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             
             if (typeof activeView === 'string') {
                 const prefId = `sys_sort_${activeView}`;
-                setCustomLists((customLists || []).filter(l => l.id !== prefId));
+                setCustomLists((customLists || []).filter(l => String(l.id) !== prefId));
                 await supabase.from('custom_lists').delete().eq('id', prefId);
             } else {
                 alert("自訂收藏冊將維持手動排列順序。");
@@ -6228,6 +6270,22 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         });
     };
     
+    const handleConfirmSelectCards = async (newSelectedItems) => {
+        if (typeof activeView !== 'object' || !activeView.id) return;
+        
+        const nextItems = newSelectedItems.map(item => {
+            const existing = (activeView.items || []).find(i => String(i.cardId) === String(item.cardId));
+            return existing || { cardId: item.cardId, note: '' };
+        });
+        
+        const payload = { ...activeView, items: nextItems };
+        setActiveView(payload);
+        setCustomLists((customLists || []).map(l => l.id === payload.id ? payload : l));
+        await supabase.from('custom_lists').upsert(toSnakeCase(payload));
+        
+        setShowCardSelector(false);
+    };
+
     // ==========================================
     // 6. 內部渲染元件
     // ==========================================
@@ -6397,6 +6455,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                                  </select>
                               </div> 
+                              {typeof activeView === 'object' && activeView.id && !String(activeView.id).startsWith('sys_sort_') && (
+                                  <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 flex-1 sm:flex-none whitespace-nowrap shadow-sm border border-indigo-100">
+                                      <Plus className="w-3 h-3"/> 新增卡片
+                                  </button>
+                              )}
                               <button 
                                   onMouseDown={handleSortButtonPressStart} onMouseUp={handleSortButtonPressEnd} onMouseLeave={handleSortButtonPressEnd}
                                   onTouchStart={handleSortButtonPressStart} onTouchEnd={handleSortButtonPressEnd}
@@ -6487,6 +6550,21 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   </Modal>
               )}
 
+              {showCardSelector && typeof activeView === 'object' && (
+                  <MiniCardSelector 
+                      cards={cards} 
+                      selectedItems={(activeView.items || []).map((i, idx) => ({ uid: `item_${idx}_${i.cardId}`, cardId: i.cardId }))} 
+                      onConfirm={handleConfirmSelectCards} 
+                      onClose={() => setShowCardSelector(false)} 
+                      members={members} 
+                      series={series} 
+                      batches={batches} 
+                      channels={channels} 
+                      types={types} 
+                      subunits={subunits} 
+                  />
+              )}
+
               <SeriesFilterModal 
                   visible={showSeriesModal} onClose={() => setShowSeriesModal(false)}
                   seriesTypes={availableSeriesTypes} 
@@ -6528,7 +6606,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
           <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {(customLists || []).filter(l => !l.id.startsWith('sys_sort_')).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_')).map(list => (
                       <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
                            <div className="flex items-center gap-3 min-w-0">
                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
@@ -7539,7 +7617,8 @@ export default function App() {
           types={currentTypes} sales={currentSales} 
           cols={collectionCols}       // 🌟 致命錯誤修正：把 cols 換成 collectionCols
           setCols={setCollectionCols} // 🌟 致命錯誤修正：把 setCols 換成 setCollectionCols
-          subunits={currentSubunits}  // 🌟 傳入 subunits
+          subunits={currentSubunits}
+          customLists={customLists}
         />;
       case 'bulk':
         return <BulkTab 
