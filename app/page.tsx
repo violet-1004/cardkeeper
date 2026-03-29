@@ -5976,8 +5976,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 payload.id = editingListId;
                 setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
             } else {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    alert("您尚未登入，無法儲存。");
+                    return;
+                }
                 payload.id = Date.now().toString(); // 🌟 復原為純數字，相容資料庫的 bigint 格式
                 payload.items = [];
+                payload.userId = user.id;
                 setCustomLists([...(customLists || []), payload]);
             }
             
