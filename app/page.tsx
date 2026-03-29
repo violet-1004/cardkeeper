@@ -6041,17 +6041,14 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
 
-            // 🌟 🍎 終極殺器：透過自家的 Next.js API 代理伺服器拿圖片，完全免疫 Safari 的阻擋！
+            // 🌟 直接透過客戶端 Fetch 取得圖片轉 Base64，避免依賴可能不存在的 Proxy API
             for (let img of imgElements) {
-                if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:') && !img.src.includes('/api/proxy')) {
+                if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:')) {
                     originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset });
                     try {
-                        // 1. 把外部網址，包裝成呼叫我們剛剛建立的 API
-                        const proxyUrl = `/api/proxy?url=${encodeURIComponent(img.src)}`;
-                        
-                        // 2. 透過自家 API 拿圖片，Safari 絕對不會擋
-                        const response = await fetch(proxyUrl);
-                        if (!response.ok) throw new Error('Proxy failed');
+                        const fetchUrl = img.src + (img.src.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+                        const response = await fetch(fetchUrl, { mode: 'cors' });
+                        if (!response.ok) throw new Error('Fetch failed');
                         
                         const blob = await response.blob();
                         const base64 = await new Promise((resolve) => {
@@ -6060,46 +6057,39 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             reader.readAsDataURL(blob);
                         });
                         
-                        // 3. 完美替換，拔除 srcset
                         img.src = base64; 
                         img.removeAttribute('srcset'); 
                     } catch (e) {
-                        console.warn("透過 Proxy 轉換圖片失敗:", e);
+                        console.warn("圖片轉 Base64 失敗，嘗試回退:", e);
+                        img.crossOrigin = 'anonymous';
                     }
                 }
             }
 
             // 給予更充裕的緩衝時間讓 DOM 渲染 Base64 圖片
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             const targetHeight = element.scrollHeight;
             const targetWidth = element.scrollWidth;
 
-            // 1. 把設定統整成一個變數
+            // 1. 把設定統整成一個變數 (移除 allowTaint，避免 SecurityError)
             const exportOptions = {
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
                 cacheBust: true, 
                 skipAutoScale: true,
                 useCORS: true, 
-                allowTaint: true,
                 width: targetWidth,
                 height: targetHeight, 
                 style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
                 filter: (node) => {
                     const isNoExport = node?.classList?.contains('no-export') || node?.classList?.contains('no-print');
-                    // 🌟 新增：過濾掉被隱藏的卡片
                     const isHiddenCard = node?.classList?.contains('card-is-hidden-for-export');
                     return !isNoExport && !isHiddenCard;
                 }
             };
 
-            // 2. 🌟 🍎 專剋 Safari：連擊暖身法 (Warm-up Hack)
-            // Safari 常常在前兩次渲染 SVG 時把圖片丟失，我們強迫它連畫三次！
-            try { await htmlToImage.toPng(element, exportOptions); } catch (e) {}
-            try { await htmlToImage.toPng(element, exportOptions); } catch (e) {}
-            
-            // 3. 第三次正式截圖
+            // 2. 正式截圖
             const dataUrl = await htmlToImage.toPng(element, exportOptions);
 
             setExportedImage(dataUrl);
@@ -6109,11 +6099,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             if (error) {
                  if (typeof error === 'string') msg = error;
                  else if (error.message) msg = error.message;
-                 // 🌟 針對 [object Event] 的特殊處理 (通常是圖片載入失敗)
                  else if (error.type && error.type === 'error') msg = '圖片載入失敗，請檢查網路連線或圖片來源';
                  else msg = String(error);
             }
-            alert(`匯出圖片失敗: ${msg}`);
+            alert(`匯出圖片失敗 (若範圍太大請嘗試減少排數): ${msg}`);
         } finally {
             // 🌟 截圖完成後，完美還原所有圖片狀態
             originalImageSrcs.forEach(item => {
