@@ -2105,9 +2105,9 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   );
 }
 
-function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits }) {
+function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists }) {
   const [viewMode, setViewMode] = useState('all');
-  const [showDetails, setShowDetails] = useState(true);
+  const [detailLevel, setDetailLevel] = useState(2); // 2: all, 1: partial, 0: none
   const [hideSelling, setHideSelling] = useState(false);
 
   const [isMarkMode, setIsMarkMode] = useState(false);
@@ -2555,7 +2555,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                        </select>
                     </div>
 
-                     <button
+                    <button
                         onClick={() => setDetailLevel(prev => (prev + 2) % 3)}
                         className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${detailLevel > 0 ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
                         title={detailLevel === 2 ? "顯示部分資訊" : detailLevel === 1 ? "隱藏所有資訊" : "顯示完整資訊"}
@@ -2563,7 +2563,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                         {detailLevel === 2 && <Eye className="w-4 h-4" />}
                         {detailLevel === 1 && <Eye className="w-4 h-4 opacity-50" />}
                         {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
-                     </button>
+                    </button>
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
                     <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
@@ -2622,7 +2622,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                 const { arrived, unshipped, hoarded, total } = invStats;
                 const isOwned = total > 0;
                 const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
-                const cardCustomLists = cardToListsMap[String(card.id)];
                 
                 const memberName = memberMap[String(card.memberId)]?.name;
                 const cardSeries = seriesMap[String(card.seriesId)];
@@ -2708,16 +2707,16 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                             </div>
                         )}
                         </div>
-                        {detailLevel > 0 && (
+                    {detailLevel > 0 && (
                             <div className="px-0.5 sm:px-1">
-                                <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 flex items-center gap-1 flex-wrap">
-                                    <span>{memberName}</span>
-                                    {detailLevel === 2 && cardCustomLists && (
-                                        <span className="text-indigo-500 bg-indigo-50 px-1 rounded truncate font-medium normal-case">
-                                            {cardCustomLists.join(', ')}
-                                        </span>
-                                    )}
-                                </div>
+                            <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 flex items-center gap-1 flex-wrap">
+                                <span>{memberName}</span>
+                                {detailLevel === 2 && cardToListsMap[String(card.id)] && (
+                                    <span className="text-indigo-500 bg-indigo-50 px-1 rounded truncate font-medium normal-case">
+                                        {cardToListsMap[String(card.id)].join(', ')}
+                                    </span>
+                                )}
+                            </div>
                                 <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
                                 {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                             </div>
@@ -4058,10 +4057,13 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                         </div>
 
                         <button
-                            onClick={() => setShowDetails(!showDetails)}
-                            className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                            onClick={() => setDetailLevel(prev => (prev + 2) % 3)}
+                            className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${detailLevel > 0 ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
+                            title={detailLevel === 2 ? "顯示部分資訊" : detailLevel === 1 ? "隱藏所有資訊" : "顯示完整資訊"}
                         >
-                            {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                            {detailLevel === 2 && <Eye className="w-4 h-4" />}
+                            {detailLevel === 1 && <Eye className="w-4 h-4 opacity-50" />}
+                            {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
                         </button>
                     </div>
                     
