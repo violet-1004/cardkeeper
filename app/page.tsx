@@ -935,30 +935,32 @@ function SeriesFilterModal({
                         全部
                     </button>
                 </div>
-                <div className="grid grid-cols-4 gap-2 max-h-[40vh] overflow-y-auto no-scrollbar pb-2">
+                <div className="grid grid-cols-4 gap-x-2 gap-y-3 max-h-[40vh] overflow-y-auto no-scrollbar pb-2">
                     {(options || []).map(opt => {
                         const isSelected = selected.includes(String(opt.id));
                         return (
                             <div 
                                 key={opt.id} 
                                 onClick={() => toggleSelect(String(opt.id))}
-                                className={`cursor-pointer relative aspect-square rounded-lg border-2 overflow-hidden flex flex-col items-center justify-center transition-all ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-200 shadow-md' : 'border-gray-100 hover:border-gray-300'}`}
+                                className="cursor-pointer flex flex-col gap-1 group"
                             >
-                                {opt.image ? (
-                                    <img src={opt.image} alt={opt.name} className="absolute inset-0 w-full h-full object-cover" />
-                                ) : (
-                                    <div className="absolute inset-0 w-full h-full bg-gray-100 flex items-center justify-center text-gray-300">
-                                        {label === '系列' ? <ImageIcon className="w-6 h-6" /> : <Package className="w-6 h-6" />}
-                                    </div>
-                                )}
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1 pt-4 flex items-end justify-center">
-                                    <span className="text-[10px] font-bold text-white text-center leading-tight line-clamp-2">{opt.name}</span>
+                                <div className={`relative aspect-square rounded-lg border-2 overflow-hidden flex flex-col items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-200 shadow-md' : 'border-gray-100 group-hover:border-gray-300'}`}>
+                                    {opt.image ? (
+                                        <img src={opt.image} alt={opt.name} className="absolute inset-0 w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="absolute inset-0 w-full h-full bg-gray-100 flex items-center justify-center text-gray-300">
+                                            {label === '系列' ? <ImageIcon className="w-6 h-6" /> : <Package className="w-6 h-6" />}
+                                        </div>
+                                    )}
+                                    {isSelected && (
+                                        <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10">
+                                            <Check className="w-3 h-3 text-white" />
+                                        </div>
+                                    )}
                                 </div>
-                                {isSelected && (
-                                    <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10">
-                                        <Check className="w-3 h-3 text-white" />
-                                    </div>
-                                )}
+                                <span className={`text-[10px] font-bold text-center leading-tight line-clamp-2 px-0.5 ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`}>
+                                    {opt.name}
+                                </span>
                             </div>
                         )
                     })}
@@ -2109,9 +2111,23 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   const [hideSelling, setHideSelling] = useState(false);
 
   const [isMarkMode, setIsMarkMode] = useState(false);
-  const [cardMarks, setCardMarks] = useState({});
+  const [cardMarks, setCardMarks] = useState(() => {
+      if (typeof window !== 'undefined') {
+          try {
+              const saved = localStorage.getItem('collection_card_marks');
+              if (saved) return JSON.parse(saved);
+          } catch (e) {}
+      }
+      return {};
+  });
   const pressTimer = useRef(null);
   const hasCardLongPressed = useRef(false);
+
+  useEffect(() => {
+      if (typeof window !== 'undefined') {
+          localStorage.setItem('collection_card_marks', JSON.stringify(cardMarks));
+      }
+  }, [cardMarks]);
 
   const startPress = (cardId) => {
       if (!isMarkMode) return;
@@ -2134,10 +2150,6 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
   useEffect(() => {
       return () => clearTimeout(pressTimer.current);
   }, []);
-
-  useEffect(() => {
-      setCardMarks({});
-  }, [viewMode]);
 
   const [filterSubunits, setFilterSubunits] = useState([]);
   const [filterMembers, setFilterMembers] = useState([]);
@@ -2501,12 +2513,23 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                          </button>
                      )}
                      <button
-                         onClick={() => { setIsMarkMode(!isMarkMode); if (!isMarkMode) setCardMarks({}); }}
+                         onClick={() => { setIsMarkMode(!isMarkMode); }}
                          className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${isMarkMode ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
                          title="標記模式 (點擊+1，長按或右鍵-1)"
                      >
                          <PenTool className="w-4 h-4" />
                      </button>
+                     {isMarkMode && (
+                         <button
+                             onClick={() => {
+                                 if (confirm('確定要清除所有標記嗎？')) setCardMarks({});
+                             }}
+                             className="p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 bg-red-50 text-red-500 hover:bg-red-100 shadow-sm"
+                             title="清除所有標記"
+                         >
+                             <Trash2 className="w-4 h-4" />
+                         </button>
+                     )}
                      <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0 flex-1 sm:flex-none">
                        <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
                        <select 
