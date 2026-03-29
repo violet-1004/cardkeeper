@@ -6014,12 +6014,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         }
     };
 
-    const handleDeleteList = async (e, id) => {
-        e.stopPropagation();
-        if(confirm("確定刪除？")) {
-            setCustomLists((customLists || []).filter(l => l.id !== id));
-            await supabase.from('custom_lists').delete().eq('id', id);
-        }
+    const handleDeleteList = async () => {
+        if (!listToDelete) return;
+        setCustomLists((customLists || []).filter(l => l.id !== listToDelete));
+        await supabase.from('custom_lists').delete().eq('id', listToDelete);
+        setListToDelete(null);
     };
 
     const handleExportPNG = async (exportTitle) => {
