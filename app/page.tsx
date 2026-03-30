@@ -6085,9 +6085,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
 
-            // 🌟 直接透過客戶端 Fetch 取得圖片轉 Base64，避免依賴可能不存在的 Proxy API
-            for (let img of imgElements) {
-                if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:')) {
+            // 🌟 效能優化：將圖片分批並行轉換為 Base64，大幅提升匯出速度並減少超時破圖
+            const imgArray = Array.from(imgElements).filter(img => img.src && img.src.startsWith('http') && !img.src.startsWith('data:'));
+            const batchSize = 10; // 每次並行處理 10 張，避免瀏覽器網路連線池塞爆導致載入失敗
+            
+            for (let i = 0; i < imgArray.length; i += batchSize) {
+                const batch = imgArray.slice(i, i + batchSize);
+                await Promise.all(batch.map(async (img) => {
                     originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset, crossOrigin: img.crossOrigin });
                     try {
                         const isNextImage = img.src.includes('_next/image');
@@ -6111,11 +6115,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                         img.crossOrigin = 'anonymous';
                         img.removeAttribute('srcset');
                     }
-                }
+                }));
             }
 
             // 給予更充裕的緩衝時間讓 DOM 渲染 Base64 圖片
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
             const targetHeight = element.scrollHeight;
             const targetWidth = element.scrollWidth;
@@ -6124,7 +6128,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             const exportOptions = {
                 pixelRatio: 2, 
                 backgroundColor: '#ffffff',
-                cacheBust: true, 
+                cacheBust: false, // 🌟 改為 false，因為已經手動處理快取，避免 html-to-image 內部再次超時
                 skipAutoScale: true,
                 useCORS: true, 
                 // 🌟 新增防崩潰機制：當遇到載入失敗的圖片，替換成透明圖片避免 html-to-image 拋出錯誤導致整個截圖失敗
