@@ -6088,10 +6088,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             // 🌟 直接透過客戶端 Fetch 取得圖片轉 Base64，避免依賴可能不存在的 Proxy API
             for (let img of imgElements) {
                 if (img.src && img.src.startsWith('http') && !img.src.startsWith('data:')) {
-                    originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset });
+                    originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset, crossOrigin: img.crossOrigin });
                     try {
-                        const fetchUrl = img.src + (img.src.includes('?') ? '&' : '?') + 'cb=' + Date.now();
-                        const response = await fetch(fetchUrl, { mode: 'cors' });
+                        const isNextImage = img.src.includes('_next/image');
+                        // 若為 Next.js 內部優化圖片，不加 cb 避免 400 錯誤
+                        const fetchUrl = isNextImage ? img.src : img.src + (img.src.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+                        const response = await fetch(fetchUrl, { mode: 'cors', cache: isNextImage ? 'default' : 'no-cache' });
                         if (!response.ok) throw new Error('Fetch failed');
                         
                         const blob = await response.blob();
@@ -6103,9 +6105,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                         
                         img.src = base64; 
                         img.removeAttribute('srcset'); 
+                        img.removeAttribute('crossOrigin');
                     } catch (e) {
                         console.warn("圖片轉 Base64 失敗，嘗試回退:", e);
                         img.crossOrigin = 'anonymous';
+                        img.removeAttribute('srcset');
                     }
                 }
             }
@@ -6123,6 +6127,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 cacheBust: true, 
                 skipAutoScale: true,
                 useCORS: true, 
+                // 🌟 新增防崩潰機制：當遇到載入失敗的圖片，替換成透明圖片避免 html-to-image 拋出錯誤導致整個截圖失敗
+                imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                 width: targetWidth,
                 height: targetHeight, 
                 style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
@@ -6153,6 +6159,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 item.el.src = item.src;
                 if (item.srcset) {
                     item.el.srcset = item.srcset;
+                }
+                if (item.crossOrigin !== undefined && item.crossOrigin !== null) {
+                    item.el.crossOrigin = item.crossOrigin;
+                } else {
+                    item.el.removeAttribute('crossOrigin');
                 }
             });
             
