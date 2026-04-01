@@ -5597,6 +5597,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [isHideMode, setIsHideMode] = useState(false);
     const [hiddenCardIds, setHiddenCardIds] = useState(new Set());
     
+    const [is4x6Mode, setIs4x6Mode] = useState(false);
+    const [cardsPerPage, setCardsPerPage] = useState(8);
+    
     // 🌟 眼睛長按邏輯 (隱藏/顯示價格)
     const pricePressTimer = useRef(null);
     const hasPriceLongPressed = useRef(false);
@@ -5635,7 +5638,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
     const exportRef = useRef(null);
     const [isExporting, setIsExporting] = useState(false);
-    const [exportedImage, setExportedImage] = useState(null);
+    const [exportedImages, setExportedImages] = useState([]);
     const [isEditMode, setIsEditMode] = useState(false);
     const [cardMarks, setCardMarks] = useState({});
 
@@ -6012,6 +6015,20 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         return displayCards;
     }, [displayCards, exportStartRow, exportEndRow, cols, maxRows]);
 
+    // 🌟 自動切換 4x6 張數預設值
+    useEffect(() => {
+        if (is4x6Mode) setCardsPerPage(cols >= 4 ? cols * 2 : cols * 3);
+    }, [is4x6Mode, cols]);
+
+    const chunkedCards = useMemo(() => {
+        if (!is4x6Mode) return [cardsToRender];
+        const chunks = [];
+        for (let i = 0; i < cardsToRender.length; i += cardsPerPage) {
+            chunks.push(cardsToRender.slice(i, i + cardsPerPage));
+        }
+        return chunks;
+    }, [is4x6Mode, cardsToRender, cardsPerPage]);
+
     // ==========================================
     // 5. 事件與功能函式
     // ==========================================
@@ -6107,9 +6124,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             reader.readAsDataURL(blob);
                         });
                         
-                        img.src = base64; 
-                        img.removeAttribute('srcset'); 
-                        img.removeAttribute('crossOrigin');
+                        // 🌟 修正：確保 Base64 圖片真的被瀏覽器載入且解碼完畢後再放行
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.onerror = resolve; // 即使失敗也放行，避免卡死
+                            img.removeAttribute('srcset'); 
+                            img.removeAttribute('sizes');
+                            img.removeAttribute('crossOrigin');
+                            img.src = base64; 
+                        });
                     } catch (e) {
                         console.warn("圖片轉 Base64 失敗，嘗試回退:", e);
                         img.crossOrigin = 'anonymous';
@@ -6121,32 +6144,42 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             // 給予更充裕的緩衝時間讓 DOM 渲染 Base64 圖片
             await new Promise(resolve => setTimeout(resolve, 1500));
 
-            const targetHeight = element.scrollHeight;
-            const targetWidth = element.scrollWidth;
-
-            // 1. 把設定統整成一個變數 (移除 allowTaint，避免 SecurityError)
-            const exportOptions = {
-                pixelRatio: 2, 
-                backgroundColor: '#ffffff',
-                cacheBust: false, // 🌟 改為 false，因為已經手動處理快取，避免 html-to-image 內部再次超時
-                skipAutoScale: true,
-                useCORS: true, 
-                // 🌟 新增防崩潰機制：當遇到載入失敗的圖片，替換成透明圖片避免 html-to-image 拋出錯誤導致整個截圖失敗
-                imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-                width: targetWidth,
-                height: targetHeight, 
-                style: { height: `${targetHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
-                filter: (node) => {
-                    const isNoExport = node?.classList?.contains('no-export') || node?.classList?.contains('no-print');
-                    const isHiddenCard = node?.classList?.contains('card-is-hidden-for-export');
-                    return !isNoExport && !isHiddenCard;
+            if (is4x6Mode) {
+                const pages = element.querySelectorAll('.export-page');
+                const dataUrls = [];
+                for (let i = 0; i < pages.length; i++) {
+                    const page = pages[i];
+                    const origPageStyle = page.style.cssText;
+                    page.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; margin-bottom: 0 !important;';
+                    
+                    const exportOptions = {
+                        pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
+                        imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                        width: page.scrollWidth, height: page.scrollHeight, 
+                        style: { height: `${page.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff' },
+                        filter: (node) => {
+                            if (node?.classList?.contains('no-export') || node?.classList?.contains('no-print') || node?.classList?.contains('card-is-hidden-for-export')) return false;
+                            return true;
+                        }
+                    };
+                    dataUrls.push(await htmlToImage.toPng(page, exportOptions));
+                    page.style.cssText = origPageStyle;
                 }
-            };
-
-            // 2. 正式截圖
-            const dataUrl = await htmlToImage.toPng(element, exportOptions);
-
-            setExportedImage(dataUrl);
+                setExportedImages(dataUrls);
+            } else {
+                element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
+                const exportOptions = {
+                    pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
+                    imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                    width: element.scrollWidth, height: element.scrollHeight, 
+                    style: { height: `${element.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
+                    filter: (node) => {
+                        if (node?.classList?.contains('no-export') || node?.classList?.contains('no-print') || node?.classList?.contains('card-is-hidden-for-export')) return false;
+                        return true;
+                    }
+                };
+                setExportedImages([await htmlToImage.toPng(element, exportOptions)]);
+            }
         } catch (error) {
             console.error('Export failed:', error);
             let msg = '未知錯誤';
@@ -6390,6 +6423,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                 <img 
                                     src={card.image} 
                                     alt="卡片圖片" 
+                                    crossOrigin="anonymous"
+                                    loading="eager"
+                                    decoding="sync"
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                                 />
                             ) : (
@@ -6445,100 +6481,116 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
         return (
           <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in" {...swipeHandlers}>
-              <div className="bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative" ref={exportRef}>
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b-2 border-black pb-3 sm:pb-4 gap-3 sm:gap-0">
-                      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+              <div className="w-full relative" ref={exportRef}>
+                  {/* --- 控制列與過濾器 (匯出時自動隱藏) --- */}
+                  <div className="no-export no-print mb-6 space-y-4 px-4 sm:px-8 mt-4 sm:mt-8 max-w-[1200px] mx-auto">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border shadow-sm gap-4 sm:gap-0">
                           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                              <button onClick={() => setActiveView(null)} className="no-export no-print p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+                              <button onClick={() => setActiveView(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
                                   <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                               </button>
-                              <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
+                              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
                           </div>
-                          <div className="text-right sm:hidden flex-shrink-0 ml-2">
-                              <div className="text-[10px] font-bold text-gray-400">CardKeeper</div>
-                              <div className="text-[9px] text-gray-300">{new Date().toLocaleDateString()}</div>
-                          </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-4">
-                          <div className="flex items-center gap-2 no-export no-print w-full sm:w-auto">
-                               <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-1 sm:flex-none justify-center">
-                                 <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
-                                 <select 
-                                    value={cols}
-                                    onChange={(e) => setCols(Number(e.target.value))}
-                                    className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full text-center"
-                                 >
-                                    {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                                 </select>
+                          <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-2 flex-wrap">
+                              <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8">
+                                  <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
+                                  <select value={cols} onChange={(e) => setCols(Number(e.target.value))} className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer text-center">
+                                      {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                  </select>
                               </div> 
                               {typeof activeView === 'object' && activeView.id && !String(activeView.id).startsWith('sys_sort_') && (
-                                  <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 flex-1 sm:flex-none whitespace-nowrap shadow-sm border border-indigo-100">
+                                  <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 shadow-sm border border-indigo-100">
                                       <Plus className="w-3 h-3"/> 新增卡片
                                   </button>
                               )}
-                              <button 
-                                  onMouseDown={handleSortButtonPressStart} onMouseUp={handleSortButtonPressEnd} onMouseLeave={handleSortButtonPressEnd}
-                                  onTouchStart={handleSortButtonPressStart} onTouchEnd={handleSortButtonPressEnd}
-                                  onClick={handleSortButtonClick}
-                                  className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} 
-                                  title="排序 | 長按切換隱藏模式 | 長按5秒重置排序"
-                              >
+                              <button onMouseDown={handleSortButtonPressStart} onMouseUp={handleSortButtonPressEnd} onMouseLeave={handleSortButtonPressEnd} onTouchStart={handleSortButtonPressStart} onTouchEnd={handleSortButtonPressEnd} onClick={handleSortButtonClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="排序 | 長按切換隱藏模式 | 長按5秒重置排序">
                                   <ArrowUpDown className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
+                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
                                   <PenTool className="w-4 h-4" />
                               </button>
-                              <button 
-                                  onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick}
-                                  className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-1 sm:flex-none ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
+                              <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
                           </div>
-                          <div className="text-right hidden sm:block">
-                              <div className="text-sm font-bold text-gray-400">CardKeeper</div>
-                              <div className="text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                      </div>
+
+                      <div className="space-y-3 p-4 bg-white rounded-xl border shadow-sm">
+                          <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />
+                          <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
+                          <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
+                          {activeView === 'selling' && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
+                          <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group mt-2">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
+                                  <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                                  <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                              </div>
+                              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                          </div>
+                          
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-4 border-t mt-2">
+                              <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">匯出範圍</span>
+                                  <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
+                                  <span className="text-xs font-bold text-gray-400">-</span>
+                                  <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
+                                  <span className="text-xs text-gray-500">排 (共 {maxRows} 排)</span>
+                              </div>
+                              
+                              <div className="hidden sm:block w-px h-6 bg-gray-200"></div>
+
+                              <div className="flex items-center gap-3">
+                                  <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
+                                  <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
+                                      <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer" />
+                                      <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6 多張分割</label>
+                                  </div>
+                                  {is4x6Mode && (
+                                      <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">
+                                          <span className="text-xs text-indigo-700 font-bold">每張</span>
+                                          <input type="number" min="1" max="50" value={cardsPerPage} onChange={e => setCardsPerPage(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-white border rounded text-xs font-bold p-1 outline-none focus:border-indigo-400 text-indigo-700" />
+                                          <span className="text-xs text-indigo-700 font-bold">卡片</span>
+                                      </div>
+                                  )}
+                              </div>
                           </div>
                       </div>
+
+                      {isHideMode && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-bold rounded-lg text-center border border-red-100">隱藏模式：點擊卡片可將其從匯出圖片中隱藏 (已隱藏 {hiddenCardIds.size} 張)</div>}
+                      {isReorderMode && <div className="mb-4 p-3 bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg text-center border border-indigo-100 animate-pulse">{reorderSelectedId ? "請點擊另一張卡片以插入其前方" : "請點擊一張卡片開始移動"}</div>}
                   </div>
 
-                  <div className="mb-6 space-y-3 p-4 bg-gray-50 rounded-xl border no-export no-print">
-                      <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />
-                      <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
-                      <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
-                      {activeView === 'selling' && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
-                      <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group no-export no-print mt-2">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
-                              <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                              <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                  {/* --- 匯出繪製區塊 --- */}
+                  {is4x6Mode ? (
+                      <div className="flex flex-col gap-6 sm:gap-10 pb-20 items-center px-4 sm:px-8">
+                          {chunkedCards.map((chunk, i) => (
+                              <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: cols >= 4 ? '1200px' : '800px', aspectRatio: cols >= 4 ? '3/2' : '2/3' }}>
+                                  <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
+                                      <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title} ({i+1}/{chunkedCards.length})</h1>
+                                      <div className="text-right flex-shrink-0 ml-2">
+                                          <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
+                                          <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                                      </div>
+                                  </div>
+                                  <CardGrid displayCards={chunk} />
+                              </div>
+                          ))}
+                          {chunkedCards.length === 0 && <div className="text-center py-20 text-gray-400 w-full">沒有符合條件的卡片</div>}
                       </div>
-                      <div className="flex items-center gap-3 pt-2 border-t mt-2">
-                          <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">匯出範圍</span>
-                          <div className="flex items-center gap-2">
-                              <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-14 text-center bg-white border rounded-md text-xs font-bold p-1" />
-                              <span className="text-xs font-bold text-gray-400">-</span>
-                              <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-14 text-center bg-white border rounded-md text-xs font-bold p-1" />
-                              <span className="text-xs text-gray-500">排 (共 {maxRows} 排)</span>
+                  ) : (
+                      <div className="export-page bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative max-w-[1400px] mx-auto border-x border-gray-200/50">
+                          <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
+                              <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
+                              <div className="text-right flex-shrink-0 ml-2">
+                                  <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
+                                  <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                              </div>
                           </div>
-                      </div>
-                  </div>
-
-                  {isHideMode && (
-                      <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-bold rounded-lg text-center border border-red-100 no-export no-print">
-                          隱藏模式：點擊卡片可將其從匯出圖片中隱藏 (已隱藏 {hiddenCardIds.size} 張)
+                          <CardGrid displayCards={cardsToRender} />
+                          {displayCards.length === 0 && <div className="text-center py-20 text-gray-400 w-full">沒有符合條件的卡片</div>}
                       </div>
                   )}
-                  {isReorderMode && (
-                      <div className="mb-4 p-3 bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg text-center border border-indigo-100 animate-pulse">
-                          {reorderSelectedId ? "請點擊另一張卡片以插入其前方" : "請點擊一張卡片開始移動"}
-                      </div>
-                  )}
-
-                  <CardGrid displayCards={cardsToRender} />
-                  {displayCards.length === 0 && <div className="text-center py-20 text-gray-400">沒有符合條件的卡片</div>}
               </div>
 
               <div className="fixed bottom-8 inset-x-0 flex justify-center pointer-events-none no-print z-50">
@@ -6547,21 +6599,35 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   </button>
               </div>
 
-              {exportedImage && (
-                  <Modal title="圖片已產生" onClose={() => setExportedImage(null)} className="max-w-2xl" footer={
+              {exportedImages.length > 0 && (
+                  <Modal title="圖片已產生" onClose={() => setExportedImages([])} className="max-w-2xl" footer={
                           <div className="flex gap-2 w-full">
-                              <button onClick={() => setExportedImage(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-all">關閉預覽</button>
-                              <a href={exportedImage} download={`${title}_${new Date().toISOString().split('T')[0]}.png`} className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2">
-                                  <Download className="w-5 h-5" /> 點此下載圖片
-                              </a>
+                              <button onClick={() => setExportedImages([])} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-all">關閉預覽</button>
+                              <button onClick={() => {
+                                  exportedImages.forEach((img, idx) => {
+                                      const link = document.createElement('a');
+                                      link.href = img;
+                                      link.download = `${title}_${new Date().toISOString().split('T')[0]}${is4x6Mode ? `_${idx + 1}` : ''}.png`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                  });
+                              }} className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2">
+                                  <Download className="w-5 h-5" /> 下載全部 ({exportedImages.length}張)
+                              </button>
                           </div>
                       }>
-                      <div className="p-4 flex flex-col items-center">
-                          <div className="bg-green-50 text-green-700 p-3 rounded-xl mb-4 w-full text-center text-sm font-bold border border-green-200">
-                              圖片產生成功！🎉<br/><span className="text-xs font-normal text-green-600">請點擊下方「點此下載圖片」按鈕，或直接長按下方圖片儲存。</span>
+                      <div className="p-4 flex flex-col items-center max-h-[60vh] overflow-y-auto no-scrollbar">
+                          <div className="bg-green-50 text-green-700 p-3 rounded-xl mb-4 w-full text-center text-sm font-bold border border-green-200 flex-shrink-0">
+                              圖片產生成功！🎉<br/><span className="text-xs font-normal text-green-600">請點擊下方按鈕下載全部，或長按圖片個別儲存。</span>
                           </div>
-                          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-lg w-full max-w-md bg-white">
-                              <img src={exportedImage} alt="Export Preview" className="w-full h-auto object-contain block pointer-events-auto" style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }} />
+                          <div className="flex flex-col gap-4 w-full max-w-md">
+                              {exportedImages.map((img, idx) => (
+                                  <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden shadow-lg bg-white relative">
+                                      {is4x6Mode && <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-md z-10">第 {idx + 1} 張</div>}
+                                      <img src={img} alt={`Export Preview ${idx+1}`} className="w-full h-auto object-contain block pointer-events-auto" style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }} />
+                                  </div>
+                              ))}
                           </div>
                       </div>
                   </Modal>
@@ -7629,6 +7695,7 @@ export default function App() {
         />;
       case 'collection': 
         return <CollectionTab 
+          currentGroupId={currentGroupId}
           cards={currentCards} inventory={currentInventory} setViewingCard={setViewingCard} 
           members={currentMembers} series={currentSeries} batches={currentBatches} channels={currentChannels} 
           types={currentTypes} sales={currentSales} 
@@ -7712,6 +7779,7 @@ export default function App() {
         />;
            case 'export': 
         return <ExportTab 
+          currentGroupId={currentGroupId}
           cards={currentCards} customLists={customLists} setCustomLists={setCustomLists} 
           setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} 
           sales={currentSales} inventory={currentInventory} members={currentMembers} series={currentSeries} 
@@ -7908,6 +7976,7 @@ export default function App() {
 
       {viewingCard && (
         <CardDetailModal 
+          currentGroupId={currentGroupId}
           card={viewingCard} 
           onClose={() => setViewingCard(null)}
           inventory={inventory}
@@ -8027,7 +8096,7 @@ export default function App() {
       {activeModal === 'bulkList' && (
           <Modal title="批量加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
               <div className="space-y-2">
-                  {(customLists || []).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
                       <button 
                           key={list.id}
                           onClick={async () => {
