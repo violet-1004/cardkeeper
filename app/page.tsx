@@ -10,7 +10,7 @@ import {
   X, Maximize2, Minimize2, Save, BookOpen, User, Settings, Filter, 
   ChevronRight, MoreHorizontal, Search, Edit2, Check, Users, Heart, ShoppingBag, FolderPlus,
   ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp, ArrowUpDown,
-  ChevronLeft, Folder, Package, Copy, Disc, RefreshCw
+  ChevronLeft, Folder, Package, Copy, Disc, RefreshCw, Printer
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
@@ -6017,7 +6017,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
     // 🌟 自動切換 4x6 張數預設值
     useEffect(() => {
-        if (is4x6Mode) setCardsPerPage(cols >= 4 ? cols * 2 : cols * 3);
+        if (is4x6Mode) {
+            const defaultCardsMap = { 10: 30, 9: 27, 8: 16, 7: 14, 6: 12, 5: 5, 4: 4, 3: 3, 2: 2 };
+            setCardsPerPage(defaultCardsMap[cols] || 12);
+        }
     }, [is4x6Mode, cols]);
 
     const chunkedCards = useMemo(() => {
@@ -6087,62 +6090,35 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         setIsEditMode(false);
         setIsExporting(true);
         
+        // 🌟 致命錯誤修正：等待 React 完成 setIsExporting(true) 所觸發的畫面重繪。
+        // 如果不等待，React 會在我們轉 Base64 的途中，將 img.src 強制覆寫回原本的網址，
+        // 導致 Base64 轉換失效，html-to-image 依然讀不到圖片而變成灰底！
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         const element = exportRef.current;
         const overlay = element.parentElement; 
         const origOverlayStyle = overlay.style.cssText;
         const origElementStyle = element.style.cssText;
         const origScrollTop = overlay.scrollTop;
 
-        // 🌟 準備存放原始圖片 URL 的陣列，截圖完要還原
-        const originalImageSrcs = [];
-        const imgElements = element.querySelectorAll('img');
-
         try {
             overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
             element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
             window.scrollTo(0, 0);
 
-            // 🌟 效能優化：將圖片分批並行轉換為 Base64，大幅提升匯出速度並減少超時破圖
-            const imgArray = Array.from(imgElements).filter(img => img.src && img.src.startsWith('http') && !img.src.startsWith('data:'));
-            const batchSize = 10; // 每次並行處理 10 張，避免瀏覽器網路連線池塞爆導致載入失敗
-            
-            for (let i = 0; i < imgArray.length; i += batchSize) {
-                const batch = imgArray.slice(i, i + batchSize);
-                await Promise.all(batch.map(async (img) => {
-                    originalImageSrcs.push({ el: img, src: img.src, srcset: img.srcset, crossOrigin: img.crossOrigin });
-                    try {
-                        const isNextImage = img.src.includes('_next/image');
-                        // 若為 Next.js 內部優化圖片，不加 cb 避免 400 錯誤
-                        const fetchUrl = isNextImage ? img.src : img.src + (img.src.includes('?') ? '&' : '?') + 'cb=' + Date.now();
-                        const response = await fetch(fetchUrl, { mode: 'cors', cache: isNextImage ? 'default' : 'no-cache' });
-                        if (!response.ok) throw new Error('Fetch failed');
-                        
-                        const blob = await response.blob();
-                        const base64 = await new Promise((resolve) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result);
-                            reader.readAsDataURL(blob);
-                        });
-                        
-                        // 🌟 修正：確保 Base64 圖片真的被瀏覽器載入且解碼完畢後再放行
-                        await new Promise((resolve) => {
-                            img.onload = resolve;
-                            img.onerror = resolve; // 即使失敗也放行，避免卡死
-                            img.removeAttribute('srcset'); 
-                            img.removeAttribute('sizes');
-                            img.removeAttribute('crossOrigin');
-                            img.src = base64; 
-                        });
-                    } catch (e) {
-                        console.warn("圖片轉 Base64 失敗，嘗試回退:", e);
-                        img.crossOrigin = 'anonymous';
-                        img.removeAttribute('srcset');
-                    }
-                }));
-            }
-
-            // 給予更充裕的緩衝時間讓 DOM 渲染 Base64 圖片
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // 🌟 動態等待所有圖片真正載入完畢，避免網速慢導致 html-to-image 抓到尚未載入的灰底
+            const imgElements = Array.from(element.querySelectorAll('img'));
+            await Promise.all(imgElements.map(img => {
+                if (img.complete && img.naturalHeight > 0) return Promise.resolve();
+                return new Promise((resolve) => {
+                    const check = () => resolve();
+                    img.addEventListener('load', check, { once: true });
+                    img.addEventListener('error', () => {
+                        setTimeout(resolve, 800); // 發生 CORS 錯誤時，給予 800ms 讓 onError 救援載入原圖
+                    }, { once: true });
+                });
+            }));
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             if (is4x6Mode) {
                 const pages = element.querySelectorAll('.export-page');
@@ -6153,7 +6129,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     page.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; margin-bottom: 0 !important;';
                     
                     const exportOptions = {
-                        pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
+                        pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
                         imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                         width: page.scrollWidth, height: page.scrollHeight, 
                         style: { height: `${page.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff' },
@@ -6169,7 +6145,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             } else {
                 element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
                 const exportOptions = {
-                    pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
+                    pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
                     imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                     width: element.scrollWidth, height: element.scrollHeight, 
                     style: { height: `${element.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
@@ -6191,19 +6167,6 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             }
             alert(`匯出圖片失敗 (若範圍太大請嘗試減少排數): ${msg}`);
         } finally {
-            // 🌟 截圖完成後，完美還原所有圖片狀態
-            originalImageSrcs.forEach(item => {
-                item.el.src = item.src;
-                if (item.srcset) {
-                    item.el.srcset = item.srcset;
-                }
-                if (item.crossOrigin !== undefined && item.crossOrigin !== null) {
-                    item.el.crossOrigin = item.crossOrigin;
-                } else {
-                    item.el.removeAttribute('crossOrigin');
-                }
-            });
-            
             if (overlay && element) {
                 overlay.style.cssText = origOverlayStyle;
                 element.style.cssText = origElementStyle;
@@ -6397,6 +6360,17 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 const saleRecord = activeView === 'selling' ? salesMap[String(card.id)] : null;
                 const sellQty = saleRecord ? (Number(saleRecord.quantity) || 0) : 0;
 
+                // 🌟 針對外部 API 匯入的小卡圖片，自動掛上 corsproxy 代理伺服器，解決 html-to-image 無法截取跨域圖片導致灰底的問題。
+                let exportImgUrl = null;
+                if (card.image) {
+                    const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
+                    if (isExternalAPI) {
+                        exportImgUrl = `https://corsproxy.io/?${encodeURIComponent(card.image)}`;
+                    } else {
+                        exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1` : `${card.image}?export_cors=1`;
+                    }
+                }
+
                 return (
                     <div 
                         key={idx} 
@@ -6417,13 +6391,18 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             hiddenCardIds.has(card.id) ? 'card-is-hidden-for-export' : ''
                         }`}
                     >
-                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`} style={{ containerType: 'inline-size' }}>
+                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`}>
                             {card.image ? (
-                                /* 🌟 修正：匯出時改用原生 img 標籤並開啟 CORS，解決 html-to-image 抓不到圖片變成灰底的問題 */
+                                /* 🌟 修正：加入 crossOrigin 確保快取具備跨域權限 */
                                 <img 
-                                    src={card.image} 
+                                    src={exportImgUrl} 
                                     alt="卡片圖片" 
                                     crossOrigin="anonymous"
+                                    onError={(e) => {
+                                        // 🌟 致命破圖救援：如果伺服器不支援 CORS 導致圖片變成問號，立刻移除跨域限制並退回原圖
+                                        e.target.removeAttribute('crossOrigin');
+                                        e.target.src = card.image;
+                                    }}
                                     loading="eager"
                                     decoding="sync"
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none"
@@ -6449,7 +6428,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             </div>
                             {card.note && (activeView !== 'selling' || showPrices) && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
-                                    <div className={`inline-block text-white font-bold px-3 pt-[2px] pb-[6px] rounded-full shadow-md max-w-full whitespace-nowrap ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: '12cqw' }}>{card.note}</div>
+                                    <div className={`inline-block text-white font-bold px-2 py-0.5 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: cols >= 6 ? '9px' : '12px' }}>{card.note}</div>
                                 </div>
                             )}
                             {hiddenCardIds.has(card.id) && (
@@ -6481,6 +6460,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
         return (
           <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in" {...swipeHandlers}>
+              <style>{`
+                  @media print {
+                      @page { ${is4x6Mode ? (cols >= 4 ? "size: 6in 4in; margin: 0;" : "size: 4in 6in; margin: 0;") : "margin: 8mm;"} }
+                      body, html { overflow: visible !important; height: auto !important; background-color: #ffffff !important; }
+                      .fixed.inset-0 { position: relative !important; overflow: visible !important; height: auto !important; background-color: #ffffff !important; display: block !important; }
+                      .no-print { display: none !important; }
+                      .export-page { box-shadow: none !important; border: none !important; width: 100% !important; max-width: none !important; ${is4x6Mode ? 'margin: 0 !important; border-radius: 0 !important; break-after: page; page-break-after: always;' : 'break-inside: avoid;'} }
+                  }
+              `}</style>
               <div className="w-full relative" ref={exportRef}>
                   {/* --- 控制列與過濾器 (匯出時自動隱藏) --- */}
                   <div className="no-export no-print mb-6 space-y-4 px-4 sm:px-8 mt-4 sm:mt-8 max-w-[1200px] mx-auto">
@@ -6563,7 +6551,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
 
                   {/* --- 匯出繪製區塊 --- */}
                   {is4x6Mode ? (
-                      <div className="flex flex-col gap-6 sm:gap-10 pb-20 items-center px-4 sm:px-8">
+                      <div className="flex flex-col gap-6 sm:gap-10 pb-20 items-center px-4 sm:px-8 print:block print:p-0 print:m-0">
                           {chunkedCards.map((chunk, i) => (
                               <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: cols >= 4 ? '1200px' : '800px', aspectRatio: cols >= 4 ? '3/2' : '2/3' }}>
                                   <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
@@ -6593,9 +6581,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   )}
               </div>
 
-              <div className="fixed bottom-8 inset-x-0 flex justify-center pointer-events-none no-print z-50">
-                  <button onClick={(e) => { e.preventDefault(); handleExportPNG(title); }} disabled={isExporting} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 hover:-translate-y-1 hover:shadow-[0_10px_40px_rgb(0,0,0,0.3)] flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait transition-all pointer-events-auto">
-                      <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出'}
+              <div className="fixed bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
+                  <button onClick={(e) => { e.preventDefault(); handleExportPNG(title); }} disabled={isExporting} className="bg-indigo-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
+                      <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出長圖'}
                   </button>
               </div>
 
