@@ -176,7 +176,6 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
       newImages.splice(index, 1);
       onChange(newImages);
   };
-  const response = await fetch(`/api/data?${params.toString()}`); // 👈 這行是多餘的
   return (
     <>
     <div 
