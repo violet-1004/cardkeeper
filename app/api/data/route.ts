@@ -30,7 +30,7 @@ export async function GET(request: Request) {
             'bulk_records': schema.bulkRecords,
             'custom_lists': schema.customLists,
             'ui_sales': schema.uiSales,
-            'ui_settings': (schema as any).uiSettings, // 🌟 加上 (schema as any) 繞過 TypeScript 檢查
+            'ui_settings': null, // 🌟 設為 null，避免 Webpack 靜態打包時報錯
             'ui_subunits': schema.uiSubunits,
         };
 
@@ -75,14 +75,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
+        const body = (await request.json()) as any; // 🌟 標註為 any 解決 TypeScript unknown 錯誤
         const { action, table, data, filters } = body;
 
         const schemaMap: Record<string, any> = {
             'groups': schema.groups, 'members': schema.members, 'series': schema.series,
             'batches': schema.batches, 'channels': schema.channels, 'types': schema.types,
             'ui_cards': schema.uiCards, 'ui_inventory': schema.uiInventory, 'bulk_records': schema.bulkRecords,
-            'custom_lists': schema.customLists, 'ui_sales': schema.uiSales, 'ui_settings': (schema as any).uiSettings,
+            'custom_lists': schema.customLists, 'ui_sales': schema.uiSales, 'ui_settings': null, // 🌟 同樣設為 null
             'ui_subunits': schema.uiSubunits,
         };
 
