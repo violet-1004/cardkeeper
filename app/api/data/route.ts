@@ -5,6 +5,7 @@ import * as schema from '@/schema';
 
 // 🌟 強制邊緣運算，Cloudflare 才會把它編譯成 API
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     try {
@@ -29,7 +30,16 @@ export async function GET(request: Request) {
         }
 
         // 4. 連線 D1 並撈出資料 (使用繞過型別檢查的寫法)
-        const env = getRequestContext().env as any;
+        let env;
+        try {
+            env = getRequestContext().env as any;
+        } catch (e) {
+            return NextResponse.json({ error: "無法取得 Cloudflare 邊緣運算環境。如果您在本地端開發，請使用 wrangler pages dev 來啟動伺服器。" }, { status: 400 });
+        }
+        
+        if (!env || !env.DB) {
+            return NextResponse.json({ error: "找不到 D1 資料庫綁定 'DB'。請確認您已在 Cloudflare Pages 後台設定了綁定。" }, { status: 400 });
+        }
         const db = drizzle(env.DB);
         const data = await db.select().from(targetTable);
 
@@ -38,6 +48,6 @@ export async function GET(request: Request) {
 
     } catch (error: any) {
         console.error("API 錯誤:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: error.message || String(error) }, { status: 400 });
     }
 }
