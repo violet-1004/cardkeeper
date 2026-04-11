@@ -149,7 +149,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             if (!selectedSeriesId) return setStatus("錯誤：請先在上方選擇要匯入的「系列」！");
             if (!apiIdInput) return setStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
 
-            let allFormattedCards = [];
+            let allFormattedCards: any[] = [];
             let tempCursor = currentCursor;
 
             for (let i = 0; i < fetchPages; i++) {
@@ -200,7 +200,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             const channelMap: Record<string, number> = {};
             channelsData?.forEach((c: any) => { if (c.name) channelMap[c.name.toUpperCase()] = c.id; });
 
-            let allFormattedBatches = [];
+            let allFormattedBatches: any[] = [];
             let tempCursor = currentCursor;
 
             for (let i = 0; i < fetchPages; i++) {
