@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getRequestContext } from '@cloudflare/next-on-pages';
+import { drizzle } from 'drizzle-orm/d1';
+import * as schema from '@/schema';
 
 // 🌟 強制邊緣運算，Cloudflare 才會把它編譯成 API
 export const runtime = 'edge';
@@ -6,12 +9,6 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     try {
-        // 🌟 終極防爆：將所有依賴改為「動態載入 (Dynamic Import)」
-        // 這樣如果套件或 Schema 有不相容的情況，才會被這層 try...catch 確實捕捉到！
-        const { getRequestContext } = await import('@cloudflare/next-on-pages');
-        const { drizzle } = await import('drizzle-orm/d1');
-        const schema = await import('@/schema');
-
         // 1. 從網址列取得 ?table=xxx 的參數
         const { searchParams } = new URL(request.url);
         const tableName = searchParams.get('table');

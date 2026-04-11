@@ -1,12 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.supabase.co', // 允許所有 Supabase 網域的圖片進行壓縮
-      },
-    ],
+  webpack: (config, { nextRuntime }) => {
+    // 🌟 告訴 Webpack 在 Edge 環境下不要去尋找本地的 async_hooks 檔案
+    if (nextRuntime === 'edge') {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        async_hooks: false,
+      };
+    }
+    return config;
   },
 };
 
