@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     
-    // 🌟 從前端傳來的 query 參數讀取 table
+    // 🌟 從前端傳來的 query 參數動態讀取要撈取的資料表名稱
     const table = searchParams.get('table');
     if (!table) {
       return NextResponse.json({ error: 'Missing table parameter' }, { status: 400 });
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const filterColumn = searchParams.get('filterColumn');
     const filterValue = searchParams.get('filterValue');
 
-    // 將 Supabase 的底線命名自動轉成 Drizzle schema 的駝峰物件
+    // 將前端傳入的底線命名(e.g., ui_cards) 轉成 Schema 中定義的駝峰物件(e.g., uiCards)
     const camelCaseTable = table.replace(/_([a-z])/g, g => g[1].toUpperCase());
     const tableSchema = (schema as any)[camelCaseTable];
 
