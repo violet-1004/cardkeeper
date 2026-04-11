@@ -6,7 +6,8 @@ import { eq, sql } from 'drizzle-orm';
 import * as schema from '@/schema';
 
 function getDb() {
-    return drizzle(getRequestContext().env.DB);
+    const env = getRequestContext().env as any;
+    return drizzle(env.DB);
 }
 
 export async function fetchSeriesAndGroups() {
