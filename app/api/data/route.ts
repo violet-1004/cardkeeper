@@ -37,6 +37,10 @@ export async function GET(request: Request) {
         // 3. 從字典中取得對應的資料表
         const targetTable = schemaMap[tableName];
         if (!targetTable) {
+             // 🌟 針對尚未建立的 ui_settings，直接回傳空資料讓前端靜默通過
+             if (tableName === 'ui_settings') {
+                 return NextResponse.json({ data: [] });
+             }
              return NextResponse.json(
                  { error: `找不到資料表對應的 Schema: ${tableName}` }, 
                  { status: 404 }
@@ -57,8 +61,8 @@ export async function GET(request: Request) {
         const db = drizzle(env.DB);
         const data = await db.select().from(targetTable);
 
-        // 5. 回傳資料
-        return NextResponse.json(data);
+        // 5. 🌟 核心修復：將資料包在 data 屬性裡面，符合前端 result.data 的預期
+        return NextResponse.json({ data });
 
     } catch (error: any) {
         console.error("API 錯誤:", error);
