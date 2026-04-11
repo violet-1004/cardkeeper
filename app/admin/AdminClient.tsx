@@ -158,7 +158,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 const response = await fetch(url);
 
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
-                const data = await response.json();
+                const data: any = await response.json();
 
                 if (!data.records || data.records.length === 0) {
                     setStatus("已到達資料最末端，無更多資料。");
@@ -209,7 +209,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 const response = await fetch(url);
 
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
-                const data = await response.json();
+                const data: any = await response.json();
 
                 if (!data.records || data.records.length === 0) {
                     setStatus("已到達資料最末端，無更多資料。");
