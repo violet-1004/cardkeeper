@@ -4,10 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx @cloudflare/next-on-pages",
+    "build": "next build", 
     "start": "next start",
-    "lint": "next lint",
-    "pages:preview": "npx wrangler pages dev .vercel/output/static"
+    "lint": "next lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",
