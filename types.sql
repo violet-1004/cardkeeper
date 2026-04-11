@@ -1,0 +1,12 @@
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('入場卡', '1773331625412', '入場卡', NULL, '10');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('公放卡', '1771784189224', '公放卡', NULL, '9');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('周邊卡', '1771784189224', '周邊卡', NULL, '1');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('專卡', '1771784189224', '專卡', NULL, '0');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('幸運卡', '1771784189224', '幸運卡', NULL, '4');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('抽選卡', '1771784189224', '抽選卡', NULL, '11');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('星光卡', '1773331625412', '星光卡', NULL, '7');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('特典卡', '1771784189224', '特典卡', NULL, '2');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('簽售卡', '1771784189224', '簽售卡', NULL, '3');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('遊戲卡', '1773331625412', '遊戲卡', NULL, '8');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('隨機卡', '1773331625412', '隨機卡', NULL, '1');
+INSERT INTO types ("id", "group_id", "name", "short_name", "sort_order") VALUES ('飲料卡', '1771784189224', '飲料卡', NULL, '5');

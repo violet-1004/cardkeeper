@@ -1,0 +1,1 @@
+ALTER TABLE `ui_subunits` ADD `sort_order` integer;

@@ -1,0 +1,11 @@
+# wrangler.toml 檔案內容：
+name = "my-card-app"
+compatibility_date = "2024-03-20"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "my-card-db"
+database_id = "12bd1cc8-3276-4e33-80a2-4dbf528a6371"
+migrations_dir = "drizzle"  # 👈 加上這行，告訴 Wrangler 去哪裡找檔案

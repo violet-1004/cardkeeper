@@ -1,0 +1,1 @@
+ALTER TABLE `ui_sales` ADD `color` text;

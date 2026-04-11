@@ -1,0 +1,2 @@
+INSERT INTO groups ("id", "name", "image") VALUES ('1771784189224', 'VIVIZ/GFRIEND', 'https://qvmypjngydubsigeeial.supabase.co/storage/v1/object/public/card-images/P7CrPcfmaxKzffi5_TEUivVWXBkuuAEqoVJksE9kN-foHi2otCPdPfOtrplJoAAUto8ifDhQDkp92wJGIdioCvtHdiMY5ZoEOlyqmjzz8mSyCmzZ8AxyGYbPalT9ewc4xp8H-DjFP45NrluC1uovSQ.webp');
+INSERT INTO groups ("id", "name", "image") VALUES ('1773331625412', 'CRAVITY', 'https://qvmypjngydubsigeeial.supabase.co/storage/v1/object/public/card-images/G4ldx61bcAExfDn.jpeg');

@@ -5408,14 +5408,14 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
   );
 }
 
-function BulkOwnModal({ cards, selectedCards, onClose, onSave, series, batches, channels, types }) {
+function BulkOwnModal({ cards, selectedItems, onClose, onSave, series, batches, channels, types }) {
     const [form, setForm] = useState({ buyDate: new Date().toISOString().split('T')[0], source: '' });
     const [totalAmount, setTotalAmount] = useState('');
     
     const [cardItems, setCardItems] = useState(
-        (selectedCards || []).map(c => ({
-            uid: `temp_${Date.now()}_${Math.random()}`,
-            cardId: c.id, buyPrice: '', sellPrice: '', isManual: false
+        (selectedItems || []).map(item => ({
+            uid: item.uid || `temp_${Date.now()}_${Math.random()}`,
+            cardId: item.cardId, buyPrice: '', sellPrice: '', isManual: false
         }))
     );
 
@@ -6851,61 +6851,31 @@ export default function App() {
   useEffect(() => {
     async function fetchAllData() {
         const fetchTable = async (t, silent = false, options = {}) => { 
-        if (options.paginate) {
-            let allData = [];
-            let from = 0;
-            const step = 1000;
-            let hasMore = true;
-
-            while (hasMore) {
-                let query = supabase.from(t).select('*').range(from, from + step - 1);
+            try {
+                // 🌟 改為呼叫 D1 API，不用再依賴 Supabase client，也無需手動分頁
+                const params = new URLSearchParams({ table: t });
+                if (options.paginate) params.append('paginate', 'true');
                 if (options.orderBy) {
-                    query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+                    params.append('orderBy', options.orderBy);
+                    params.append('ascending', String(options.ascending ?? true));
                 }
-                const { data, error } = await query;
+                if (options.limit) params.append('limit', String(options.limit));
                 
-                if (error) {
-                     console.error(`🚨 [${t}] 讀取失敗:`, error.message);
-                     if (!silent && !error.message?.includes('AbortError') && !error.message?.includes('Lock was stolen')) {
-                         alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
-                     }
-                     break;
+                const response = await fetch(`/api/data?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error(`API 請求失敗: ${response.status}`);
                 }
-
-                if (data && data.length > 0) {
-                    allData = [...allData, ...data];
-                    from += step;
+                
+                const result = await response.json();
+                console.log(`✅ [${t}] 成功讀取 ${result.data?.length || 0} 筆資料`);
+                return (result.data || []).map(toCamelCase);
+            } catch (error) {
+                console.error(`🚨 [${t}] 讀取失敗:`, error.message);
+                if (!silent && !error.message?.includes('AbortError') && !error.message?.includes('Lock was stolen')) {
+                    alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
                 }
-
-                if (!data || data.length < step) {
-                    hasMore = false;
-                }
+                return [];
             }
-            
-            console.log(`✅ [${t}] 成功讀取 ${allData.length} 筆資料`);
-            return allData.map(toCamelCase);
-        }
-
-        let query = supabase.from(t).select('*');
-        
-        if (options.orderBy) {
-            query = query.order(options.orderBy, { ascending: options.ascending ?? true });
-        }
-        query = query.limit(options.limit || 10000);
-        const { data, error } = await query; 
-    
-        // 🌟 加上錯誤警告，抓出連線或權限問題
-        if (error) {
-         console.error(`🚨 [${t}] 讀取失敗:`, error.message);
-         // 🌟 隱藏 React Strict Mode 或併發請求造成的 AbortError 鎖定錯誤
-         if (!silent && !error.message?.includes('AbortError') && !error.message?.includes('Lock was stolen')) {
-             alert(`讀取 ${t} 失敗！\n錯誤訊息: ${error.message}`);
-         }
-        } else {
-             console.log(`✅ [${t}] 成功讀取 ${data?.length || 0} 筆資料`);
-        }
-    
-        return (data || []).map(toCamelCase); 
         };
         const fetchedGroups = await fetchTable('groups');
         setGroups(fetchedGroups);
@@ -7599,7 +7569,9 @@ export default function App() {
       const finalIds = newBulkInvItems.map(i => i.id);
       
       // 🌟 終極修復：先撈取資料庫既有 ID，比對後精準刪除，避免 .not('in') 字串陣列語法錯誤導致儲存中斷
-      const { data: existingInv } = await supabase.from('ui_inventory').select('id').eq('bulk_record_id', savedRecordId);
+      const res = await fetch(`/api/data?table=ui_inventory&filterColumn=bulk_record_id&filterValue=${savedRecordId}`);
+      const result = await res.json();
+      const existingInv = result.data;
       if (existingInv) {
           const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
           if (idsToDelete.length > 0) {
