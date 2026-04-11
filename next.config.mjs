@@ -9,9 +9,6 @@ const nextConfig = {
       };
     }
     return config;
-  },
-  experimental: {
-    serverComponentsExternalPackages: ['@cloudflare/next-on-pages']
   }
 };
 
