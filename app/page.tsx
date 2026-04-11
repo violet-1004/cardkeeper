@@ -6461,7 +6461,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             </div>
                             {card.note && (activeView !== 'selling' || showPrices) && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
-                                    <div className={`inline-block text-white font-bold px-2.5 py-1 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: cols >= 6 ? '16px' : '26px' }}>{card.note}</div>
+                                    <div className={`inline-block text-white font-bold px-2.5 py-1 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: cols >= 6 ? '20px' : '36px' }}>{card.note}</div>
                                 </div>
                             )}
                             {hiddenCardIds.has(card.id) && (
