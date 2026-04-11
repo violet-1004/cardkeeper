@@ -6871,7 +6871,18 @@ export default function App() {
                 
                 const result = await response.json();
                 console.log(`✅ [${t}] 成功讀取 ${result.data?.length || 0} 筆資料`);
-                return (result.data || []).map(toCamelCase);
+                
+                return (result.data || []).map(toCamelCase).map(item => {
+                    // 🌟 核心防爆：處理 Cloudflare D1 (SQLite) 將 JSON 陣列轉為純字串的問題
+                    if (typeof item.items === 'string') {
+                        try { item.items = JSON.parse(item.items) || []; } catch(e) { item.items = []; }
+                    }
+                    if (typeof item.memberIds === 'string') {
+                        try { item.memberIds = JSON.parse(item.memberIds) || []; } catch(e) { item.memberIds = []; }
+                    }
+                    return item;
+                });
+                
             } catch (error) {
                 console.error(`🚨 [${t}] 讀取失敗:`, error.message);
                 if (!silent && !error.message?.includes('AbortError') && !error.message?.includes('Lock was stolen')) {
