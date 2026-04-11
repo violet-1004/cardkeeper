@@ -6863,8 +6863,10 @@ export default function App() {
                 
                 const response = await fetch(`/api/data?${params.toString()}`);
                 if (!response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    throw new Error(`API 請求失敗: ${response.status} - ${errData.error || '未知的伺服器錯誤'}`);
+                    const errText = await response.text();
+                    let errData: any = {};
+                    try { errData = JSON.parse(errText); } catch (e) {}
+                    throw new Error(`API 請求失敗: ${response.status} - ${errData.error || errText.substring(0, 100) || '未知的伺服器錯誤'}`);
                 }
                 
                 const result = await response.json();

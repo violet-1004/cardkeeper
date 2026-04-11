@@ -32,6 +32,14 @@ export async function GET(request: Request) {
     }
 
     const env = getRequestContext().env as any;
+    
+    if (!env) {
+      return NextResponse.json({ error: '環境變數 env 尚未載入。如果您在本地端測試，請確保設定了 setupDevPlatform。' }, { status: 500 });
+    }
+    if (!env.DB) {
+      return NextResponse.json({ error: '找不到 D1 資料庫綁定！請確認您已在 Cloudflare Pages 後台 [Settings] > [Functions] 綁定了名為 "DB" 的 D1 資料庫。' }, { status: 500 });
+    }
+
     const db = drizzle(env.DB);
 
     let query = db.select().from(tableSchema);
@@ -59,6 +67,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('API 讀取錯誤:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
   }
 }
