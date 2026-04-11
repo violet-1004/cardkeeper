@@ -1315,7 +1315,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                         ) : (
                             <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">未擁有</span>
                         )}
-                        {card.isWishlist && (
+                        {!!card.isWishlist && (
                             <span className="text-sm font-bold text-pink-600 bg-pink-50 px-3 py-1 rounded-full border border-pink-100 flex items-center gap-1">
                                 <Heart className="w-3 h-3 fill-current" /> 許願中
                             </span>
@@ -2104,7 +2104,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                         </div>
                                     )}
                                     <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
-                                        {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                        {!!card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                         {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                     </div>
                                     {isSelectionMode && (
@@ -2726,7 +2726,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
                                         {cardMarks[card.id]}
                                     </div>
                                 )}
-                                {card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                {!!card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                 {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                             </div>
 
