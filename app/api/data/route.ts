@@ -17,11 +17,25 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "缺少 table 參數" }, { status: 400 });
         }
 
-        // 2. 轉換命名規則 (例如前端傳 ui_cards，轉成 schema 裡的 uiCards)
-        const schemaKey = tableName.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-        
-        // 3. 確認 Schema 中有沒有這張表
-        const targetTable = (schema as any)[schemaKey] || (schema as any)[tableName];
+        // 🌟 防爆機制：建立明確的對應字典，避免 Webpack 在正式環境壓縮(Minify)導致動態變數名稱失效
+        const schemaMap: Record<string, any> = {
+            'groups': schema.groups,
+            'members': schema.members,
+            'series': schema.series,
+            'batches': schema.batches,
+            'channels': schema.channels,
+            'types': schema.types,
+            'ui_cards': schema.uiCards,
+            'ui_inventory': schema.uiInventory,
+            'bulk_records': schema.bulkRecords,
+            'custom_lists': schema.customLists,
+            'ui_sales': schema.uiSales,
+            'ui_settings': (schema as any).uiSettings, // 🌟 加上 (schema as any) 繞過 TypeScript 檢查
+            'ui_subunits': schema.uiSubunits,
+        };
+
+        // 3. 從字典中取得對應的資料表
+        const targetTable = schemaMap[tableName];
         if (!targetTable) {
              return NextResponse.json(
                  { error: `找不到資料表對應的 Schema: ${tableName}` }, 
