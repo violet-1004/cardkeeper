@@ -3740,7 +3740,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     const [localItems, setLocalItems] = useState([...(selectedItems || [])]);
 
     const [cols, setCols] = useState(typeof window !== 'undefined' && window.innerWidth < 768 ? 4 : 8);
-    const [showDetails, setShowDetails] = useState(true);
+    const [detailLevel, setDetailLevel] = useState(2); // 🌟 修復致命錯誤：補上缺失的 detailLevel 狀態
     const [viewMode, setViewMode] = useState('all');
 
     const [filterSubunit, setFilterSubunit] = useState('All');
@@ -3835,18 +3835,18 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
 
     const availableTypes = useMemo(() => {
         const ids = new Set(subunitFilteredCards.map(c => String(c.type)).filter(Boolean));
-        const currentTypes = (types || []).filter(t => ids.has(t.id) || ids.has(t.name));
+        const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(String(t.name))); // 🌟 修正 D1 數字型別比對
         ids.forEach(id => {
-            if (!currentTypes.some(t => t.id === id || t.name === id)) currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
+            if (!currentTypes.some(t => String(t.id) === id || String(t.name) === id)) currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
         });
         return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
     }, [subunitFilteredCards, types]);
 
     const availableChannels = useMemo(() => {
         const ids = new Set(subunitFilteredCards.map(c => String(c.channel)).filter(Boolean));
-        const currentChannels = (channels || []).filter(c => ids.has(c.id) || ids.has(c.name));
+        const currentChannels = (channels || []).filter(c => ids.has(String(c.id)) || ids.has(String(c.name))); // 🌟 修正 D1 數字型別比對
         ids.forEach(id => {
-            if (!currentChannels.some(c => c.id === id || c.name === id)) currentChannels.push({ id, name: id, shortName: '' });
+            if (!currentChannels.some(c => String(c.id) === id || String(c.name) === id)) currentChannels.push({ id, name: id, shortName: '' });
         });
         const freqMap = {};
         subunitFilteredCards.forEach(c => { if (c.channel) freqMap[String(c.channel)] = (freqMap[String(c.channel)] || 0) + 1; });
@@ -4020,7 +4020,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                {(options || []).map(opt => {
                    const id = typeof opt === 'object' ? opt.id : opt;
                    const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
-                   const isSelected = current === id;
+                   const isSelected = String(current) === String(id); // 🌟 修正：確保篩選器按鈕能正確亮起
                    return (
                        <button 
                            key={id}
@@ -4167,7 +4167,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                         {count}
                                     </div>
                                 )}
-                                {showDetails && (
+                                {detailLevel > 0 && (
                                     <div className="px-0.5 sm:px-1 bg-white pt-1 pb-1">
                                         <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
                                         <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
