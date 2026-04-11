@@ -1,15 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config, { nextRuntime }) => {
-    // 🌟 告訴 Webpack 在 Edge 環境下不要去尋找本地的 async_hooks 檔案
-    if (nextRuntime === 'edge') {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        async_hooks: false,
-      };
-    }
-    return config;
-  },
+  // 🌟 已移除所有會導致 Edge 崩潰的 Webpack 覆寫
+  // Next.js 14 在 Cloudflare (配合 nodejs_compat) 下能完美原生執行
 };
 
 export default nextConfig;
