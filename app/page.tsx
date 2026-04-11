@@ -6396,7 +6396,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (card.image) {
                     const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
                     if (isExternalAPI) {
-                        exportImgUrl = `https://corsproxy.io/?${encodeURIComponent(card.image)}`;
+                        // 🌟 改用更穩定、專為圖片設計的 CORS 代理伺服器 (wsrv.nl)
+                        exportImgUrl = `https://wsrv.nl/?url=${encodeURIComponent(card.image)}`;
                     } else {
                         exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1` : `${card.image}?export_cors=1`;
                     }
@@ -6430,9 +6431,10 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     alt="卡片圖片" 
                                     crossOrigin="anonymous"
                                     onError={(e) => {
-                                        // 🌟 致命破圖救援：如果伺服器不支援 CORS 導致圖片變成問號，立刻移除跨域限制並退回原圖
-                                        e.target.removeAttribute('crossOrigin');
-                                        e.target.src = card.image;
+                                        // 🌟 破圖救援：絕對不能移除 crossOrigin，否則 canvas 會被污染導致匯出變成灰底！
+                                        // 改用第二個備用的穩定 CORS 代理服務
+                                        const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}`;
+                                        if (e.target.src !== fallbackUrl) e.target.src = fallbackUrl;
                                     }}
                                     loading="eager"
                                     decoding="sync"
