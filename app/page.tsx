@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
+const response = await fetch(`/api/data?${params.toString()}`);
+
 // --- 🌟 資料庫欄位名稱轉換工具 (處理 JS 駝峰命名與資料庫底線命名的差異) ---
 const toSnakeCase = (obj) => {
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
