@@ -6133,8 +6133,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         const origScrollTop = overlay.scrollTop;
 
         try {
-            overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important;';
-            element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
+            overlay.style.cssText += 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; height: auto !important; max-height: none !important; min-height: 100vh !important; overflow: visible !important; z-index: 9999 !important; align-items: flex-start !important;';
+            element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin: 0 !important; transform: none !important; align-items: flex-start !important;';
             window.scrollTo(0, 0);
 
             // 🌟 動態等待所有圖片真正載入完畢，避免網速慢導致 html-to-image 抓到尚未載入的灰底
@@ -6157,13 +6157,13 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 for (let i = 0; i < pages.length; i++) {
                     const page = pages[i];
                     const origPageStyle = page.style.cssText;
-                    page.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; margin-bottom: 0 !important;';
+                    page.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; margin: 0 !important; transform: none !important; align-self: flex-start !important;';
                     
                     const exportOptions = {
                         pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
                         imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                         width: page.scrollWidth, height: page.scrollHeight, 
-                        style: { height: `${page.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff' },
+                        style: { height: `${page.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', margin: '0', transform: 'none', alignSelf: 'flex-start' },
                         filter: (node) => {
                             if (node?.classList?.contains('no-export') || node?.classList?.contains('no-print') || node?.classList?.contains('card-is-hidden-for-export')) return false;
                             return true;
@@ -6174,12 +6174,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 }
                 setExportedImages(dataUrls);
             } else {
-                element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin-bottom: 0 !important;';
+                element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin: 0 !important; transform: none !important; align-self: flex-start !important;';
                 const exportOptions = {
                     pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
                     imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                     width: element.scrollWidth, height: element.scrollHeight, 
-                    style: { height: `${element.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px' },
+                    style: { height: `${element.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px', margin: '0', transform: 'none', alignSelf: 'flex-start' },
                     filter: (node) => {
                         if (node?.classList?.contains('no-export') || node?.classList?.contains('no-print') || node?.classList?.contains('card-is-hidden-for-export')) return false;
                         return true;
@@ -6459,7 +6459,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                             </div>
                             {card.note && (activeView !== 'selling' || showPrices) && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
-                                    <div className={`inline-block text-white font-bold px-2 py-0.5 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: cols >= 6 ? '9px' : '12px' }}>{card.note}</div>
+                                    <div className={`inline-block text-white font-bold px-2.5 py-1 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: cols >= 6 ? '12px' : '16px' }}>{card.note}</div>
                                 </div>
                             )}
                             {hiddenCardIds.has(card.id) && (
