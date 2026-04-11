@@ -72,3 +72,73 @@ export async function GET(request: Request) {
         }, { status: 400 });
     }
 }
+
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+        const { action, table, data, filters } = body;
+
+        const schemaMap: Record<string, any> = {
+            'groups': schema.groups, 'members': schema.members, 'series': schema.series,
+            'batches': schema.batches, 'channels': schema.channels, 'types': schema.types,
+            'ui_cards': schema.uiCards, 'ui_inventory': schema.uiInventory, 'bulk_records': schema.bulkRecords,
+            'custom_lists': schema.customLists, 'ui_sales': schema.uiSales, 'ui_settings': (schema as any).uiSettings,
+            'ui_subunits': schema.uiSubunits,
+        };
+
+        const targetTable = schemaMap[table];
+        if (!targetTable) return NextResponse.json({ error: null, data: null });
+
+        let env;
+        try { env = getRequestContext().env as any; } catch(e) { return NextResponse.json({ error: { message: "無 Edge 環境" } }); }
+        if (!env || !env.DB) return NextResponse.json({ error: { message: "未綁定 DB" } });
+
+        const db = drizzle(env.DB);
+        const { eq, and, inArray, sql } = await import('drizzle-orm');
+
+        let whereClause = undefined;
+        if (filters && filters.length > 0) {
+            const conditions = filters.map((f: any) => {
+                const camelCol = f.col.replace(/_([a-z])/g, (g: string) => g[1].toUpperCase());
+                const dbCol = targetTable[camelCol];
+                if (!dbCol) return null;
+                if (f.op === 'eq') return eq(dbCol, f.val);
+                if (f.op === 'in') return inArray(dbCol, f.vals);
+                return null;
+            }).filter(Boolean);
+            if (conditions.length > 0) whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+        }
+
+        if (action === 'insert' || action === 'upsert') {
+            const items = Array.isArray(data) ? data : [data];
+            if (items.length > 0) {
+                if (action === 'upsert') {
+                    const firstItem = items[0];
+                    const setObj: Record<string, any> = {};
+                    for (const key of Object.keys(firstItem)) {
+                        if (key !== 'id' && targetTable[key]) {
+                            setObj[key] = sql.raw(`excluded."${targetTable[key].name}"`);
+                        }
+                    }
+                    const pk = targetTable.id || targetTable.key;
+                    if (pk) {
+                        await db.insert(targetTable).values(items).onConflictDoUpdate({ target: pk, set: setObj });
+                    } else {
+                        await db.insert(targetTable).values(items);
+                    }
+                } else {
+                    await db.insert(targetTable).values(items);
+                }
+            }
+        } else if (action === 'update' && whereClause) {
+            await db.update(targetTable).set(data).where(whereClause);
+        } else if (action === 'delete' && whereClause) {
+            await db.delete(targetTable).where(whereClause);
+        }
+
+        return NextResponse.json({ error: null, data: null });
+    } catch (error: any) {
+        console.error('DB POST 錯誤:', error);
+        return NextResponse.json({ error: { message: error.message || String(error) } });
+    }
+}

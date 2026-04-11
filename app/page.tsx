@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient'; // 🌟 引入資料庫連線
+import { supabase as realSupabase } from '@/lib/supabaseClient'; // 🌟 保留原始連線供圖片上傳使用
 import { 
   Camera, Plus, Trash2, DollarSign, Calendar, Layers, Grid, List, 
   Image as ImageIcon, CheckCircle, XCircle, Share2, Download, Eye, EyeOff,
@@ -14,6 +14,37 @@ import {
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
+
+// 🌟 終極 D1 攔截器：將前端所有 Supabase 寫入操作，無縫攔截並轉交給 D1 API
+class D1QueryBuilder {
+    payload: any;
+    constructor(table: string, action: string, data = null) {
+        this.payload = { table, action, data, filters: [] };
+    }
+    eq(col: string, val: any) { this.payload.filters.push({ col, val, op: 'eq' }); return this; }
+    in(col: string, vals: any[]) { this.payload.filters.push({ col, vals, op: 'in' }); return this; }
+    async then(resolve?: (val: any) => void, reject?: (err: any) => void) {
+        try {
+            const res = await fetch('/api/data', { 
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.payload) 
+            });
+            const json = await res.json();
+            if (typeof resolve === 'function') resolve(json); // 仿造 Supabase 格式 { error: null }
+        } catch (e) {
+            if (typeof reject === 'function') reject(e);
+        }
+    }
+}
+const supabase = {
+    ...realSupabase,
+    from: (table: string) => ({
+        select: () => realSupabase.from(table).select(), // 保留 select 防呆
+        insert: (data: any) => new D1QueryBuilder(table, 'insert', data),
+        upsert: (data: any) => new D1QueryBuilder(table, 'upsert', data),
+        update: (data: any) => new D1QueryBuilder(table, 'update', data),
+        delete: () => new D1QueryBuilder(table, 'delete')
+    })
+};
 
 // --- 🌟 資料庫欄位名稱轉換工具 (處理 JS 駝峰命名與資料庫底線命名的差異) ---
 const toSnakeCase = (obj) => {
