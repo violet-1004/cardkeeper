@@ -2,18 +2,20 @@ import { NextResponse } from 'next/server';
 import { getRequestContext } from '@cloudflare/next-on-pages';
 import { drizzle } from 'drizzle-orm/d1';
 import { asc, desc, eq } from 'drizzle-orm';
-import * as schema from '@/schema'; // 引入您寫好的 Drizzle schema
+import * as schema from '@/schema';
 
-// 🌟 關鍵 1：告訴 Next.js 這支 API 跑在 Edge 環境
 export const runtime = 'edge';
-export const dynamic = 'force-dynamic'; // 🌟 強制標記為動態 API
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     
-    // 專屬於 groups API，所以直接鎖定 groups 資料表
-    const table = 'groups';
+    // 🌟 從前端傳來的 query 參數讀取 table
+    const table = searchParams.get('table');
+    if (!table) {
+      return NextResponse.json({ error: 'Missing table parameter' }, { status: 400 });
+    }
 
     const orderBy = searchParams.get('orderBy');
     const ascending = searchParams.get('ascending') !== 'false';
@@ -29,11 +31,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: `找不到對應的資料表 Schema: ${table}` }, { status: 400 });
     }
 
-    // 🌟 關鍵 2：取得 Cloudflare 綁定的 D1 資料庫
     const env = getRequestContext().env as any;
     const db = drizzle(env.DB);
 
-    // 🌟 關鍵 3：透過 Drizzle 撈取資料
     let query = db.select().from(tableSchema);
 
     const camelCaseFilterColumn = filterColumn ? filterColumn.replace(/_([a-z])/g, g => g[1].toUpperCase()) : null;
