@@ -6405,9 +6405,21 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (card.image) {
                     const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
                     if (isExternalAPI) {
-                        // 🌟 終極修復：改用 corsproxy.io 作為主代理，速度極快且帶有強快取標頭 (Cache-Control)。
-                        // 解決 4x6 換頁時 html-to-image 重複發送請求被封鎖，導致套件 Bug 渲染出同一張圖片的問題。
-                        exportImgUrl = `https://corsproxy.io/?${encodeURIComponent(card.image)}`;
+                        // 🌟 終極修復：解決「輸出時多張小卡變成同一張圖」的雙重致命問題：
+                        // 1. Safari Canvas 緩存 Bug：強制加上 v=ID，確保每張圖片 URL 絕對唯一，防止 Canvas 錯用上一張圖片的緩存。
+                        // 2. 目標 API 防刷機制：將請求平均分散到三個不同的頂級代理，避免單一 IP 瞬間請求過多而被攔截回傳預設錯誤圖。
+                        const encodedUrl = encodeURIComponent(card.image);
+                        const proxies = [
+                            `https://corsproxy.io/?${encodedUrl}`,
+                            `https://api.codetabs.com/v1/proxy/?quest=${encodedUrl}`,
+                            `https://images.weserv.nl/?url=${encodedUrl}&w=800`
+                        ];
+                        // 用卡片 ID 產生穩定 Hash，讓同一張卡固定使用同一個代理以命中快取
+                        let hash = 0;
+                        for (let i = 0; i < String(card.id).length; i++) hash = String(card.id).charCodeAt(i) + ((hash << 5) - hash);
+                        const proxyIndex = Math.abs(hash) % proxies.length;
+                        
+                        exportImgUrl = `${proxies[proxyIndex]}&v=${card.id}`;
                     } else {
                         exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1&v=${card.id}` : `${card.image}?export_cors=1&v=${card.id}`;
                     }
@@ -6441,17 +6453,18 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     alt="卡片圖片" 
                                     crossOrigin="anonymous"
                                     onError={(e) => {
-                                        // 🌟 破圖救援：如果 corsproxy 遇到特定阻擋，依序無縫切換其他代理
+                                        // 🌟 破圖救援：如果第一線代理遇到特定阻擋，依序無縫切換其他代理，並加上唯一識別碼防 Safari 快取 Bug
                                         const originalUrl = encodeURIComponent(card.image);
                                         const fallbacks = [
-                                            `https://images.weserv.nl/?url=${originalUrl}&w=800`, // 加上壓縮參數加速
-                                            `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`,
-                                            `https://api.allorigins.win/raw?url=${originalUrl}`
+                                            `https://api.allorigins.win/raw?url=${originalUrl}`,
+                                            `https://images.weserv.nl/?url=${originalUrl}&w=800`,
+                                            `https://corsproxy.io/?${originalUrl}`,
+                                            `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`
                                         ];
                                         let currentAttempt = Number(e.target.dataset.fallbackIndex || 0);
                                         if (currentAttempt < fallbacks.length) {
                                             e.target.dataset.fallbackIndex = currentAttempt + 1;
-                                            e.target.src = fallbacks[currentAttempt];
+                                            e.target.src = `${fallbacks[currentAttempt]}&v=${card.id}_fallback_${currentAttempt}`;
                                         }
                                     }}
                                     loading="eager"
