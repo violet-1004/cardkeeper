@@ -1031,7 +1031,7 @@ function SeriesFilterModal({
     );
 }
 
-function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords }) {
+function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords }) {
     const [activeModal, setActiveModal] = useState(null); 
     const [tempInvData, setTempInvData] = useState(null);
     const saleFocusRef = useRef(null);
@@ -1538,7 +1538,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
             {activeModal === 'list' && (
                 <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
                     <div className="space-y-2">
-                        {(customLists || []).map(list => (
+                        {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
                             <button 
                                 key={list.id}
                                 onClick={() => handleAddToList(list.id, prompt("備註文字"))}
@@ -2136,7 +2136,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   );
 }
 
-function CollectionTab({ cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists }) {
+function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists }) {
   const [viewMode, setViewMode] = useState('all');
   const [detailLevel, setDetailLevel] = useState(2); // 2: all, 1: partial, 0: none
   const [hideSelling, setHideSelling] = useState(false);
@@ -2250,7 +2250,7 @@ function CollectionTab({ cards, inventory, setViewingCard, members, series, batc
 
   const cardToListsMap = useMemo(() => {
       const map = {};
-      (customLists || []).filter(l => !String(l.id).startsWith('sys_sort_')).forEach(list => {
+      (customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).forEach(list => {
           (list.items || []).forEach(item => {
               const cardId = String(item.cardId);
               if (!map[cardId]) {
@@ -5607,7 +5607,7 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices }) {
+function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices }) {
     // ==========================================
     // 1. 狀態宣告 (確保順序與唯一性)
     // ==========================================
@@ -5619,6 +5619,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     const [isListModalOpen, setIsListModalOpen] = useState(false);
     const [editingListId, setEditingListId] = useState(null);
     const [listTitleInput, setListTitleInput] = useState('');
+    const [listGroupIdInput, setListGroupIdInput] = useState('');
     const [listToDelete, setListToDelete] = useState(null);
     const clickTimer = useRef(null);
 
@@ -6074,7 +6075,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     // ==========================================
     const handleSaveList = async () => {
         if(listTitleInput.trim()) {
-            const payload = { title: listTitleInput.trim() };
+            const payload = { title: listTitleInput.trim(), groupId: listGroupIdInput || currentGroupId };
             if (editingListId) {
                 payload.id = editingListId;
                 setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
@@ -6095,6 +6096,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 setIsListModalOpen(false);
                 setEditingListId(null);
                 setListTitleInput('');
+                setListGroupIdInput('');
             }
         }
     };
@@ -6106,6 +6108,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             clickTimer.current = null;
             setEditingListId(list.id);
             setListTitleInput(list.title);
+            setListGroupIdInput(list.groupId || currentGroupId);
             setIsListModalOpen(true);
         } else {
             clickTimer.current = setTimeout(() => {
@@ -6787,7 +6790,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
           <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_')).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
                       <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
                            <div className="flex items-center gap-3 min-w-0">
                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
@@ -6800,7 +6803,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                       </div>
                   ))}
                   
-                  <div onClick={() => { setEditingListId(null); setListTitleInput(''); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group select-none">
+                  <div onClick={() => { setEditingListId(null); setListTitleInput(''); setListGroupIdInput(currentGroupId); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group select-none">
                       <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:text-indigo-500 shadow-sm flex-shrink-0"><Plus className="w-5 h-5 sm:w-6 sm:h-6" /></div>
                       <span className="font-bold text-gray-500 group-hover:text-indigo-600 text-sm sm:text-base">新增收藏冊</span>
                   </div>
@@ -6809,15 +6812,28 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
         </div>
 
         {isListModalOpen && (
-            <Modal title={editingListId ? "編輯收藏冊" : "新增收藏冊"} onClose={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="max-w-sm" footer={
+            <Modal title={editingListId ? "編輯收藏冊" : "新增收藏冊"} onClose={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); setListGroupIdInput(''); }} className="max-w-sm" footer={
                 <div className="flex gap-2 w-full">
-                    <button onClick={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); }} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
+                    <button onClick={() => { setIsListModalOpen(false); setEditingListId(null); setListTitleInput(''); setListGroupIdInput(''); }} className="flex-1 py-3 rounded-xl border font-bold text-gray-500 hover:bg-gray-50">取消</button>
                     <button onClick={handleSaveList} className="flex-1 py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800">{editingListId ? "儲存修改" : "確認新增"}</button>
                 </div>
             }>
-                <div className="p-4">
-                    <label className="text-xs font-bold text-gray-500 mb-1.5 block">收藏冊名稱</label>
-                    <input autoFocus type="text" placeholder="例如：售物清單、保留區..." value={listTitleInput} onChange={e => setListTitleInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveList()} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100" />
+                <div className="p-4 space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1.5 block">所屬團體</label>
+                        <div className="relative">
+                            <select value={listGroupIdInput} onChange={e => setListGroupIdInput(e.target.value)} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 appearance-none">
+                                {(groups || []).map(g => (
+                                    <option key={g.id} value={g.id}>{g.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1.5 block">收藏冊名稱</label>
+                        <input autoFocus type="text" placeholder="例如：售物清單、保留區..." value={listTitleInput} onChange={e => setListTitleInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveList()} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100" />
+                    </div>
                 </div>
             </Modal>
         )}
@@ -7864,6 +7880,7 @@ export default function App() {
            case 'export': 
         return <ExportTab 
           currentGroupId={currentGroupId}
+              groups={groups}
           cards={currentCards} customLists={customLists} setCustomLists={setCustomLists} 
           setViewingCard={setViewingCard} isExportMode={isExportMode} setIsExportMode={setIsExportMode} 
           sales={currentSales} inventory={currentInventory} members={currentMembers} series={currentSeries} 
