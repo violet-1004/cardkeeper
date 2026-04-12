@@ -6698,15 +6698,18 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                   <Modal title="圖片已產生" onClose={() => setExportedImages([])} className="max-w-2xl" footer={
                           <div className="flex gap-2 w-full">
                               <button onClick={() => setExportedImages([])} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-all">關閉預覽</button>
-                              <button onClick={() => {
-                                  exportedImages.forEach((img, idx) => {
+                              <button onClick={async () => {
+                                  for (let idx = 0; idx < exportedImages.length; idx++) {
+                                      const img = exportedImages[idx];
                                       const link = document.createElement('a');
                                       link.href = img;
                                       link.download = `${title}_${new Date().toISOString().split('T')[0]}${is4x6Mode ? `_${idx + 1}` : ''}.png`;
                                       document.body.appendChild(link);
                                       link.click();
                                       document.body.removeChild(link);
-                                  });
+                                      // 🌟 加入短暫延遲，防止瀏覽器阻擋連續下載
+                                      await new Promise(resolve => setTimeout(resolve, 300));
+                                  }
                               }} className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2">
                                   <Download className="w-5 h-5" /> 下載全部 ({exportedImages.length}張)
                               </button>
