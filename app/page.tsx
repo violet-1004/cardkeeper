@@ -7759,10 +7759,8 @@ export default function App() {
       
       const finalIds = newBulkInvItems.map(i => i.id);
       
-      // 🌟 終極修復：先撈取資料庫既有 ID，比對後精準刪除，避免 .not('in') 字串陣列語法錯誤導致儲存中斷
-      const res = await fetch(`/api/data?table=ui_inventory&filterColumn=bulk_record_id&filterValue=${savedRecordId}`);
-      const result = await res.json();
-      const existingInv = result.data;
+      // 🌟 終極修復：撈取資料庫既有 ID，比對後精準刪除
+      const { data: existingInv } = await supabase.from('ui_inventory').select('id').eq('bulk_record_id', savedRecordId);
       if (existingInv) {
           const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
           if (idsToDelete.length > 0) {
