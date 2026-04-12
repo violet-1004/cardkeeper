@@ -1533,7 +1533,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                         </form>
                     </div>
                 </Modal>
-            )}
+            )}//b
 
             {activeModal === 'list' && (
                 <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
