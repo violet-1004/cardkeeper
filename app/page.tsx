@@ -6166,7 +6166,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     page.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; margin: 0 !important; transform: none !important; align-self: flex-start !important;';
                     
                     const exportOptions = {
-                        pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: true, skipAutoScale: true, useCORS: true, 
+                        pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
                         imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                         width: page.scrollWidth, height: page.scrollHeight, 
                         style: { height: `${page.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', margin: '0', transform: 'none', alignSelf: 'flex-start' },
@@ -6177,12 +6177,15 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     };
                     dataUrls.push(await htmlToImage.toPng(page, exportOptions));
                     page.style.cssText = origPageStyle;
+                    
+                    // 🌟 加上延遲，讓瀏覽器釋放記憶體，並避免短時間內瞬間轉檔過多圖片
+                    await new Promise(resolve => setTimeout(resolve, 800));
                 }
                 setExportedImages(dataUrls);
             } else {
                 element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin: 0 !important; transform: none !important; align-self: flex-start !important;';
                 const exportOptions = {
-                    pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: true, skipAutoScale: true, useCORS: true, 
+                    pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
                     imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                     width: element.scrollWidth, height: element.scrollHeight, 
                     style: { height: `${element.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px', margin: '0', transform: 'none', alignSelf: 'flex-start' },
