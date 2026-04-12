@@ -28,6 +28,11 @@ class D1QueryBuilder {
             const res = await fetch('/api/data', { 
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.payload) 
             });
+            if (!res.ok) {
+                const text = await res.text();
+                if (typeof resolve === 'function') resolve({ error: { message: `請求失敗 (${res.status}): ${text.includes('<!DOCTYPE html>') ? '找不到 API 路由，請確認檔案路徑是否正確' : text}` } });
+                return;
+            }
             const json = await res.json();
             if (typeof resolve === 'function') resolve(json); // 仿造 Supabase 格式 { error: null }
         } catch (e) {
@@ -7030,7 +7035,11 @@ export default function App() {
                     const errText = await response.text();
                     let errData: any = {};
                     try { errData = JSON.parse(errText); } catch (e) {}
-                    throw new Error(`API 請求失敗: ${response.status} - ${errData.error || errText.substring(0, 100) || '未知的伺服器錯誤'}`);
+                    let displayError = errData.error || errText;
+                    if (errText.includes('<!DOCTYPE html>')) {
+                        displayError = '找不到 API 路由。請確認已將後端檔案放置於 app/api/data/route.ts';
+                    }
+                    throw new Error(`API 請求失敗 (${response.status}): ${displayError.substring(0, 100)}`);
                 }
                 
                 const result = await response.json();
@@ -7474,7 +7483,11 @@ export default function App() {
         const response = await fetch('/api/crawler?planets=cravity');
         
         if (!response.ok) {
-            throw new Error('伺服器代理請求失敗');
+            if (response.status === 404) {
+                throw new Error('找不到 API 路由 (/api/crawler)！\n請確認專案中是否已建立 app/api/crawler/route.ts 檔案。');
+            }
+            const errText = await response.text();
+            throw new Error(`伺服器請求失敗 (${response.status}): ${errText.includes('<!DOCTYPE html>') ? 'API 路徑錯誤' : errText.substring(0, 50)}`);
         }
 
         const data = await response.json();
@@ -7486,7 +7499,7 @@ export default function App() {
         
     } catch (error) {
         console.error("抓取失敗：", error);
-        alert("抓取失敗，請檢查 Console");
+        alert(`資料同步失敗：\n${error.message}`);
     }
   };
 

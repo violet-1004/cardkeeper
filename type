@@ -1,5 +1,5 @@
 git add .
-git commit -m "0412 輸出圖-5"
+git commit -m "0412 輸出功能更新"
 git push
 
 npx vercel --prod
