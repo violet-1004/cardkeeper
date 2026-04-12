@@ -1533,7 +1533,7 @@ function CardDetailModal({ cards, card: initialCard, onClose, inventory, setInve
                         </form>
                     </div>
                 </Modal>
-            )}//b
+            )}
 
             {activeModal === 'list' && (
                 <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
@@ -6402,7 +6402,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (card.image) {
                     const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
                     if (isExternalAPI) {
-                        // 🌟 修復：wsrv.nl 在大量併發匯出時會觸發防刷機制，回傳同一張錯誤佔位圖，導致輸出全部變成同一張。改回 allorigins 為主。
+                        // 🌟 修復：wsrv.nl 會在 4x6 模式併發擷取時觸發防刷機制，回傳相同的「貓頭鷹」佔位圖且狀態碼 200。改以 allorigins 為主。
                         exportImgUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}&v=${card.id}`;
                     } else {
                         exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1&v=${card.id}` : `${card.image}?export_cors=1&v=${card.id}`;
@@ -6437,19 +6437,17 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     alt="卡片圖片" 
                                     crossOrigin="anonymous"
                                     onError={(e) => {
-                                    // 🌟 破圖救援：多重代理機制，徹底解決藍色問號問題
-                                    const originalUrl = encodeURIComponent(card.image);
-                                    const fallbacks = [
-                                        `https://corsproxy.io/?${originalUrl}`, // 🌟 修正：corsproxy.io 的正確寫法不能加 url=
-                                        `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`, // 🌟 第三備用：CodeTabs
-                                        `https://images.weserv.nl/?url=${originalUrl}&v=${Date.now()}` // 🌟 第四備用：Weserv (加上時間戳防快取)
-                                    ];
-                                    
-                                    let currentAttempt = Number(e.target.dataset.fallbackIndex || 0);
-                                    if (currentAttempt < fallbacks.length) {
-                                        e.target.dataset.fallbackIndex = currentAttempt + 1;
-                                        e.target.src = fallbacks[currentAttempt];
-                                    }
+                                        // 🌟 破圖救援：多重代理機制，徹底解決 4x6 模式併發失敗問題
+                                        const originalUrl = encodeURIComponent(card.image);
+                                        const fallbacks = [
+                                            `https://corsproxy.io/?${originalUrl}`, 
+                                            `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`
+                                        ];
+                                        let currentAttempt = Number(e.target.dataset.fallbackIndex || 0);
+                                        if (currentAttempt < fallbacks.length) {
+                                            e.target.dataset.fallbackIndex = currentAttempt + 1;
+                                            e.target.src = fallbacks[currentAttempt];
+                                        }
                                     }}
                                     loading="eager"
                                     decoding="sync"
