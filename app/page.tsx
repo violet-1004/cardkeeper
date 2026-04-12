@@ -5630,6 +5630,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     
     const [is4x6Mode, setIs4x6Mode] = useState(false);
     const [cardsPerPage, setCardsPerPage] = useState(8);
+    const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
     
     // 🌟 眼睛長按邏輯 (隱藏/顯示價格)
     const pricePressTimer = useRef(null);
@@ -5997,6 +5998,11 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             return safeString(cardA.id).localeCompare(safeString(cardB.id));
         });
 
+        // 🌟 切換新舊順序
+        if (sortDirection === 'desc') {
+            defaultSorted.reverse();
+        }
+
         // 🌟 如果有自訂排序，則依照自訂順序重排 (優先度高)
         if (customOrder.length > 0) {
             const orderMap = new Map(customOrder.map((id, index) => [id, index]));
@@ -6049,8 +6055,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
     // 🌟 自動切換 4x6 張數預設值
     useEffect(() => {
         if (is4x6Mode) {
-            const defaultCardsMap = { 10: 30, 9: 27, 8: 16, 7: 14, 6: 12, 5: 5, 4: 4, 3: 3, 2: 2 };
-            setCardsPerPage(defaultCardsMap[cols] || 12);
+            const defaultCardsMap = { 15: 45, 14: 42, 13: 39, 12: 36, 11: 33, 10: 30, 9: 27, 8: 16, 7: 14, 6: 12, 5: 5, 4: 4, 3: 3, 2: 2, 1: 1 };
+            setCardsPerPage(defaultCardsMap[cols] || Math.max(1, cols * 3));
         }
     }, [is4x6Mode, cols]);
 
@@ -6513,12 +6519,24 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                               <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
                           </div>
                           <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-2 flex-wrap">
-                              <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8">
-                                  <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
-                                  <select value={cols} onChange={(e) => setCols(Number(e.target.value))} className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer text-center">
-                                      {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                                  </select>
-                              </div> 
+                              <div className="flex bg-gray-100 px-2 rounded-lg items-center h-8 gap-2">
+                                  <Grid className="w-3.5 h-3.5 text-gray-400" />
+                                  <input 
+                                      type="range" 
+                                      min="1" 
+                                      max="15" 
+                                      value={cols} 
+                                      onChange={(e) => setCols(Number(e.target.value))} 
+                                      className="w-16 sm:w-20 accent-indigo-600 cursor-pointer"
+                                  />
+                                  <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
+                              </div>
+                              <button 
+                                  onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
+                                  className="px-3 py-1 rounded-lg transition-all h-8 flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold whitespace-nowrap"
+                              >
+                                  {sortDirection === 'asc' ? '舊到新' : '新到舊'}
+                              </button>
                               {typeof activeView === 'object' && activeView.id && !String(activeView.id).startsWith('sys_sort_') && (
                                   <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 shadow-sm border border-indigo-100">
                                       <Plus className="w-3 h-3"/> 新增卡片
