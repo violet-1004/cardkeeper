@@ -6405,8 +6405,9 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (card.image) {
                     const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
                     if (isExternalAPI) {
-                        // 🌟 修復：wsrv.nl 會在 4x6 模式併發擷取時觸發防刷機制，回傳相同的「貓頭鷹」佔位圖且狀態碼 200。改以 allorigins 為主。
-                        exportImgUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}&v=${card.id}`;
+                        // 🌟 終極修復：改用 corsproxy.io 作為主代理，速度極快且帶有強快取標頭 (Cache-Control)。
+                        // 解決 4x6 換頁時 html-to-image 重複發送請求被封鎖，導致套件 Bug 渲染出同一張圖片的問題。
+                        exportImgUrl = `https://corsproxy.io/?${encodeURIComponent(card.image)}`;
                     } else {
                         exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1&v=${card.id}` : `${card.image}?export_cors=1&v=${card.id}`;
                     }
@@ -6440,11 +6441,12 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     alt="卡片圖片" 
                                     crossOrigin="anonymous"
                                     onError={(e) => {
-                                        // 🌟 破圖救援：多重代理機制，徹底解決 4x6 模式併發失敗問題
+                                        // 🌟 破圖救援：如果 corsproxy 遇到特定阻擋，依序無縫切換其他代理
                                         const originalUrl = encodeURIComponent(card.image);
                                         const fallbacks = [
-                                            `https://corsproxy.io/?${originalUrl}`, 
-                                            `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`
+                                            `https://images.weserv.nl/?url=${originalUrl}&w=800`, // 加上壓縮參數加速
+                                            `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`,
+                                            `https://api.allorigins.win/raw?url=${originalUrl}`
                                         ];
                                         let currentAttempt = Number(e.target.dataset.fallbackIndex || 0);
                                         if (currentAttempt < fallbacks.length) {
