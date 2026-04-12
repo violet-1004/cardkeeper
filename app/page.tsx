@@ -7021,40 +7021,36 @@ export default function App() {
     async function fetchAllData() {
         const fetchTable = async (t, silent = false, options = {}) => { 
             try {
-                // 🌟 改為呼叫 D1 API，不用再依賴 Supabase client，也無需手動分頁
-                const params = new URLSearchParams({ table: t });
-                if (options.paginate) params.append('paginate', 'true');
-                if (options.orderBy) {
-                    params.append('orderBy', options.orderBy);
-                    params.append('ascending', String(options.ascending ?? true));
+                // 處理超過 1000 筆的分頁
+                if (options.paginate) {
+                    let allData = [];
+                    let from = 0;
+                    const step = 999;
+                    while (true) {
+                        let query = supabase.from(t).select('*');
+                        if (options.orderBy) {
+                            query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+                        }
+                        const { data, error } = await query.range(from, from + step);
+                        if (error) throw error;
+                        if (!data || data.length === 0) break;
+                        allData = [...allData, ...data];
+                        if (data.length <= step) break;
+                        from += step + 1;
+                    }
+                    return allData.map(toCamelCase);
+                } else {
+                    let query = supabase.from(t).select('*');
+                    if (options.orderBy) {
+                        query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+                    }
+                    if (options.limit) {
+                        query = query.limit(options.limit);
+                    }
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    return (data || []).map(toCamelCase);
                 }
-                if (options.limit) params.append('limit', String(options.limit));
-                
-                const response = await fetch(`/api/data?${params.toString()}`);
-                if (!response.ok) {
-                    const errText = await response.text();
-                    let errData: any = {};
-                    try { errData = JSON.parse(errText); } catch (e) {}
-                    let displayError = errData.error || errText;
-                    if (errText.includes('<!DOCTYPE html>')) {
-                        displayError = '找不到 API 路由。請確認已將後端檔案放置於 app/api/data/route.ts';
-                    }
-                    throw new Error(`API 請求失敗 (${response.status}): ${displayError.substring(0, 100)}`);
-                }
-                
-                const result = await response.json();
-                console.log(`✅ [${t}] 成功讀取 ${result.data?.length || 0} 筆資料`);
-                
-                return (result.data || []).map(toCamelCase).map(item => {
-                    // 🌟 核心防爆：處理 Cloudflare D1 (SQLite) 將 JSON 陣列轉為純字串的問題
-                    if (typeof item.items === 'string') {
-                        try { item.items = JSON.parse(item.items) || []; } catch(e) { item.items = []; }
-                    }
-                    if (typeof item.memberIds === 'string') {
-                        try { item.memberIds = JSON.parse(item.memberIds) || []; } catch(e) { item.memberIds = []; }
-                    }
-                    return item;
-                });
                 
             } catch (error) {
                 console.error(`🚨 [${t}] 讀取失敗:`, error.message);
