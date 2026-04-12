@@ -2140,6 +2140,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
   const [viewMode, setViewMode] = useState('all');
   const [detailLevel, setDetailLevel] = useState(2); // 2: all, 1: partial, 0: none
   const [hideSelling, setHideSelling] = useState(false);
+  const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
 
   const [isMarkMode, setIsMarkMode] = useState(false);
   const [cardMarks, setCardMarks] = useState(() => {
@@ -2502,6 +2503,10 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
   });
   
+  if (sortDirection === 'desc') {
+      filteredCards.reverse();
+  }
+  
   // 🌟 修復進度條計算：以當前篩選範圍 (cardsInScope) 為基準，避免切換「擁有」時永遠顯示 100%
   const totalCount = cardsInScope.length;
   const ownedCount = cardsInScope.filter(c => (inventoryMap[c.id]?.total || inventoryMap[String(c.id)]?.total || 0) > 0).length; // 🌟 雙重比對
@@ -2585,6 +2590,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                           {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                        </select>
                     </div>
+
+                   <button 
+                       onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
+                       className="px-3 py-1 rounded-lg transition-all h-8 flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold whitespace-nowrap"
+                   >
+                       {sortDirection === 'asc' ? '舊到新' : '新到舊'}
+                   </button>
 
                     <button
                         onClick={() => setDetailLevel(prev => (prev + 2) % 3)}
@@ -5679,6 +5691,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [customOrder, setCustomOrder] = useState([]);
     const [isReorderMode, setIsReorderMode] = useState(false);
     const [reorderSelectedId, setReorderSelectedId] = useState(null);
+    const [customExportTitle, setCustomExportTitle] = useState(null); // 🌟 新增：自訂標題狀態
 
     const swipeHandlers = useSwipeToClose(() => setActiveView(null));
 
@@ -5866,6 +5879,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         setReorderSelectedId(null);
         setIsHideMode(false);
         setHiddenCardIds(new Set());
+        setCustomExportTitle(null); // 🌟 切換視圖時重置標題
     }, [activeView]);
 
     // 從資料庫清單中讀取跨裝置的自訂排序
@@ -6383,13 +6397,13 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
               {(options || []).map(opt => {
                   const id = typeof opt === 'object' ? opt.id : opt;
                   const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
-                  const isSelected = current.includes(id);
+                  const isSelected = current.includes(String(id));
                   
                   if (isColor) {
                       return (
                           <button
                               key={id}
-                              onClick={() => onChange(id)}
+                              onClick={() => onChange(String(id))}
                               className={`w-6 h-6 rounded-full border-2 transition-all ${id} ${isSelected ? 'border-gray-600 scale-110 ring-1 ring-gray-400 shadow-sm' : 'border-transparent opacity-40 hover:opacity-100'}`}
                               title={name}
                           />
@@ -6399,7 +6413,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                   return (
                       <button 
                           key={id}
-                          onClick={() => onChange(id)}
+                          onClick={() => onChange(String(id))}
                           className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                       >
                           {name}
@@ -6551,10 +6565,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     // 7. 畫面回傳
     // ==========================================
     if (activeView) {
-        const title = activeView === 'owned' ? '我的擁有' : 
+        const defaultExportTitle = activeView === 'owned' ? '我的擁有' : 
                       activeView === 'wishlist' ? '願望清單' : 
                       activeView === 'selling' ? '販售中' : 
                       activeView.title;
+        const displayExportTitle = customExportTitle !== null ? customExportTitle : defaultExportTitle;
 
         return (
           <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in" {...swipeHandlers}>
@@ -6575,7 +6590,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onClick={() => setActiveView(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
                                   <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                               </button>
-                              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
+                              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{displayExportTitle}</h1>
                           </div>
                           <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-2 flex-wrap">
                               <div className="flex bg-gray-100 px-2 rounded-lg items-center h-8 gap-2">
@@ -6665,7 +6680,19 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                           {chunkedCards.map((chunk, i) => (
                               <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: cols >= 4 ? '1200px' : '800px', aspectRatio: cols >= 4 ? '3/2' : '2/3' }}>
                                   <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
-                                      <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title} ({i+1}/{chunkedCards.length})</h1>
+                                      <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-1 sm:gap-2 min-w-0">
+                                          <span 
+                                              contentEditable 
+                                              suppressContentEditableWarning 
+                                              onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                              className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text min-w-[50px]"
+                                              title="點擊直接修改標題"
+                                          >
+                                              {displayExportTitle}
+                                          </span>
+                                          <span className="whitespace-nowrap flex-shrink-0">({i+1}/{chunkedCards.length})</span>
+                                      </h1>
                                       <div className="text-right flex-shrink-0 ml-2">
                                           <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
                                           <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
@@ -6679,7 +6706,18 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                   ) : (
                       <div className="export-page bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative max-w-[1400px] mx-auto border-x border-gray-200/50">
                           <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
-                              <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight truncate">{title}</h1>
+                              <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight min-w-0">
+                                  <span 
+                                      contentEditable 
+                                      suppressContentEditableWarning 
+                                      onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                      className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text inline-block min-w-[50px]"
+                                      title="點擊直接修改標題"
+                                  >
+                                      {displayExportTitle}
+                                  </span>
+                              </h1>
                               <div className="text-right flex-shrink-0 ml-2">
                                   <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
                                   <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
@@ -6692,7 +6730,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
               </div>
 
               <div className="fixed bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
-                  <button onClick={(e) => { e.preventDefault(); handleExportPNG(title); }} disabled={isExporting} className="bg-indigo-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
+                  <button onClick={(e) => { e.preventDefault(); handleExportPNG(displayExportTitle); }} disabled={isExporting} className="bg-indigo-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
                       <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出長圖'}
                   </button>
               </div>
@@ -6706,7 +6744,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                       const img = exportedImages[idx];
                                       const link = document.createElement('a');
                                       link.href = img;
-                                      link.download = `${title}_${new Date().toISOString().split('T')[0]}${is4x6Mode ? `_${idx + 1}` : ''}.png`;
+                                      link.download = `${displayExportTitle}_${new Date().toISOString().split('T')[0]}${is4x6Mode ? `_${idx + 1}` : ''}.png`;
                                       document.body.appendChild(link);
                                       link.click();
                                       document.body.removeChild(link);
