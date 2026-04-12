@@ -6160,7 +6160,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                     page.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; margin: 0 !important; transform: none !important; align-self: flex-start !important;';
                     
                     const exportOptions = {
-                        pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
+                        pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: true, skipAutoScale: true, useCORS: true, 
                         imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                         width: page.scrollWidth, height: page.scrollHeight, 
                         style: { height: `${page.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', margin: '0', transform: 'none', alignSelf: 'flex-start' },
@@ -6176,7 +6176,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             } else {
                 element.style.cssText += 'display: block !important; height: max-content !important; max-height: none !important; overflow: visible !important; background-color: #ffffff !important; padding-bottom: 60px !important; margin: 0 !important; transform: none !important; align-self: flex-start !important;';
                 const exportOptions = {
-                    pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: false, skipAutoScale: true, useCORS: true, 
+                    pixelRatio: 1.5, backgroundColor: '#ffffff', cacheBust: true, skipAutoScale: true, useCORS: true, 
                     imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                     width: element.scrollWidth, height: element.scrollHeight, 
                     style: { height: `${element.scrollHeight}px`, maxHeight: 'none', overflow: 'visible', backgroundColor: '#ffffff', paddingBottom: '60px', margin: '0', transform: 'none', alignSelf: 'flex-start' },
@@ -6396,16 +6396,16 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (card.image) {
                     const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
                     if (isExternalAPI) {
-                        // 🌟 改用更穩定、專為圖片設計的 CORS 代理伺服器 (wsrv.nl)
-                        exportImgUrl = `https://wsrv.nl/?url=${encodeURIComponent(card.image)}`;
+                        // 🌟 改用更穩定、專為圖片設計的 CORS 代理伺服器 (wsrv.nl)，並加上卡片 ID 避免 4x6 模式快取混淆
+                        exportImgUrl = `https://wsrv.nl/?url=${encodeURIComponent(card.image)}&v=${card.id}`;
                     } else {
-                        exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1` : `${card.image}?export_cors=1`;
+                        exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1&v=${card.id}` : `${card.image}?export_cors=1&v=${card.id}`;
                     }
                 }
 
                 return (
                     <div 
-                        key={idx} 
+                        key={card.id} 
                         onClick={() => {
                             if (isHideMode) {
                                 handleCardClickInHideMode(card.id);
@@ -6433,7 +6433,7 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     onError={(e) => {
                                         // 🌟 破圖救援：絕對不能移除 crossOrigin，否則 canvas 會被污染導致匯出變成灰底！
                                         // 改用第二個備用的穩定 CORS 代理服務
-                                        const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}`;
+                                        const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}&v=${card.id}`;
                                         if (e.target.src !== fallbackUrl) e.target.src = fallbackUrl;
                                     }}
                                     loading="eager"
