@@ -6157,6 +6157,27 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             }));
             await new Promise(resolve => setTimeout(resolve, 1000));
 
+            // 🌟 終極殺手鐧：在 html-to-image 處理前，強制將所有圖片轉為 Base64！
+            // 徹底解決 Safari 的 Canvas 快取 Bug (多張圖片變成同一張)，以及代理伺服器防刷問題！
+            imgElements.forEach(img => {
+                try {
+                    if (img.src.startsWith('data:') || !img.complete || img.naturalHeight === 0) return;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width || 100;
+                    canvas.height = img.naturalHeight || img.height || 100;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // 壓縮避免 OOM
+                    
+                    img.dataset.originalSrc = img.src; // 備份原始網址
+                    img.removeAttribute('crossOrigin'); // 移除跨域標籤
+                    img.src = dataUrl;
+                } catch (e) {
+                    console.warn('Canvas Base64 轉換失敗:', e);
+                }
+            });
+            await new Promise(resolve => setTimeout(resolve, 300)); // 讓 DOM 有時間重新渲染 Base64
+
             if (is4x6Mode) {
                 const pages = element.querySelectorAll('.export-page');
                 const dataUrls = [];
@@ -6207,6 +6228,16 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
             }
             alert(`匯出圖片失敗 (若範圍太大請嘗試減少排數): ${msg}`);
         } finally {
+            // 🌟 匯出完成後，將畫面上的圖片無縫復原為真實網址，不影響原先顯示
+            const imgElements = Array.from(element?.querySelectorAll('img') || []);
+            imgElements.forEach(img => {
+                if (img.dataset.originalSrc) {
+                    img.crossOrigin = "anonymous";
+                    img.src = img.dataset.originalSrc;
+                    delete img.dataset.originalSrc;
+                }
+            });
+
             if (overlay && element) {
                 overlay.style.cssText = origOverlayStyle;
                 element.style.cssText = origElementStyle;
