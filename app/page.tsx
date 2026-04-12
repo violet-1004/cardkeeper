@@ -6402,8 +6402,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                 if (card.image) {
                     const isExternalAPI = card.image.startsWith('http') && !card.image.includes('supabase.co') && typeof window !== 'undefined' && !card.image.includes(window.location.hostname);
                     if (isExternalAPI) {
-                        // 🌟 改用更穩定、專為圖片設計的 CORS 代理伺服器 (wsrv.nl)，並加上卡片 ID 避免 4x6 模式快取混淆
-                        exportImgUrl = `https://wsrv.nl/?url=${encodeURIComponent(card.image)}&v=${card.id}`;
+                        // 🌟 修復：wsrv.nl 在大量併發匯出時會觸發防刷機制，回傳同一張錯誤佔位圖，導致輸出全部變成同一張。改回 allorigins 為主。
+                        exportImgUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}&v=${card.id}`;
                     } else {
                         exportImgUrl = card.image.includes('?') ? `${card.image}&export_cors=1&v=${card.id}` : `${card.image}?export_cors=1&v=${card.id}`;
                     }
@@ -6438,8 +6438,8 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     crossOrigin="anonymous"
                                     onError={(e) => {
                                         // 🌟 破圖救援：絕對不能移除 crossOrigin，否則 canvas 會被污染導致匯出變成灰底！
-                                        // 改用第二個備用的穩定 CORS 代理服務
-                                        const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.image)}&v=${card.id}`;
+                                    // 改用 corsproxy.io 作為備用的穩定 CORS 代理服務
+                                    const fallbackUrl = `https://corsproxy.io/?url=${encodeURIComponent(card.image)}&v=${card.id}`;
                                         if (e.target.src !== fallbackUrl) e.target.src = fallbackUrl;
                                     }}
                                     loading="eager"
