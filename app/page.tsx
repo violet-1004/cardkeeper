@@ -6437,10 +6437,19 @@ function ExportTab({ cards, customLists, setCustomLists, setViewingCard, isExpor
                                     alt="卡片圖片" 
                                     crossOrigin="anonymous"
                                     onError={(e) => {
-                                        // 🌟 破圖救援：絕對不能移除 crossOrigin，否則 canvas 會被污染導致匯出變成灰底！
-                                    // 改用 corsproxy.io 作為備用的穩定 CORS 代理服務
-                                    const fallbackUrl = `https://corsproxy.io/?url=${encodeURIComponent(card.image)}&v=${card.id}`;
-                                        if (e.target.src !== fallbackUrl) e.target.src = fallbackUrl;
+                                    // 🌟 破圖救援：多重代理機制，徹底解決藍色問號問題
+                                    const originalUrl = encodeURIComponent(card.image);
+                                    const fallbacks = [
+                                        `https://corsproxy.io/?${originalUrl}`, // 🌟 修正：corsproxy.io 的正確寫法不能加 url=
+                                        `https://api.codetabs.com/v1/proxy/?quest=${originalUrl}`, // 🌟 第三備用：CodeTabs
+                                        `https://images.weserv.nl/?url=${originalUrl}&v=${Date.now()}` // 🌟 第四備用：Weserv (加上時間戳防快取)
+                                    ];
+                                    
+                                    let currentAttempt = Number(e.target.dataset.fallbackIndex || 0);
+                                    if (currentAttempt < fallbacks.length) {
+                                        e.target.dataset.fallbackIndex = currentAttempt + 1;
+                                        e.target.src = fallbacks[currentAttempt];
+                                    }
                                     }}
                                     loading="eager"
                                     decoding="sync"
