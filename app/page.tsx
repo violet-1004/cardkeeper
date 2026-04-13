@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase as realSupabase } from '@/lib/supabaseClient'; // 🌟 保留原始連線供圖片上傳使用
 import { 
   Camera, Plus, Trash2, DollarSign, Calendar, Layers, Grid, List, 
   Image as ImageIcon, CheckCircle, XCircle, Share2, Download, Eye, EyeOff,
@@ -14,6 +14,37 @@ import {
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
+
+// 🌟 終極 D1 攔截器：將前端所有 Supabase 寫入操作，無縫攔截並轉交給 D1 API
+class D1QueryBuilder {
+    payload: any;
+    constructor(table: string, action: string, data = null) {
+        this.payload = { table, action, data, filters: [] };
+    }
+    eq(col: string, val: any) { this.payload.filters.push({ col, val, op: 'eq' }); return this; }
+    in(col: string, vals: any[]) { this.payload.filters.push({ col, vals, op: 'in' }); return this; }
+    async then(resolve?: (val: any) => void, reject?: (err: any) => void) {
+        try {
+            const res = await fetch('/api/data', { 
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.payload) 
+            });
+            const json = await res.json();
+            if (typeof resolve === 'function') resolve(json); // 仿造 Supabase 格式 { error: null }
+        } catch (e) {
+            if (typeof reject === 'function') reject(e);
+        }
+    }
+}
+const supabase = {
+    ...realSupabase,
+    from: (table: string) => ({
+        select: () => realSupabase.from(table).select(), // 保留 select 防呆
+        insert: (data: any) => new D1QueryBuilder(table, 'insert', data),
+        upsert: (data: any) => new D1QueryBuilder(table, 'upsert', data),
+        update: (data: any) => new D1QueryBuilder(table, 'update', data),
+        delete: () => new D1QueryBuilder(table, 'delete')
+    })
+};
 
 // --- 🌟 資料庫欄位名稱轉換工具 (處理 JS 駝峰命名與資料庫底線命名的差異) ---
 const toSnakeCase = (obj) => {
@@ -6985,36 +7016,36 @@ export default function App() {
     async function fetchAllData() {
         const fetchTable = async (t, silent = false, options = {}) => { 
             try {
-                // 處理超過 1000 筆的分頁
-                if (options.paginate) {
-                    let allData = [];
-                    let from = 0;
-                    const step = 999;
-                    while (true) {
-                        let query = supabase.from(t).select('*');
-                        if (options.orderBy) {
-                            query = query.order(options.orderBy, { ascending: options.ascending ?? true });
-                        }
-                        const { data, error } = await query.range(from, from + step);
-                        if (error) throw error;
-                        if (!data || data.length === 0) break;
-                        allData = [...allData, ...data];
-                        if (data.length <= step) break;
-                        from += step + 1;
-                    }
-                    return allData.map(toCamelCase);
-                } else {
-                    let query = supabase.from(t).select('*');
-                    if (options.orderBy) {
-                        query = query.order(options.orderBy, { ascending: options.ascending ?? true });
-                    }
-                    if (options.limit) {
-                        query = query.limit(options.limit);
-                    }
-                    const { data, error } = await query;
-                    if (error) throw error;
-                    return (data || []).map(toCamelCase);
+                // 🌟 改為呼叫 D1 API，不用再依賴 Supabase client，也無需手動分頁
+                const params = new URLSearchParams({ table: t });
+                if (options.paginate) params.append('paginate', 'true');
+                if (options.orderBy) {
+                    params.append('orderBy', options.orderBy);
+                    params.append('ascending', String(options.ascending ?? true));
                 }
+                if (options.limit) params.append('limit', String(options.limit));
+                
+                const response = await fetch(`/api/data?${params.toString()}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    let errData: any = {};
+                    try { errData = JSON.parse(errText); } catch (e) {}
+                    throw new Error(`API 請求失敗: ${response.status} - ${errData.error || errText.substring(0, 100) || '未知的伺服器錯誤'}`);
+                }
+                
+                const result = await response.json();
+                console.log(`✅ [${t}] 成功讀取 ${result.data?.length || 0} 筆資料`);
+                
+                return (result.data || []).map(toCamelCase).map(item => {
+                    // 🌟 核心防爆：處理 Cloudflare D1 (SQLite) 將 JSON 陣列轉為純字串的問題
+                    if (typeof item.items === 'string') {
+                        try { item.items = JSON.parse(item.items) || []; } catch(e) { item.items = []; }
+                    }
+                    if (typeof item.memberIds === 'string') {
+                        try { item.memberIds = JSON.parse(item.memberIds) || []; } catch(e) { item.memberIds = []; }
+                    }
+                    return item;
+                });
                 
             } catch (error) {
                 console.error(`🚨 [${t}] 讀取失敗:`, error.message);
@@ -7443,11 +7474,7 @@ export default function App() {
         const response = await fetch('/api/crawler?planets=cravity');
         
         if (!response.ok) {
-            if (response.status === 404) {
-                throw new Error('找不到 API 路由 (/api/crawler)！\n請確認專案中是否已建立 app/api/crawler/route.ts 檔案。');
-            }
-            const errText = await response.text();
-            throw new Error(`伺服器請求失敗 (${response.status}): ${errText.includes('<!DOCTYPE html>') ? 'API 路徑錯誤' : errText.substring(0, 50)}`);
+            throw new Error('伺服器代理請求失敗');
         }
 
         const data = await response.json();
@@ -7459,7 +7486,7 @@ export default function App() {
         
     } catch (error) {
         console.error("抓取失敗：", error);
-        alert(`資料同步失敗：\n${error.message}`);
+        alert("抓取失敗，請檢查 Console");
     }
   };
 
@@ -7719,8 +7746,10 @@ export default function App() {
       
       const finalIds = newBulkInvItems.map(i => i.id);
       
-      // 🌟 終極修復：撈取資料庫既有 ID，比對後精準刪除
-      const { data: existingInv } = await supabase.from('ui_inventory').select('id').eq('bulk_record_id', savedRecordId);
+      // 🌟 終極修復：先撈取資料庫既有 ID，比對後精準刪除，避免 .not('in') 字串陣列語法錯誤導致儲存中斷
+      const res = await fetch(`/api/data?table=ui_inventory&filterColumn=bulk_record_id&filterValue=${savedRecordId}`);
+      const result = await res.json();
+      const existingInv = result.data;
       if (existingInv) {
           const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
           if (idsToDelete.length > 0) {
