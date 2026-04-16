@@ -4260,30 +4260,22 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     // 🌟 將舊有的歸戶物件，攤平成純陣列，每張卡都是獨立的物件 (包含 uid, buyPrice, sellPrice)
     const [cardItems, setCardItems] = useState(() => {
-        // 🌟 修正：過濾掉雜物與純專輯項目
         const items = (record?.items || []).filter(i => !i.isMisc && !i.isAlbum);
-        let availableInv = [...(inventory || []).filter(i => String(i.bulkRecordId) === String(record?.id) && !i.albumId)]; // 🌟 假設純專輯的庫存沒有 cardId 或有標記，這裡先簡單過濾
         
-        const initialItems = items.flatMap(item => {
-            const qty = Number(item.quantity) || 1; 
-            return Array.from({ length: qty }).map(() => {
-                let invIdx = availableInv.findIndex(inv => String(inv.cardId) === String(item.cardId));
-                let matchedInv = null;
-                if (invIdx !== -1) {
-                    matchedInv = availableInv[invIdx];
-                    availableInv.splice(invIdx, 1);
-                }
-                return {
-                    uid: matchedInv?.id || `temp_${Date.now()}_${Math.random()}`,
-                    cardId: item.cardId,
-                    buyPrice: item.buyPrice,
-                    sellPrice: matchedInv?.sellPrice || '',
-                    sellDate: matchedInv?.sellDate || '', // 🌟 初始化售出日期
-                    isManual: item.isManual,
-                    isSet: isSetMode || item.isSet || false
-                    // 🌟 移除卡片綁定專輯的欄位初始化
-                };
-            });
+        // 🌟 核心修復：直接使用 bulk_records.items 內的 ID 作為唯一識別碼 (uid)，
+        // 避免重新整理後因匹配邏輯錯誤 (用 cardId 找) 導致重複卡片關聯丟失。
+        const initialItems = items.map(item => {
+            const matchedInv = (inventory || []).find(inv => String(inv.id) === String(item.id));
+            
+            return {
+                uid: item.id || `temp_${Date.now()}_${Math.random()}`, // item.id 就是 inventory ID，是唯一且穩定的
+                cardId: item.cardId,
+                buyPrice: item.buyPrice,
+                sellPrice: matchedInv?.sellPrice || item.sellPrice || '',
+                sellDate: matchedInv?.sellDate || item.sellDate || '',
+                isManual: item.isManual,
+                isSet: isSetMode || item.isSet || false,
+            };
         });
         
         return sortItemsByMember(initialItems);
