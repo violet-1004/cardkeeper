@@ -4309,7 +4309,6 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const [miscToRemove, setMiscToRemove] = useState(null);
     const [albumToRemove, setAlbumToRemove] = useState(null); // 🌟 新增刪除專輯確認
     const [albumToSelect, setAlbumToSelect] = useState(null);
-    const swipeHandlers = useSwipeToClose(onClose);
 
     const totalSoldPrice = useMemo(() => {
         const cardSellSum = cardItems.reduce((acc, item) => acc + (Number(item.sellPrice) || 0), 0);
@@ -4722,6 +4721,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         }
         onClose();
     };
+
+    const swipeHandlers = useSwipeToClose(handleClose);
 
     return (
         <div className="fixed inset-0 z-[150] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up" {...swipeHandlers}>
