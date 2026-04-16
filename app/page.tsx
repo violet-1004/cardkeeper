@@ -2095,31 +2095,44 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                     }
                                 }}
                             >
-                                <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-600' : 'border-gray-100'}`}>
-                                    {card.image ? (
-                                        <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                            <ImageIcon className="w-8 h-8" />
+                                {(() => {
+                                    const isOriginalTarget = isSelectionMode && batchCategorizeTarget && (() => {
+                                        const { type, value } = batchCategorizeTarget;
+                                        if (type === 'type' || type === 'channel') {
+                                            const arr = type === 'type' ? types : channels;
+                                            const obj = (arr || []).find(x => String(x.id) === String(value));
+                                            return String(card[type]) === String(value) || (obj && String(card[type]) === String(obj.name));
+                                        }
+                                        return String(card[type]) === String(value);
+                                    })();
+                                    return (
+                                        <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border transition-all ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-600 shadow-md' : isOriginalTarget ? 'border-pink-400 ring-2 ring-pink-400 opacity-90' : 'border-gray-100'}`}>
+                                            {card.image ? (
+                                                <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                                    <ImageIcon className="w-8 h-8" />
+                                                </div>
+                                            )}
+                                            <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
+                                                {!!card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                                {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
+                                            </div>
+                                            {isSelectionMode && (
+                                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white/50 border-gray-400'}`}>
+                                                    {isSelected && <Check className="w-3 h-3" />}
+                                                </div>
+                                            )}
+                                            {total > 0 && (
+                                                <div className={`absolute top-1 sm:top-2 ${isSelectionMode ? 'right-8' : 'right-1 sm:right-2'} flex flex-col gap-0.5 z-10 items-end transition-all`}>
+                                                    {arrived > 0 && <div className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="到貨">{arrived}</div>}
+                                                    {hoarded > 0 && <div className="bg-blue-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="囤貨">{hoarded}</div>}
+                                                    {unshipped > 0 && <div className="bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未發貨">{unshipped}</div>}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                    <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
-                                        {!!card.isWishlist && <div className="bg-pink-500 text-white p-1 rounded-full shadow"><Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
-                                        {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
-                                    </div>
-                                    {isSelectionMode && (
-                                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white/50 border-gray-400'}`}>
-                                        {isSelected && <Check className="w-3 h-3" />}
-                                    </div>
-                                )}
-                                {total > 0 && (
-                                    <div className={`absolute top-1 sm:top-2 ${isSelectionMode ? 'right-8' : 'right-1 sm:right-2'} flex flex-col gap-0.5 z-10 items-end transition-all`}>
-                                        {arrived > 0 && <div className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="到貨">{arrived}</div>}
-                                        {hoarded > 0 && <div className="bg-blue-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="囤貨">{hoarded}</div>}
-                                        {unshipped > 0 && <div className="bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未發貨">{unshipped}</div>}
-                                    </div>
-                                )}
-                                </div>
+                                    );
+                                })()}
                                 
                                 {/* 🌟 顯示名稱 (與收藏頁籤一致) */}
                                 <div className="px-0.5 sm:px-1">
@@ -4396,12 +4409,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         };
     }, []);
 
-    const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems, updatedAlbumItems) => {
+    const syncToParent = (updatedForm, updatedTotal, updatedCardItems, updatedMiscItems, updatedAlbumItems, forceSave = false) => {
         if (!updatedForm.name.trim() && !isSetMode) return;
         
         if (syncTimer.current) clearTimeout(syncTimer.current);
         
-        syncTimer.current = setTimeout(() => {
+        const executeSave = () => {
             const finalCardItems = updatedCardItems.map(item => ({
                 id: item.uid, // 回傳 inventory ID 給 App
                 cardId: item.cardId, quantity: 1, buyPrice: Number(item.buyPrice) || 0, sellPrice: Number(item.sellPrice) || 0, sellDate: item.sellDate,
@@ -4426,7 +4439,13 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             }));
 
             onSave({ ...updatedForm, id: localRecordId, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
-        }, 600); // 延遲 600ms，避免頻繁寫入資料庫
+        };
+
+        if (forceSave) {
+            executeSave();
+        } else {
+            syncTimer.current = setTimeout(executeSave, 600);
+        }
     };
 
     // 🌟 新版均價計算 (加入專輯成本扣除)
@@ -4677,7 +4696,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
         setCardItems(nextCards); 
         setMiscItems(nextMisc);
         setAlbumItems(nextAlbums);
-        syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums);
+        syncToParent(form, totalAmount, nextCards, nextMisc, nextAlbums, true);
         setShowCardSelector(false);
     };
 
@@ -4697,10 +4716,17 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     };
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
+    const handleClose = () => {
+        if (form.name.trim() || isSetMode) {
+            syncToParent(form, totalAmount, cardItems, miscItems, albumItems, true);
+        }
+        onClose();
+    };
+
     return (
         <div className="fixed inset-0 z-[150] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up" {...swipeHandlers}>
             <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0 shadow-sm">
-                <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
+                <button onClick={handleClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">{isEdit ? (isSetMode ? '編輯套收記錄' : '編輯盤收記錄') : (isSetMode ? '新增套收記錄' : '新增盤收記錄')}</div>
                 <div className="flex gap-1 items-center">
                     {isEdit && <button onClick={() => { if(confirm('確定要刪除這筆記錄嗎？')) onDelete(record.id); }} className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>}
