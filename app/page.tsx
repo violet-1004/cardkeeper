@@ -4401,10 +4401,12 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
 
     // 🌟 加入防抖機制，避免打字時瘋狂觸發 DB 儲存
     const syncTimer = useRef(null);
+    const pendingSaveRef = useRef(null); // 🌟 用於記錄最新且尚未執行的儲存操作
 
     useEffect(() => {
         return () => {
             if (syncTimer.current) clearTimeout(syncTimer.current);
+            if (pendingSaveRef.current) pendingSaveRef.current(); // 確保意外卸載時仍能存檔
         };
     }, []);
 
@@ -4438,7 +4440,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             }));
 
             onSave({ ...updatedForm, id: localRecordId, totalAmount: Number(updatedTotal) || 0, items: [...finalCardItems, ...finalMiscItems, ...finalAlbumItems] });
+            pendingSaveRef.current = null; // 🌟 執行後清空待儲存狀態
         };
+
+        pendingSaveRef.current = executeSave; // 🌟 每次變更都記錄最新的儲存邏輯
 
         if (forceSave) {
             executeSave();
@@ -4716,8 +4721,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const cancelMiscPress = () => clearTimeout(miscPressTimer.current);
 
     const handleClose = () => {
-        if (form.name.trim() || isSetMode) {
-            syncToParent(form, totalAmount, cardItems, miscItems, albumItems, true);
+        if (pendingSaveRef.current) {
+            pendingSaveRef.current(); // 🌟 只執行尚未被存檔的最新變更，避免舊 State 覆蓋新資料
         }
         onClose();
     };
