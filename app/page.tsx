@@ -7659,13 +7659,15 @@ export default function App() {
           dataToSave.image = uploaded;
       }
 
-      if (dataToSave.id) {
-          setBulkRecords(prev => prev.map(r => r.id === dataToSave.id ? { ...r, ...dataToSave } : r));
+      const isExisting = (bulkRecords || []).some(r => String(r.id) === String(dataToSave.id));
+
+      if (isExisting) {
+          setBulkRecords(prev => prev.map(r => (r.id === dataToSave.id ? { ...r, ...dataToSave } : r)));
           savedRecordId = dataToSave.id;
           setEditingBulkRecord(prev => ({ ...prev, ...dataToSave }));
       } else {
-          const newRecord = { ...dataToSave, id: Date.now().toString() };
-          setBulkRecords(prev => [...prev, newRecord]);
+          const newRecord = { ...dataToSave, id: dataToSave.id || Date.now().toString() };
+          setBulkRecords(prev => [...(prev || []), newRecord]);
           savedRecordId = newRecord.id;
           setEditingBulkRecord(newRecord);
       }
