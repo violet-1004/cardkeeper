@@ -7706,22 +7706,37 @@ export default function App() {
 
       let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === savedRecordId)];
 
+      // 🌟 核心修復：先用精準 ID 配對已經存在資料庫的庫存，避免排序改變導致新卡片搶走舊卡片的 ID
+      const matchedById = new Map();
+      (dataToSave.items || []).forEach(item => {
+          if (item.isMisc) return;
+          if (!item.id || String(item.id).startsWith('temp_') || String(item.id).startsWith('sel_') || String(item.id).startsWith('album_')) return;
+          const invIdx = availableInv.findIndex(i => String(i.id) === String(item.id));
+          if (invIdx !== -1) {
+              matchedById.set(item.id, availableInv[invIdx]);
+              availableInv.splice(invIdx, 1); // 消耗掉，避免重複配對
+          }
+      });
+
       // 🌟 過濾雜物，並精準對應每一張獨立卡片的庫存 ID 與售價
       // 🌟 修正：同時處理卡片 (!isMisc && !isAlbum) 與 專輯 (isAlbum)
       const newBulkInvItems = (dataToSave.items || []).filter(item => !item.isMisc).map((item, idx) => {
-          let invIdx = -1;
-          if (item.isAlbum) {
-              // 專輯對應邏輯：找同 bulkRecordId 且有 albumId 的項目
-              invIdx = availableInv.findIndex(i => String(i.id) === String(item.id) || (String(i.albumId) === String(item.albumId) && i.albumStatus === item.albumStatus));
-          } else {
-              // 卡片對應邏輯
-              invIdx = availableInv.findIndex(i => String(i.id) === String(item.id) || String(i.cardId) === String(item.cardId));
-          }
+          let existing = matchedById.get(item.id);
           
-          let existing = null;
-          if (invIdx !== -1) {
-              existing = availableInv[invIdx];
-              availableInv.splice(invIdx, 1);
+          if (!existing) {
+              let invIdx = -1;
+              if (item.isAlbum) {
+                  // 專輯對應邏輯：找同 bulkRecordId 且有 albumId 的項目
+                  invIdx = availableInv.findIndex(i => String(i.albumId) === String(item.albumId) && i.albumStatus === item.albumStatus);
+              } else {
+                  // 卡片對應邏輯
+                  invIdx = availableInv.findIndex(i => String(i.cardId) === String(item.cardId));
+              }
+              
+              if (invIdx !== -1) {
+                  existing = availableInv[invIdx];
+                  availableInv.splice(invIdx, 1);
+              }
           }
 
           let nextNote = existing?.note || `來自盤收: ${dataToSave.name}`;
@@ -7772,15 +7787,11 @@ export default function App() {
       
       const finalIds = newBulkInvItems.map(i => i.id);
       
-      // 🌟 終極修復：先撈取資料庫既有 ID，比對後精準刪除，避免 .not('in') 字串陣列語法錯誤導致儲存中斷
-      const res = await fetch(`/api/data?table=ui_inventory&filterColumn=bulk_record_id&filterValue=${savedRecordId}`);
-      const result = await res.json();
-      const existingInv = result.data;
-      if (existingInv) {
-          const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
-          if (idsToDelete.length > 0) {
-              await supabase.from('ui_inventory').delete().in('id', idsToDelete);
-          }
+      // 🌟 終極修復：直接從前端 inventory 狀態撈取既有資料比對，避免使用不支援的 GET filterColumn 參數導致 API 崩潰中斷儲存
+      const existingInv = inventory.filter(i => String(i.bulkRecordId) === String(savedRecordId));
+      const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
+      if (idsToDelete.length > 0) {
+          await supabase.from('ui_inventory').delete().in('id', idsToDelete);
       } else if (finalIds.length === 0) {
           // 如果完全沒有卡片，保險起見直接清空該盤收的庫存
           await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
