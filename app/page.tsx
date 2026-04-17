@@ -3597,7 +3597,7 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
         // 🌟 如果這筆資料來自盤收，同步移除盤收紀錄內的該項目
         if (targetItem && targetItem.bulkRecordId && setBulkRecords) {
             setBulkRecords(prev => prev.map(record => {
-                if (record.id === targetItem.bulkRecordId) {
+                if (String(record.id) === String(targetItem.bulkRecordId)) {
                     const newItems = (record.items || []).filter(item => item.id !== invId);
                     // 背景同步更新資料庫
                     supabase.from('bulk_records').update({ items: newItems }).eq('id', record.id).then();
@@ -7720,7 +7720,7 @@ export default function App() {
       const isExisting = (bulkRecords || []).some(r => String(r.id) === String(dataToSave.id));
 
       if (isExisting) {
-          setBulkRecords(prev => prev.map(r => (r.id === dataToSave.id ? { ...r, ...dataToSave } : r)));
+          setBulkRecords(prev => prev.map(r => (String(r.id) === String(dataToSave.id) ? { ...r, ...dataToSave } : r)));
           savedRecordId = dataToSave.id;
           setEditingBulkRecord(prev => ({ ...prev, ...dataToSave }));
       } else {
@@ -7835,8 +7835,8 @@ export default function App() {
 
   const handleDeleteBulkRecord = async (id) => {
       // 1. 更新前端畫面狀態，立刻隱藏
-      setBulkRecords(prev => prev.filter(r => r.id !== id));
-      setInventory(prev => prev.filter(i => i.bulkRecordId !== id));
+      setBulkRecords(prev => prev.filter(r => String(r.id) !== String(id)));
+      setInventory(prev => prev.filter(i => String(i.bulkRecordId) !== String(id)));
       setEditingBulkRecord(null);
       
       // 2. 同步刪除資料庫資料 (先刪除盤收內的所有小卡紀錄，再刪除盤收本身)
@@ -7967,7 +7967,7 @@ export default function App() {
                 // 🌟 如果這筆資料來自盤收，同步移除盤收紀錄內的該項目，避免資料不同步
                 if (targetItem && targetItem.bulkRecordId) {
                     setBulkRecords(prev => prev.map(record => {
-                        if (record.id === targetItem.bulkRecordId) {
+                        if (String(record.id) === String(targetItem.bulkRecordId)) {
                             const newItems = (record.items || []).filter(item => item.id !== id);
                             
                             // 背景同步更新資料庫
