@@ -7704,12 +7704,15 @@ export default function App() {
           dataToSave.image = uploaded;
       }
 
-      // 🌟 修正：統一將空字串轉為 null，避免 SQLite Date 欄位報錯導致儲存中斷
+      // 🌟 升級版防呆：遞迴深度清洗，將所有層級的空字串轉為 null，徹底杜絕 SQLite JSON 與 Date 欄位報錯
       const cleanPayload = (obj) => {
+          if (obj === '') return null;
+          if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+          if (Array.isArray(obj)) return obj.map(cleanPayload);
+          
           const cleaned = {};
           Object.keys(obj).forEach(k => {
-              if (obj[k] === '') cleaned[k] = null;
-              else cleaned[k] = obj[k];
+              cleaned[k] = cleanPayload(obj[k]);
           });
           return cleaned;
       };
@@ -7806,22 +7809,27 @@ export default function App() {
 
       setInventory(prevInv => [...prevInv.filter(i => String(i.bulkRecordId) !== String(savedRecordId)), ...newBulkInvItems]);
       
-      await supabase.from('bulk_records').upsert(toSnakeCase(cleanPayload(dataToSave)));
-      
-      const finalIds = newBulkInvItems.map(i => i.id);
-      
-      // 🌟 終極修復：直接從前端 inventory 狀態撈取既有資料比對，避免使用不支援的 GET filterColumn 參數導致 API 崩潰中斷儲存
-      const existingInv = inventory.filter(i => String(i.bulkRecordId) === String(savedRecordId));
-      const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
-      if (idsToDelete.length > 0) {
-          await supabase.from('ui_inventory').delete().in('id', idsToDelete);
-      } else if (finalIds.length === 0) {
-          // 如果完全沒有卡片，保險起見直接清空該盤收的庫存
-          await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
-      }
-      
-      if (newBulkInvItems.length > 0) {
-          await supabase.from('ui_inventory').upsert(newBulkInvItems.map(item => toSnakeCase(cleanPayload(item))));
+      try {
+          await supabase.from('bulk_records').upsert(toSnakeCase(cleanPayload(dataToSave)));
+          
+          const finalIds = newBulkInvItems.map(i => i.id);
+          
+          // 🌟 終極修復：直接從前端 inventory 狀態撈取既有資料比對，避免使用不支援的 GET filterColumn 參數導致 API 崩潰中斷儲存
+          const existingInv = inventory.filter(i => String(i.bulkRecordId) === String(savedRecordId));
+          const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
+          if (idsToDelete.length > 0) {
+              await supabase.from('ui_inventory').delete().in('id', idsToDelete);
+          } else if (finalIds.length === 0) {
+              // 如果完全沒有卡片，保險起見直接清空該盤收的庫存
+              await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
+          }
+          
+          if (newBulkInvItems.length > 0) {
+              await supabase.from('ui_inventory').upsert(newBulkInvItems.map(item => toSnakeCase(cleanPayload(item))));
+          }
+      } catch (err) {
+          console.error("盤收儲存失敗:", err);
+          alert("盤收儲存失敗，請檢查網路連線或重新整理頁面：" + (err.message || JSON.stringify(err)));
       }
   };
 
