@@ -1276,7 +1276,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
         // 🌟 如果這筆資料來自盤收/套收，同步移除父級紀錄內的該項目
         if (targetItem && targetItem.bulkRecordId && setBulkRecords) {
             setBulkRecords(prev => prev.map(record => {
-                if (record.id === targetItem.bulkRecordId) {
+                if (String(record.id) === String(targetItem.bulkRecordId)) {
                     const newItems = (record.items || []).filter(item => String(item.id) !== String(invId));
                     supabase.from('bulk_records').update({ items: newItems }).eq('id', record.id).then();
                     return { ...record, items: newItems };
@@ -3296,7 +3296,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
 
     const albumList = useMemo(() => {
         return Object.keys(albumInventory).map(albumId => {
-            const s = (series || []).find(ser => ser.id === albumId);
+                const s = (series || []).find(ser => String(ser.id) === String(albumId));
             return {
                 id: albumId,
                 name: s?.name || '未知專輯',
@@ -7772,7 +7772,7 @@ export default function App() {
           setEditingBulkRecord(newRecord);
       }
 
-      let availableInv = [...(inventory || []).filter(i => i.bulkRecordId === savedRecordId)];
+      let availableInv = [...(inventory || []).filter(i => String(i.bulkRecordId) === String(savedRecordId))];
 
       // 🌟 核心修復：先用精準 ID 配對已經存在資料庫的庫存，避免排序改變導致新卡片搶走舊卡片的 ID
       const matchedById = new Map();
