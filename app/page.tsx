@@ -1149,7 +1149,9 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
 
         setInventory(newInventory);
         if (idsToDelete.length > 0) {
-            await supabase.from('ui_inventory').delete().in('id', idsToDelete);
+            for (let i = 0; i < idsToDelete.length; i += 50) {
+                await supabase.from('ui_inventory').delete().in('id', idsToDelete.slice(i, i + 50));
+            }
             alert(`已刪除 ${idsToDelete.length} 筆重複資料`);
         }
     };
