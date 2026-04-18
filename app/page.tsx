@@ -7782,7 +7782,7 @@ export default function App() {
               cardId: item.isAlbum ? null : item.cardId, // 🌟 專輯沒有 cardId
               bulkRecordId: savedRecordId,
               buyDate: dataToSave.buyDate || null,
-              buyPrice: item.buyPrice,
+              buyPrice: Number(item.buyPrice) || 0, // 🌟 強制轉為數字，避免 null 被資料庫拒絕
               quantity: item.isAlbum ? 0 : 1, // 🌟 專輯不計入卡片數量，但計入庫存項目
               source: dataToSave.source,
               status: dataToSave.status,
@@ -7810,7 +7810,9 @@ export default function App() {
       setInventory(prevInv => [...prevInv.filter(i => String(i.bulkRecordId) !== String(savedRecordId)), ...newBulkInvItems]);
       
       try {
-          await supabase.from('bulk_records').upsert(toSnakeCase(cleanPayload(dataToSave)));
+          // 🌟 致命錯誤修正：必須檢查 .error 並拋出，否則資料庫報錯會被靜默吞噬，導致前端以為成功但重整後回溯
+          const resBulk = await supabase.from('bulk_records').upsert(toSnakeCase(cleanPayload(dataToSave)));
+          if (resBulk?.error) throw new Error(resBulk.error.message || JSON.stringify(resBulk.error));
           
           const finalIds = newBulkInvItems.map(i => i.id);
           
@@ -7818,18 +7820,21 @@ export default function App() {
           const existingInv = inventory.filter(i => String(i.bulkRecordId) === String(savedRecordId));
           const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
           if (idsToDelete.length > 0) {
-              await supabase.from('ui_inventory').delete().in('id', idsToDelete);
+              const resDel = await supabase.from('ui_inventory').delete().in('id', idsToDelete);
+              if (resDel?.error) throw new Error(resDel.error.message || JSON.stringify(resDel.error));
           } else if (finalIds.length === 0) {
               // 如果完全沒有卡片，保險起見直接清空該盤收的庫存
-              await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
+              const resDelAll = await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
+              if (resDelAll?.error) throw new Error(resDelAll.error.message || JSON.stringify(resDelAll.error));
           }
           
           if (newBulkInvItems.length > 0) {
-              await supabase.from('ui_inventory').upsert(newBulkInvItems.map(item => toSnakeCase(cleanPayload(item))));
+              const resInv = await supabase.from('ui_inventory').upsert(newBulkInvItems.map(item => toSnakeCase(cleanPayload(item))));
+              if (resInv?.error) throw new Error(resInv.error.message || JSON.stringify(resInv.error));
           }
       } catch (err) {
           console.error("盤收儲存失敗:", err);
-          alert("盤收儲存失敗，請檢查網路連線或重新整理頁面：" + (err.message || JSON.stringify(err)));
+          alert("盤收儲存失敗，請檢查網路連線或重新整理頁面：" + (err.message || err));
       }
   };
 
