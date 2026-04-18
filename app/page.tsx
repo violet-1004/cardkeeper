@@ -1671,8 +1671,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           return [...prevItems, ...itemsToAdd];
       });
       
-      if (type === 'seriesId') {
-          const batchesToSelect = (batches || []).filter(b => String(b.groupId) === String(currentGroupId) && String(b.seriesId) === String(value)); // 🌟 這裡也補上防禦
+      if (type === 'seriesId' || type === 'type' || type === 'channel') {
+          const batchesToSelect = (batches || []).filter(b => {
+              if (String(b.groupId) !== String(currentGroupId)) return false;
+              if (type === 'type' || type === 'channel') {
+                  const arr = type === 'type' ? types : channels;
+                  const obj = (arr || []).find(x => String(x.id) === String(value));
+                  return String(b[type]) === String(value) || (obj && String(b[type]) === String(obj.name));
+              }
+              return String(b.seriesId) === String(value);
+          });
           setSelectedBatches(prevBatches => {
               const existingBatchIds = new Set(prevBatches.map(id => String(id)));
               const batchesToAdd = batchesToSelect.filter(b => !existingBatchIds.has(String(b.id))).map(b => b.id);
@@ -7612,55 +7620,52 @@ export default function App() {
       let nextCards = [...(cards || [])];
       let nextBatches = [...(batches || [])];
 
-      // 1. 若歸類目標為「系列」，處理批次的加入與移除
-      if (type === 'seriesId') {
+      // 1. 處理批次的加入與移除 (支援系列、子類、通路)
+      if (type === 'seriesId' || type === 'type' || type === 'channel') {
           nextBatches = nextBatches.map(b => {
               const isSelected = uniqueSelectedBatchIds.includes(String(b.id));
-              const wasInSeries = String(b.seriesId) === String(value);
+              let wasInTarget = false;
               
-              if (isSelected && !wasInSeries) {
-                  const newBatch = { ...b, seriesId: value };
+              if (type === 'type' || type === 'channel') {
+                  const arr = type === 'type' ? types : channels;
+                  const obj = (arr || []).find(x => String(x.id) === String(value));
+                  wasInTarget = String(b[type]) === String(value) || (obj && String(b[type]) === String(obj.name));
+              } else {
+                  wasInTarget = String(b[type]) === String(value);
+              }
+              
+              if (isSelected && !wasInTarget) {
+                  const newBatch = { ...b, [type]: value };
                   batchesToUpdateDb.push(newBatch);
                   return newBatch;
-              } else if (!isSelected && wasInSeries) {
-                  const newBatch = { ...b, seriesId: '' }; // 移出該歸類
+              } else if (!isSelected && wasInTarget) {
+                  const newBatch = { ...b, [type]: '' };
                   batchesToUpdateDb.push(newBatch);
                   return newBatch;
               }
               return b;
           });
-          
-          nextCards = nextCards.map(c => {
-              if (c.batchId) {
-                  const isSelectedBatch = uniqueSelectedBatchIds.includes(String(c.batchId));
-                  const wasSelectedBatch = batches.find(b => String(b.id) === String(c.batchId))?.seriesId === value;
-
-                  if (isSelectedBatch && String(c.seriesId) !== String(value)) {
-                      const newCard = { ...c, seriesId: value };
-                      cardsToUpdateDb.push(newCard);
-                      return newCard;
-                  } else if (!isSelectedBatch && wasSelectedBatch && String(c.seriesId) === String(value)) {
-                      const newCard = { ...c, seriesId: '' };
-                      cardsToUpdateDb.push(newCard);
-                      return newCard;
-                  }
-              }
-              return c;
-          });
       }
 
-      // 2. 處理獨立選取的「卡片」的加入與移除
+      // 2. 處理卡片的加入與移除，以及批次屬性聯動
+      const modifiedBatchIds = new Set(batchesToUpdateDb.map(b => String(b.id)));
+      const batchNewValues = new Map(batchesToUpdateDb.map(b => [String(b.id), b[type]]));
+
       nextCards = nextCards.map(c => {
-          // 如果卡片屬於某個剛被操作的批次，就不重複處理，交給上面的批次邏輯
-          if (type === 'seriesId' && c.batchId) {
-              const batchInTarget = nextBatches.find(b => String(b.id) === String(c.batchId))?.seriesId === value;
-              const batchWasInTarget = batches.find(b => String(b.id) === String(c.batchId))?.seriesId === value;
-              if (batchInTarget || batchWasInTarget) return c; 
+          // 如果卡片屬於某個剛被操作的批次，自動同步該屬性
+          if (c.batchId && modifiedBatchIds.has(String(c.batchId))) {
+              const newBatchValue = batchNewValues.get(String(c.batchId));
+              const newCard = { ...c, [type]: newBatchValue };
+              
+              const existingIdx = cardsToUpdateDb.findIndex(cu => String(cu.id) === String(newCard.id));
+              if (existingIdx !== -1) cardsToUpdateDb[existingIdx] = newCard;
+              else cardsToUpdateDb.push(newCard);
+              return newCard;
           }
 
           const isSelected = uniqueSelectedCardIds.includes(String(c.id));
           
-          const wasInBatch = (() => {
+          const wasInTarget = (() => {
               let baseMatch = false;
               if (type === 'type' || type === 'channel') {
                   const arr = type === 'type' ? types : channels;
@@ -7672,7 +7677,7 @@ export default function App() {
               return baseMatch && (!categorizeSubBatchId || String(c.batchId) === String(categorizeSubBatchId));
           })();
           
-          if (isSelected && !wasInBatch) {
+          if (isSelected && !wasInTarget) {
               const newCard = { ...c, [type]: value };
               if (type === 'seriesId' && categorizeSubBatchId) {
                   newCard.batchId = categorizeSubBatchId;
@@ -7693,7 +7698,7 @@ export default function App() {
               if (existingIdx !== -1) cardsToUpdateDb[existingIdx] = newCard;
               else cardsToUpdateDb.push(newCard);
               return newCard;
-          } else if (!isSelected && wasInBatch) {
+          } else if (!isSelected && wasInTarget) {
               const newCard = { ...c, [type]: '' };
               if (type === 'seriesId') {
                   newCard.batchId = ''; // 移出系列時，連同批次一併清空
@@ -7711,7 +7716,12 @@ export default function App() {
       
       // 3. 寫入資料庫
       for(const b of batchesToUpdateDb) {
-          await supabase.from('batches').update({ series_id: b.seriesId }).eq('id', b.id);
+          const payload = {
+              series_id: b.seriesId || null,
+              channel: b.channel || null,
+              type: b.type || null
+          };
+          await supabase.from('batches').update(payload).eq('id', b.id);
       }
       
       for(const c of cardsToUpdateDb) {
