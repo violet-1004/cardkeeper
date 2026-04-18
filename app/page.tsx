@@ -3595,7 +3595,10 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
         });
   
         const dbItems = newItems.map(({ _originalId, ...rest }) => toSnakeCase(rest));
-        await supabase.from('ui_inventory').upsert(dbItems);
+        for (let i = 0; i < dbItems.length; i += 5) {
+            const chunk = dbItems.slice(i, i + 5);
+            await supabase.from('ui_inventory').upsert(chunk);
+        }
   
         if (bulkRecords && setBulkRecords) {
             // ... (sync logic same as CardDetailModal) ...
