@@ -1721,9 +1721,13 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   const currentBatches = (batches || []).filter(b => {
       if (String(b.groupId) !== String(currentGroupId)) return false;
       if (filterSeriesId !== 'All' && String(b.seriesId) !== String(filterSeriesId)) return false;
-      // 🌟 修正：不再因為選擇子類或通路而隱藏批次 (因為批次本身可能沒有設定類型，導致被錯誤過濾)
-      // if (filterType !== 'All' && b.type !== filterType) return false;
       
+      // 🌟 應要求恢復「子類」篩選批次，並加入相容舊版資料的判斷 (ID 或 名稱)
+      if (filterType !== 'All') {
+          const tObj = (types || []).find(t => String(t.id) === String(filterType));
+          if (String(b.type) !== String(filterType) && (!tObj || String(b.type) !== String(tObj.name))) return false;
+      }
+
       // 🌟 應要求恢復「通路」篩選批次，並加入相容舊版資料的判斷 (ID 或 名稱)
       if (filterChannel !== 'All') {
           const ch = (channels || []).find(c => String(c.id) === String(filterChannel));
@@ -7171,8 +7175,8 @@ export default function App() {
   const currentMembers = useMemo(() => (members || []).filter(m => String(m.groupId) === String(currentGroupId)).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)), [members, currentGroupId]);
   const currentSeries = useMemo(() => (series || []).filter(s => String(s.groupId) === String(currentGroupId)), [series, currentGroupId]);
   const currentBatches = useMemo(() => (batches || []).filter(b => String(b.groupId) === String(currentGroupId)), [batches, currentGroupId]);
-  const currentChannels = useMemo(() => (channels || []), [channels]);
-  const currentTypes = useMemo(() => (types || []), [types]);
+  const currentChannels = useMemo(() => (channels || []).filter(c => String(c.groupId) === String(currentGroupId)), [channels, currentGroupId]);
+  const currentTypes = useMemo(() => (types || []).filter(t => String(t.groupId) === String(currentGroupId)), [types, currentGroupId]);
   const currentSubunits = useMemo(() => (subunits || []).filter(s => String(s.groupId) === String(currentGroupId)), [subunits, currentGroupId]);
   const currentCards = useMemo(() => (cards || []).filter(c => String(c.groupId) === String(currentGroupId)), [cards, currentGroupId]);
   const currentBulkRecords = useMemo(() => (bulkRecords || []).filter(r => String(r.groupId) === String(currentGroupId)), [bulkRecords, currentGroupId]);
