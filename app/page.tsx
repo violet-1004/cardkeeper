@@ -7140,12 +7140,12 @@ export default function App() {
         setBatches(await fetchTable('batches'));
         setChannels(await fetchTable('channels'));
         setTypes(await fetchTable('types'));
-        // 🌟 針對小卡使用分頁抓取所有資料，突破 10,000 筆限制
+        // 🌟 針對所有可能大量增長的資料表，使用分頁抓取突破筆數限制
         setCards(await fetchTable('ui_cards', false, { paginate: true }));
-        setInventory(await fetchTable('ui_inventory'));
-        setBulkRecords(await fetchTable('bulk_records'));
-        setCustomLists(await fetchTable('custom_lists'));
-        setSales(await fetchTable('ui_sales'));
+        setInventory(await fetchTable('ui_inventory', false, { paginate: true }));
+        setBulkRecords(await fetchTable('bulk_records', false, { paginate: true }));
+        setCustomLists(await fetchTable('custom_lists', false, { paginate: true }));
+        setSales(await fetchTable('ui_sales', false, { paginate: true }));
         setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
     }
     fetchAllData();
@@ -7858,8 +7858,12 @@ export default function App() {
           const existingInv = inventory.filter(i => String(i.bulkRecordId) === String(savedRecordId));
           const idsToDelete = existingInv.map(i => i.id).filter(id => !finalIds.includes(id));
           if (idsToDelete.length > 0) {
-              const resDel = await supabase.from('ui_inventory').delete().in('id', idsToDelete);
-              if (resDel?.error) throw new Error(resDel.error.message || JSON.stringify(resDel.error));
+              // 🌟 加入刪除分批處理，避免 SQLite 參數數量上限報錯
+              for (let i = 0; i < idsToDelete.length; i += 50) {
+                  const chunk = idsToDelete.slice(i, i + 50);
+                  const resDel = await supabase.from('ui_inventory').delete().in('id', chunk);
+                  if (resDel?.error) throw new Error(resDel.error.message || JSON.stringify(resDel.error));
+              }
           } else if (finalIds.length === 0) {
               // 如果完全沒有卡片，保險起見直接清空該盤收的庫存
               const resDelAll = await supabase.from('ui_inventory').delete().eq('bulk_record_id', savedRecordId);
@@ -7867,8 +7871,13 @@ export default function App() {
           }
           
           if (newBulkInvItems.length > 0) {
-              const resInv = await supabase.from('ui_inventory').upsert(newBulkInvItems.map(item => toSnakeCase(cleanPayload(item))));
-              if (resInv?.error) throw new Error(resInv.error.message || JSON.stringify(resInv.error));
+              // 🌟 加入儲存分批處理，解決 D1/SQLite 大量綁定變數導致的寫入靜默失敗
+              const dbPayloads = newBulkInvItems.map(item => toSnakeCase(cleanPayload(item)));
+              for (let i = 0; i < dbPayloads.length; i += 5) {
+                  const chunk = dbPayloads.slice(i, i + 5);
+                  const resInv = await supabase.from('ui_inventory').upsert(chunk);
+                  if (resInv?.error) throw new Error(resInv.error.message || JSON.stringify(resInv.error));
+              }
           }
       } catch (err) {
           console.error("盤收儲存失敗:", err);
