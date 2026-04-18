@@ -1194,8 +1194,11 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
 
       // 🌟 移除 _originalId 避免寫入資料庫報錯
       const dbItems = newItems.map(({ _originalId, ...rest }) => toSnakeCase(rest));
-      const { error } = await supabase.from('ui_inventory').upsert(dbItems);
-      if (error) console.error("Error saving inventory:", error);
+      for (let i = 0; i < dbItems.length; i += 5) {
+          const chunk = dbItems.slice(i, i + 5);
+          const { error } = await supabase.from('ui_inventory').upsert(chunk);
+          if (error) console.error("Error saving inventory:", error);
+      }
 
       // 🌟 同步更新盤收紀錄內的對應項目 (售價、狀態等)
       if (bulkRecords && setBulkRecords) {
