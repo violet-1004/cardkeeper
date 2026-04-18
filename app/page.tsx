@@ -7573,11 +7573,16 @@ export default function App() {
       closeModal();
       
       // 寫入資料庫
-      const { error } = await supabase.from('ui_inventory').insert(newRecords.map(toSnakeCase));
+      const dbPayloads = newRecords.map(toSnakeCase);
+      let hasError = false;
+      for (let i = 0; i < dbPayloads.length; i += 5) {
+          const chunk = dbPayloads.slice(i, i + 5);
+          const { error } = await supabase.from('ui_inventory').insert(chunk);
+          if (error) { console.error("入庫失敗:", error); hasError = true; }
+      }
       
-      if (error) {
-          console.error("入庫失敗:", error);
-          alert("入庫時發生錯誤，請看控制台");
+      if (hasError) {
+          alert("入庫時發生部分錯誤，請看控制台");
       } else {
           alert(`已成功入庫 ${newRecords.length} 張卡片！`);
       }
