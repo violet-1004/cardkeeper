@@ -7394,9 +7394,14 @@ export default function App() {
           setCards(prev => [...prev, ...newCards]);
           
           const dbPayloads = newCards.map(c => toSnakeCase(cleanData(c)));
-          const { error } = await supabase.from(table).insert(dbPayloads);
+          let hasError = false;
+          for (let i = 0; i < dbPayloads.length; i += 5) {
+              const chunk = dbPayloads.slice(i, i + 5);
+              const { error } = await supabase.from(table).insert(chunk);
+              if (error) { hasError = true; alert("批量儲存失敗: " + error.message); break; }
+          }
           
-          if (error) alert("批量儲存失敗: " + error.message);
+          if (hasError) return;
           return;
       }
 
