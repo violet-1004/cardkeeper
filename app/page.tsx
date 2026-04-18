@@ -7209,7 +7209,7 @@ export default function App() {
       
       const combined = [...currentTypes];
       dynamicTypeIds.forEach(id => {
-          if (!currentTypes.some(t => t.id === id || t.name === id)) {
+          if (!currentTypes.some(t => String(t.id) === String(id) || String(t.name) === String(id))) { // 🌟 強制轉字串比對
               combined.push({ id, name: id, shortName: '', sortOrder: 999 }); // 未知子類放最後
           }
       });
@@ -7234,7 +7234,7 @@ export default function App() {
       
       const combined = [...currentChannels];
       dynamicChannelIds.forEach(id => {
-          if (!currentChannels.some(c => c.id === id || c.name === id)) {
+          if (!currentChannels.some(c => String(c.id) === String(id) || String(c.name) === String(id))) { // 🌟 強制轉字串比對
               combined.push({ id, name: id, shortName: '' });
           }
       });
@@ -7414,10 +7414,10 @@ export default function App() {
       
       const updateList = (list, setList) => {
            setList(prev => {
-               const exists = prev.some(item => item.id === payload.id);
+               const exists = prev.some(item => String(item.id) === String(payload.id)); // 🌟 強制轉字串比對，解決型別不同導致的靜默重複
                let newList;
                if (exists) {
-                   newList = prev.map(item => item.id === payload.id ? payload : item);
+                   newList = prev.map(item => String(item.id) === String(payload.id) ? payload : item);
                } else {
                    newList = [...prev, payload];
                }

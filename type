@@ -1,5 +1,5 @@
 git add .
-git commit -m "0413 恢復-2"
+git commit -m "0418 子類修正"
 git push
 
 npx vercel --prod
