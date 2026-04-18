@@ -19,7 +19,27 @@ import * as htmlToImage from 'html-to-image';
 class D1QueryBuilder {
     payload: any;
     constructor(table: string, action: string, data = null) {
-        this.payload = { table, action, data, filters: [] };
+        // 🌟 自動攔截並將陣列或物件轉為 JSON 字串，避免 SQLite 寫入時變成 [object Object] 導致資料庫報錯
+        let processedData = data;
+        if (data) {
+            const processItem = (item) => {
+                if (!item || typeof item !== 'object') return item;
+                const newItem = { ...item };
+                Object.keys(newItem).forEach(k => {
+                    // 若欄位內容是陣列或物件，強制轉為 JSON 字串
+                    if (newItem[k] !== null && typeof newItem[k] === 'object') {
+                        newItem[k] = JSON.stringify(newItem[k]);
+                    }
+                });
+                return newItem;
+            };
+            if (Array.isArray(data)) {
+                processedData = data.map(processItem);
+            } else if (typeof data === 'object') {
+                processedData = processItem(data);
+            }
+        }
+        this.payload = { table, action, data: processedData, filters: [] };
     }
     eq(col: string, val: any) { this.payload.filters.push({ col, val, op: 'eq' }); return this; }
     in(col: string, vals: any[]) { this.payload.filters.push({ col, vals, op: 'in' }); return this; }
