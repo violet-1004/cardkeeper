@@ -7418,11 +7418,33 @@ export default function App() {
       }
 
       // 🌟 3. 處理單筆新增/編輯
-      const payload = { ...data, id: data.id || Date.now().toString() }; // 🌟 復原為純數字字串
+      const payload = { ...data }; 
+      let legacyStringId = null;
+
+      // 🌟 終極修復：防止不同團體間的「子類(type) / 通路(channel) / 分隊(subunit)」因為共用相同字串 ID 而互相覆寫！
+      if (['type', 'channel', 'subunit'].includes(type)) {
+          const globalList = type === 'channel' ? channels : type === 'type' ? types : subunits;
+          const conflict = globalList.find(item => String(item.id) === String(payload.id));
+          
+          // 如果這個 ID 是 temp_ 開頭，或者是未註冊的字串，或者是別的團體的，我們都賦予它全新的獨立 ID
+          if (
+              String(payload.id).startsWith('temp_') || 
+              (!conflict && String(payload.id) === String(payload.name)) || 
+              (conflict && String(conflict.groupId) !== String(currentGroupId))
+          ) {
+              legacyStringId = String(payload.id);
+              payload.id = Date.now().toString();
+          }
+      }
+
+      if (!payload.id) {
+          payload.id = Date.now().toString();
+      }
       
       const updateList = (list, setList) => {
            setList(prev => {
-               const exists = prev.some(item => String(item.id) === String(payload.id)); // 🌟 強制轉字串比對，解決型別不同導致的靜默重複
+               // 🌟 如果是剛從舊字串轉換成獨立 ID，就強制視為「新增」，不去覆寫 prev 裡的別人的資料
+               const exists = !legacyStringId && prev.some(item => String(item.id) === String(payload.id)); 
                let newList;
                if (exists) {
                    newList = prev.map(item => String(item.id) === String(payload.id) ? payload : item);
@@ -7430,7 +7452,7 @@ export default function App() {
                    newList = [...prev, payload];
                }
                // 🌟 新增 type 判斷，讓子類也馬上套用新排序
-               if (type === 'member' || type === 'type') {
+               if (type === 'member' || type === 'type' || type === 'subunit') {
                    newList.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
                }
                return newList;
@@ -7442,24 +7464,44 @@ export default function App() {
       else if (type === 'member') updateList(members, setMembers);
       else if (type === 'series') updateList(series, setSeries);
       else if (type === 'batch') updateList(batches, setBatches);
-      else if (type === 'channel') updateList(channels, setChannels);
-      else if (type === 'type') updateList(types, setTypes);
+      else if (type === 'channel') {
+          updateList(channels, setChannels);
+          if (legacyStringId) {
+              setCards(prev => prev.map(c => String(c.groupId) === String(currentGroupId) && String(c.channel) === legacyStringId ? { ...c, channel: payload.id } : c));
+              supabase.from('ui_cards').update({ channel: payload.id }).eq('group_id', currentGroupId).eq('channel', legacyStringId).then();
+              setBatches(prev => prev.map(b => String(b.groupId) === String(currentGroupId) && String(b.channel) === legacyStringId ? { ...b, channel: payload.id } : b));
+              supabase.from('batches').update({ channel: payload.id }).eq('group_id', currentGroupId).eq('channel', legacyStringId).then();
+          }
+      }
+      else if (type === 'type') {
+          updateList(types, setTypes);
+          if (legacyStringId) {
+              setCards(prev => prev.map(c => String(c.groupId) === String(currentGroupId) && String(c.type) === legacyStringId ? { ...c, type: payload.id } : c));
+              supabase.from('ui_cards').update({ type: payload.id }).eq('group_id', currentGroupId).eq('type', legacyStringId).then();
+              setBatches(prev => prev.map(b => String(b.groupId) === String(currentGroupId) && String(b.type) === legacyStringId ? { ...b, type: payload.id } : b));
+              supabase.from('batches').update({ type: payload.id }).eq('group_id', currentGroupId).eq('type', legacyStringId).then();
+          }
+      }
       else if (type === 'subunit') {
+          updateList(subunits, setSubunits);
           // 🌟 分隊特殊邏輯：如果是編輯且名稱改變，同步更新成員與系列
-          if (isEdit) {
-              const oldItem = subunits.find(s => s.id === payload.id);
-              if (oldItem && oldItem.name !== payload.name) {
-                  // Update members
-                  setMembers(prev => prev.map(m => (m.groupId === currentGroupId && m.subunit === oldItem.name) ? { ...m, subunit: payload.name } : m));
-                  await supabase.from('members').update({ subunit: payload.name }).eq('group_id', currentGroupId).eq('subunit', oldItem.name);
+          if (isEdit || legacyStringId) {
+              let oldName = null;
+              if (legacyStringId && legacyStringId.startsWith('temp_')) {
+                  oldName = legacyStringId.replace('temp_', '');
+              } else {
+                  const oldItem = subunits.find(s => String(s.id) === String(legacyStringId || payload.id));
+                  if (oldItem) oldName = oldItem.name;
+              }
                   
-                  // Update series
-                  setSeries(prev => prev.map(s => (s.groupId === currentGroupId && s.subunit === oldItem.name) ? { ...s, subunit: payload.name } : s));
-                  await supabase.from('series').update({ subunit: payload.name }).eq('group_id', currentGroupId).eq('subunit', oldItem.name);
+              if (oldName && oldName !== payload.name) {
+                  setMembers(prev => prev.map(m => (String(m.groupId) === String(currentGroupId) && m.subunit === oldName) ? { ...m, subunit: payload.name } : m));
+                  supabase.from('members').update({ subunit: payload.name }).eq('group_id', currentGroupId).eq('subunit', oldName).then();
+                  
+                  setSeries(prev => prev.map(s => (String(s.groupId) === String(currentGroupId) && s.subunit === oldName) ? { ...s, subunit: payload.name } : s));
+                  supabase.from('series').update({ subunit: payload.name }).eq('group_id', currentGroupId).eq('subunit', oldName).then();
               }
           }
-          // 🌟 排序
-          setSubunits(prev => { const next = prev.filter(s => s.id !== payload.id); return [...next, payload].sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999)); });
       }
       
       if (type === 'batch' && isEdit) {
