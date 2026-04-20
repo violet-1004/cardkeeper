@@ -7227,8 +7227,8 @@ export default function App() {
   const currentMembers = useMemo(() => (members || []).filter(m => String(m.groupId) === String(currentGroupId)).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)), [members, currentGroupId]);
   const currentSeries = useMemo(() => (series || []).filter(s => String(s.groupId) === String(currentGroupId)), [series, currentGroupId]);
   const currentBatches = useMemo(() => (batches || []).filter(b => String(b.groupId) === String(currentGroupId)), [batches, currentGroupId]);
-  const currentChannels = useMemo(() => (channels || []).filter(c => String(c.groupId) === String(currentGroupId)), [channels, currentGroupId]);
-  const currentTypes = useMemo(() => (types || []).filter(t => String(t.groupId) === String(currentGroupId)), [types, currentGroupId]);
+  const currentChannels = useMemo(() => (channels || []), [channels]); // 🌟 應要求：通路改為跨團共用，不限制群組
+  const currentTypes = useMemo(() => (types || []), [types]); // 🌟 應要求：子類改為跨團共用，不限制群組
   const currentSubunits = useMemo(() => (subunits || []).filter(s => String(s.groupId) === String(currentGroupId)), [subunits, currentGroupId]);
   const currentCards = useMemo(() => (cards || []).filter(c => String(c.groupId) === String(currentGroupId)), [cards, currentGroupId]);
   const currentBulkRecords = useMemo(() => (bulkRecords || []).filter(r => String(r.groupId) === String(currentGroupId)), [bulkRecords, currentGroupId]);
@@ -7471,11 +7471,14 @@ export default function App() {
           const globalList = type === 'channel' ? channels : type === 'type' ? types : subunits;
           const conflict = globalList.find(item => String(item.id) === String(payload.id));
           
+          // 🌟 允許通路 (channel) 與子類 (type) 跨團體共用修改，不強制配發新 ID
+          const isSharedGlobal = type === 'channel' || type === 'type';
+
           // 如果這個 ID 是 temp_ 開頭，或者是未註冊的字串，或者是別的團體的，我們都賦予它全新的獨立 ID
           if (
               String(payload.id).startsWith('temp_') || 
-              (!conflict && String(payload.id) === String(payload.name)) || 
-              (conflict && String(conflict.groupId) !== String(currentGroupId))
+              (payload.id && !conflict) || 
+              (conflict && String(conflict.groupId) !== String(currentGroupId) && !isSharedGlobal)
           ) {
               legacyStringId = String(payload.id);
               payload.id = Date.now().toString();
@@ -7534,8 +7537,10 @@ export default function App() {
               let oldName = null;
               if (legacyStringId && legacyStringId.startsWith('temp_')) {
                   oldName = legacyStringId.replace('temp_', '');
+              } else if (legacyStringId) {
+                  oldName = legacyStringId; // 🌟 舊字串本身就是舊名稱
               } else {
-                  const oldItem = subunits.find(s => String(s.id) === String(legacyStringId || payload.id));
+                  const oldItem = subunits.find(s => String(s.id) === String(payload.id));
                   if (oldItem) oldName = oldItem.name;
               }
                   
