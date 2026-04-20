@@ -1654,9 +1654,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           if (String(c.groupId) !== String(currentGroupId)) return false; // 🌟 致命修正：強制轉字串比對，解決卡片全數被錯誤過濾的問題
           if (type === 'type' || type === 'channel') {
               // 🌟 修正：相容舊版直接儲存「名稱」與新版儲存「ID」的差異
+              const effectiveVal = (!c[type] || c[type] === 'null' || c[type] === 'undefined') ? 'null' : String(c[type]);
               const arr = type === 'type' ? types : channels;
               const obj = (arr || []).find(x => String(x.id) === String(value));
-              return String(c[type]) === String(value) || (obj && String(c[type]) === String(obj.name));
+              return effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
           }
           return String(c[type]) === String(value);
       });
@@ -1675,9 +1676,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           const batchesToSelect = (batches || []).filter(b => {
               if (String(b.groupId) !== String(currentGroupId)) return false;
               if (type === 'type' || type === 'channel') {
+                  const effectiveVal = (!b[type] || b[type] === 'null' || b[type] === 'undefined') ? 'null' : String(b[type]);
                   const arr = type === 'type' ? types : channels;
                   const obj = (arr || []).find(x => String(x.id) === String(value));
-                  return String(b[type]) === String(value) || (obj && String(b[type]) === String(obj.name));
+                  return effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
               }
               return String(b.seriesId) === String(value);
           });
@@ -1732,14 +1734,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       
       // 🌟 應要求恢復「子類」篩選批次，並加入相容舊版資料的判斷 (ID 或 名稱)
       if (filterType !== 'All') {
+          const effectiveType = (!b.type || b.type === 'null' || b.type === 'undefined') ? 'null' : String(b.type);
           const tObj = (types || []).find(t => String(t.id) === String(filterType));
-          if (String(b.type) !== String(filterType) && (!tObj || String(b.type) !== String(tObj.name))) return false;
+          if (effectiveType !== String(filterType) && (!tObj || effectiveType !== String(tObj.name))) return false;
       }
 
       // 🌟 應要求恢復「通路」篩選批次，並加入相容舊版資料的判斷 (ID 或 名稱)
       if (filterChannel !== 'All') {
+          const effectiveChannel = (!b.channel || b.channel === 'null' || b.channel === 'undefined') ? 'null' : String(b.channel);
           const ch = (channels || []).find(c => String(c.id) === String(filterChannel));
-          if (String(b.channel) !== String(filterChannel) && (!ch || String(b.channel) !== String(ch.name))) return false;
+          if (effectiveChannel !== String(filterChannel) && (!ch || effectiveChannel !== String(ch.name))) return false;
       }
       return true;
   }).sort((a, b) => {
@@ -1775,8 +1779,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
         if (!cardSeries || cardSeries.type !== filterSeriesType) return false;
     }
-    if (filterType !== 'All' && String(card.type) !== String(filterType)) return false;
-    if (filterChannel !== 'All' && String(card.channel) !== String(filterChannel)) return false;
+    if (filterType !== 'All') {
+        const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? 'null' : String(card.type);
+        if (effectiveType !== String(filterType)) return false;
+    }
+    if (filterChannel !== 'All') {
+        const effectiveChannel = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? 'null' : String(card.channel);
+        if (effectiveChannel !== String(filterChannel)) return false;
+    }
     if (filterBatchId !== 'All' && String(card.batchId) !== String(filterBatchId)) return false;
     
     return true;
@@ -2137,9 +2147,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                     const isOriginalTarget = isSelectionMode && batchCategorizeTarget && (() => {
                                         const { type, value } = batchCategorizeTarget;
                                         if (type === 'type' || type === 'channel') {
+                                            const effectiveVal = (!card[type] || card[type] === 'null' || card[type] === 'undefined') ? 'null' : String(card[type]);
                                             const arr = type === 'type' ? types : channels;
                                             const obj = (arr || []).find(x => String(x.id) === String(value));
-                                            return String(card[type]) === String(value) || (obj && String(card[type]) === String(obj.name));
+                                            return effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
                                         }
                                         return String(card[type]) === String(value);
                                     })();
@@ -2368,7 +2379,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(String(t.name)));
       ids.forEach(id => {
           if (!currentTypes.some(t => String(t.id) === id || String(t.name) === id)) {
-              currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
+              currentTypes.push({ id, name: id === 'null' ? '未分類' : id, shortName: '', sortOrder: 999 });
           }
       });
       return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
@@ -2378,10 +2389,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       const ids = new Set(subunitFilteredCards.map(c => String(c.channel)).filter(Boolean));
       const currentChannels = (channels || []).filter(c => ids.has(String(c.id)) || ids.has(String(c.name)));
       ids.forEach(id => {
-          if (!currentChannels.some(c => String(c.id) === id || String(c.name) === id)) currentChannels.push({ id, name: id, shortName: '' });
+          if (!currentChannels.some(c => String(c.id) === String(id) || String(c.name) === id)) currentChannels.push({ id, name: id === 'null' ? '未分類' : id, shortName: '' });
       });
       const freqMap = {};
-      subunitFilteredCards.forEach(c => { if (c.channel) freqMap[String(c.channel)] = (freqMap[String(c.channel)] || 0) + 1; });
+      subunitFilteredCards.forEach(c => { 
+          const effChannel = (!c.channel || c.channel === 'null' || c.channel === 'undefined') ? 'null' : String(c.channel);
+          if (effChannel !== 'null') freqMap[effChannel] = (freqMap[effChannel] || 0) + 1; 
+      });
       return currentChannels.sort((a, b) => (freqMap[String(b.id)] || freqMap[String(b.name)] || 0) - (freqMap[String(a.id)] || freqMap[String(a.name)] || 0));
   }, [subunitFilteredCards, channels]);
   
@@ -3921,10 +3935,13 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
         const ids = new Set(subunitFilteredCards.map(c => String(c.channel)).filter(Boolean));
         const currentChannels = (channels || []).filter(c => ids.has(String(c.id)) || ids.has(String(c.name))); // 🌟 修正 D1 數字型別比對
         ids.forEach(id => {
-            if (!currentChannels.some(c => String(c.id) === id || String(c.name) === id)) currentChannels.push({ id, name: id, shortName: '' });
+            if (!currentChannels.some(c => String(c.id) === String(id) || String(c.name) === id)) currentChannels.push({ id, name: id === 'null' ? '未分類' : id, shortName: '' });
         });
         const freqMap = {};
-        subunitFilteredCards.forEach(c => { if (c.channel) freqMap[String(c.channel)] = (freqMap[String(c.channel)] || 0) + 1; });
+        subunitFilteredCards.forEach(c => { 
+            const effChannel = (!c.channel || c.channel === 'null' || c.channel === 'undefined') ? 'null' : String(c.channel);
+            if (effChannel !== 'null') freqMap[effChannel] = (freqMap[effChannel] || 0) + 1; 
+        });
         return currentChannels.sort((a, b) => (freqMap[String(b.id)] || freqMap[String(b.name)] || 0) - (freqMap[String(a.id)] || freqMap[String(a.name)] || 0));
     }, [subunitFilteredCards, channels]);
     
@@ -4021,8 +4038,14 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                 if (!s || s.type !== filterSeriesType) return false;
              }
 
-             if (filterType !== 'All' && String(card.type) !== String(filterType)) return false;
-             if (filterChannel !== 'All' && String(card.channel) !== String(filterChannel)) return false;
+             if (filterType !== 'All') {
+                 const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? 'null' : String(card.type);
+                 if (effectiveType !== String(filterType)) return false;
+             }
+             if (filterChannel !== 'All') {
+                 const effectiveChannel = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? 'null' : String(card.channel);
+                 if (effectiveChannel !== String(filterChannel)) return false;
+             }
              if (filterBatches.length > 0 && !filterBatches.includes(String(card.batchId))) return false;
              
              return true;
@@ -5879,8 +5902,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(t.name));
         // 🌟 修正：補回未定義在 types 列表中的自訂子類
         ids.forEach(id => {
-            if (!currentTypes.some(t => String(t.id) === id || t.name === id)) {
-              currentTypes.push({ id, name: id === 'null' ? 'null' : id, shortName: '', sortOrder: 999 });
+          if (!currentTypes.some(t => String(t.id) === String(id) || String(t.name) === id)) {
+              currentTypes.push({ id, name: id === 'null' ? '未分類' : id, shortName: '', sortOrder: 999 });
             }
         });
         return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
@@ -7232,14 +7255,14 @@ export default function App() {
   // 🌟 1. 強化版：子類 (Type) 依照你設定的 sortOrder 排序
   const combinedTypes = useMemo(() => {
       const dynamicTypeIds = new Set([
-          ...currentCards.map(c => c.type),
-          ...currentBatches.map(b => b.type)
+          ...currentCards.map(c => (!c.type || c.type === 'null' || c.type === 'undefined') ? 'null' : String(c.type)),
+          ...currentBatches.map(b => (!b.type || b.type === 'null' || b.type === 'undefined') ? 'null' : String(b.type))
       ].filter(Boolean));
       
       const combined = [...currentTypes];
       dynamicTypeIds.forEach(id => {
           if (!currentTypes.some(t => String(t.id) === String(id) || String(t.name) === String(id))) { // 🌟 強制轉字串比對
-              combined.push({ id, name: id, shortName: '', sortOrder: 999 }); // 未知子類放最後
+              combined.push({ id, name: id === 'null' ? '未分類' : id, shortName: '', sortOrder: 999 }); // 未知子類放最後
           }
       });
       // 依照 sortOrder 數字大小排序
@@ -7257,21 +7280,22 @@ export default function App() {
   // 🌟 3. 強化版：通路 (Channel) 依照「使用頻率 (卡片數量)」由多到少排序
   const combinedChannels = useMemo(() => {
       const dynamicChannelIds = new Set([
-          ...currentCards.map(c => c.channel),
-          ...currentBatches.map(b => b.channel)
+          ...currentCards.map(c => (!c.channel || c.channel === 'null' || c.channel === 'undefined') ? 'null' : String(c.channel)),
+          ...currentBatches.map(b => (!b.channel || b.channel === 'null' || b.channel === 'undefined') ? 'null' : String(b.channel))
       ].filter(Boolean));
       
       const combined = [...currentChannels];
       dynamicChannelIds.forEach(id => {
           if (!currentChannels.some(c => String(c.id) === String(id) || String(c.name) === String(id))) { // 🌟 強制轉字串比對
-              combined.push({ id, name: id, shortName: '' });
+              combined.push({ id, name: id === 'null' ? '未分類' : id, shortName: '' });
           }
       });
 
       // 計算各通路的使用頻率
       const freqMap = {};
       currentCards.forEach(c => {
-          if (c.channel) freqMap[c.channel] = (freqMap[c.channel] || 0) + 1;
+          const effChannel = (!c.channel || c.channel === 'null' || c.channel === 'undefined') ? 'null' : String(c.channel);
+          if (effChannel !== 'null') freqMap[effChannel] = (freqMap[effChannel] || 0) + 1;
       });
 
       // 依照使用頻率排序 (由大到小)
@@ -7692,13 +7716,15 @@ export default function App() {
               if (type === 'type' || type === 'channel') {
                   const arr = type === 'type' ? types : channels;
                   const obj = (arr || []).find(x => String(x.id) === String(value));
-                  wasInTarget = String(b[type]) === String(value) || (obj && String(b[type]) === String(obj.name));
+                  const effectiveVal = (!b[type] || b[type] === 'null' || b[type] === 'undefined') ? 'null' : String(b[type]);
+                  wasInTarget = effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
               } else {
                   wasInTarget = String(b[type]) === String(value);
               }
               
               if (isSelected && !wasInTarget) {
-                  const newBatch = { ...b, [type]: value };
+                  const newValue = value === 'null' ? null : value;
+                  const newBatch = { ...b, [type]: newValue };
                   batchesToUpdateDb.push(newBatch);
                   return newBatch;
               } else if (!isSelected && wasInTarget) {
@@ -7733,7 +7759,8 @@ export default function App() {
               if (type === 'type' || type === 'channel') {
                   const arr = type === 'type' ? types : channels;
                   const obj = (arr || []).find(x => String(x.id) === String(value));
-                  baseMatch = String(c[type]) === String(value) || (obj && String(c[type]) === String(obj.name));
+                  const effectiveVal = (!c[type] || c[type] === 'null' || c[type] === 'undefined') ? 'null' : String(c[type]);
+                  baseMatch = effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
               } else {
                   baseMatch = String(c[type]) === String(value);
               }
@@ -7741,7 +7768,8 @@ export default function App() {
           })();
           
           if (isSelected && !wasInTarget) {
-              const newCard = { ...c, [type]: value };
+              const newValue = value === 'null' ? null : value;
+              const newCard = { ...c, [type]: newValue };
               if (type === 'seriesId' && categorizeSubBatchId) {
                   newCard.batchId = categorizeSubBatchId;
                   const targetBatch = nextBatches.find(b => String(b.id) === String(categorizeSubBatchId));
