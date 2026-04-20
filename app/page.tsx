@@ -2477,7 +2477,8 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
             if (!s || s.type !== filterSeriesType) return false;
          }
 
-         if (filterTypes.length > 0 && !filterTypes.includes(String(card.type))) return false;
+         const cType = (!card.type || card.type === 'null' || card.type === 'undefined') ? 'null' : String(card.type);
+         if (filterTypes.length > 0 && !filterTypes.includes(cType)) return false;
          if (filterChannels.length > 0 && !filterChannels.includes(String(card.channel))) return false;
          if (filterBatches.length > 0 && !filterBatches.includes(String(card.batchId))) return false;
          
@@ -5874,12 +5875,12 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     }, [subunitFilteredCards, members]);
 
     const availableTypes = useMemo(() => {
-        const ids = new Set(subunitFilteredCards.map(c => String(c.type)).filter(t => t !== 'null' && t !== 'undefined' && t !== ''));
+      const ids = new Set(subunitFilteredCards.map(c => (!c.type || c.type === 'null' || c.type === 'undefined') ? 'null' : String(c.type)).filter(Boolean));
         const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(t.name));
         // 🌟 修正：補回未定義在 types 列表中的自訂子類
         ids.forEach(id => {
             if (!currentTypes.some(t => String(t.id) === id || t.name === id)) {
-                currentTypes.push({ id, name: id, shortName: '', sortOrder: 999 });
+              currentTypes.push({ id, name: id === 'null' ? 'null' : id, shortName: '', sortOrder: 999 });
             }
         });
         return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
