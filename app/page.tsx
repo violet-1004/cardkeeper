@@ -7227,8 +7227,8 @@ export default function App() {
   const currentMembers = useMemo(() => (members || []).filter(m => String(m.groupId) === String(currentGroupId)).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)), [members, currentGroupId]);
   const currentSeries = useMemo(() => (series || []).filter(s => String(s.groupId) === String(currentGroupId)), [series, currentGroupId]);
   const currentBatches = useMemo(() => (batches || []).filter(b => String(b.groupId) === String(currentGroupId)), [batches, currentGroupId]);
-  const currentChannels = useMemo(() => (channels || []), [channels]); // 🌟 應要求：通路改為跨團共用，不限制群組
-  const currentTypes = useMemo(() => (types || []), [types]); // 🌟 應要求：子類改為跨團共用，不限制群組
+  const currentChannels = useMemo(() => (channels || []), [channels]); // 🌟 通路維持跨團體共用
+  const currentTypes = useMemo(() => (types || []).filter(t => String(t.groupId) === String(currentGroupId)), [types, currentGroupId]); // 🌟 應要求：子類改回各團體獨立顯示
   const currentSubunits = useMemo(() => (subunits || []).filter(s => String(s.groupId) === String(currentGroupId)), [subunits, currentGroupId]);
   const currentCards = useMemo(() => (cards || []).filter(c => String(c.groupId) === String(currentGroupId)), [cards, currentGroupId]);
   const currentBulkRecords = useMemo(() => (bulkRecords || []).filter(r => String(r.groupId) === String(currentGroupId)), [bulkRecords, currentGroupId]);
@@ -7471,8 +7471,8 @@ export default function App() {
           const globalList = type === 'channel' ? channels : type === 'type' ? types : subunits;
           const conflict = globalList.find(item => String(item.id) === String(payload.id));
           
-          // 🌟 允許通路 (channel) 與子類 (type) 跨團體共用修改，不強制配發新 ID
-          const isSharedGlobal = type === 'channel' || type === 'type';
+          // 🌟 通路 (channel) 跨團共用，但子類 (type) 恢復為各團體獨立防污染
+          const isSharedGlobal = type === 'channel';
 
           // 如果這個 ID 是 temp_ 開頭，或者是未註冊的字串，或者是別的團體的，我們都賦予它全新的獨立 ID
           if (
