@@ -1076,15 +1076,15 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     const seriesName = cardSeries?.shortName || cardSeries?.name;
     const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
     
-    const effectiveType = card.type;
+    const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
     const typeObj = (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType);
     const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
     
-    const effectiveChannelId = card.channel;
+    const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
     const channelObj = (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId);
     const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
     
-    const batchNumber = cardBatch?.batchNumber;
+    const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
     const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
     const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
@@ -2109,15 +2109,15 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const seriesName = cardSeries?.shortName || cardSeries?.name;
                         const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
                         
-                        const effectiveType = card.type;
+                        const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
                         const typeObj = (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType);
                         const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                         
-                        const effectiveChannelId = card.channel;
+                        const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
                         const channelObj = (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId);
                         const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                         
-                        const batchNumber = cardBatch?.batchNumber;
+                        const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
                         const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                         const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
@@ -2722,15 +2722,15 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
                 const cardBatch = batchMap[String(card.batchId)];
                 
-                const effectiveType = card.type;
+                const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
                 const typeObj = typeMap[String(effectiveType)];
                 const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
                 
-                const effectiveChannelId = card.channel;
+                const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
                 const channelObj = channelMap[String(effectiveChannelId)];
                 const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
                 
-                const batchNumber = cardBatch?.batchNumber;
+                const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
                 const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
@@ -3029,10 +3029,18 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     
                     const cardSeries = card ? seriesMap[String(card.seriesId)] : null;
                     const cardBatch = card ? batchMap[String(card.batchId)] : null;
-                    const typeObj = card?.type ? typeMap[String(card.type)] : null;
-                    const channelObj = card?.channel ? channelMap[String(card.channel)] : null;
                     
-                    const displayTitle = card ? [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ') : '';
+                    const effectiveType = (!card?.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
+                    const typeObj = effectiveType ? typeMap[String(effectiveType)] : null;
+                    const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                    
+                    const effectiveChannelId = (!card?.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
+                    const channelObj = effectiveChannelId ? channelMap[String(effectiveChannelId)] : null;
+                    const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                    
+                    const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
+                    const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                    const displayTitle = card ? [cardSeries?.shortName || cardSeries?.name, channelAndBatch, displayType].filter(Boolean).join(' ') : '';
                     // 🌟 修正：如果是雜物，也顯示為 [包裹] 品名，與盤收標頭一致 (同時修復雜物顯示為"未命名卡片"的問題)
                     const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (item.isMisc ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片'));
 
@@ -4199,13 +4207,13 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                         const cardSeries = seriesMap[String(card.seriesId)];
                         const seriesName = cardSeries?.shortName || cardSeries?.name;
                         const cardBatch = batchMap[String(card.batchId)];
-                        const effectiveType = card.type;
+                        const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
                         const typeObj = typeMap[String(effectiveType)];
                         const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-                        const effectiveChannelId = card.channel;
+                        const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
                         const channelObj = channelMap[String(effectiveChannelId)];
                         const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-                        const batchNumber = cardBatch?.batchNumber;
+                        const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
                         const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                         const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
@@ -4834,9 +4842,15 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             if (!card) return null;
                             const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                             const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
-                            const typeObj = (types || []).find(t => String(t.id) === String(card.type) || t.name === card.type);
-                            const channelObj = (channels || []).find(c => String(c.id) === String(card.channel) || c.name === card.channel);
-                            const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
+                            const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
+                            const typeObj = effectiveType ? (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType) : null;
+                            const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                            const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
+                            const channelObj = effectiveChannelId ? (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId) : null;
+                            const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                            const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
+                            const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                            const displayTitle = [cardSeries?.shortName || cardSeries?.name, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                             return (
                                 <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
@@ -5613,9 +5627,15 @@ function BulkOwnModal({ cards, selectedItems, onClose, onSave, series, batches, 
                         if (!card) return null;
                         const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                         const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
-                        const typeObj = (types || []).find(t => String(t.id) === String(card.type) || t.name === card.type);
-                        const channelObj = (channels || []).find(c => String(c.id) === String(card.channel) || c.name === card.channel);
-                        const displayTitle = [cardSeries?.shortName || cardSeries?.name, [(channelObj?.shortName || channelObj?.name), cardBatch?.batchNumber].filter(Boolean).join(''), typeObj?.shortName || typeObj?.name].filter(Boolean).join(' ');
+                        const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
+                        const typeObj = effectiveType ? (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType) : null;
+                        const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                        const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
+                        const channelObj = effectiveChannelId ? (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId) : null;
+                        const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                        const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
+                        const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                        const displayTitle = [cardSeries?.shortName || cardSeries?.name, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                         return (
                             <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
@@ -6499,13 +6519,13 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                 const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
                 const cardBatch = (batches || []).find(b => String(b.id) === String(card.batchId));
-                const effectiveType = card.type;
+                        const effectiveType = (!card.type || card.type === 'null' || card.type === 'undefined') ? null : card.type;
                 const typeObj = (types || []).find(t => String(t.id) === String(effectiveType) || t.name === effectiveType);
                 const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
-                const effectiveChannelId = card.channel;
+                        const effectiveChannelId = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? null : card.channel;
                 const channelObj = (channels || []).find(c => String(c.id) === String(effectiveChannelId) || c.name === effectiveChannelId);
                 const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
-                const batchNumber = cardBatch?.batchNumber;
+                        const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
                 const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
