@@ -7325,16 +7325,10 @@ export default function App() {
 
           if (uploadError) throw uploadError;
 
-                    // 🌟 如果你還是用 Supabase 原生儲存，請保持這行：
-                    let finalUrl = supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
-                    
                     // 🌟 終極修復：如果你把儲存桶換成了【Cloudflare R2】，請務必改用下方寫法！
-                    // Supabase SDK 產生的網址結構不相容 Cloudflare R2，這會導致 404 藍色問號破圖。
-                    // 請將下方網址換成你在 Cloudflare R2 儀表板中取得的「公開網域 (Public Dev URL)」：
-                    /*
-                    const R2_PUBLIC_DOMAIN = "https://pub-xxxxxx.r2.dev"; // 替換成你的 R2 公開網址
-                    finalUrl = `${R2_PUBLIC_DOMAIN}/${fileName}`;
-                    */
+                    // ⚠️ 請務必將下方的網址換成你在 Cloudflare R2 儀表板中取得的「公開網域 (Public Dev URL)」：
+                    const R2_PUBLIC_DOMAIN = "https://pub-xxxxxx.r2.dev"; // 👈 請把這行換成你的實際 R2 公開網址
+                    let finalUrl = `${R2_PUBLIC_DOMAIN}/${fileName}`;
 
                     return finalUrl;
       } catch (err) {
