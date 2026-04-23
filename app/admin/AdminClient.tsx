@@ -160,7 +160,12 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
                 const data: any = await response.json();
 
-                const apiData = data.data || data; // 🌟 支援有包裝或無包裝的資料結構
+                // 🌟 終極防禦：遞迴解開所有 data 包裝，直到找到 records 陣列為止
+                let apiData = data;
+                while (apiData && apiData.data && typeof apiData.records === 'undefined') {
+                    apiData = apiData.data;
+                }
+
                 if (!apiData.records || apiData.records.length === 0) {
                     setStatus("已到達資料最末端，無更多資料。");
                     break;
@@ -212,7 +217,12 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
                 const data: any = await response.json();
 
-                const apiData = data.data || data; // 🌟 支援有包裝或無包裝的資料結構
+                // 🌟 終極防禦：遞迴解開所有 data 包裝，直到找到 records 陣列為止
+                let apiData = data;
+                while (apiData && apiData.data && typeof apiData.records === 'undefined') {
+                    apiData = apiData.data;
+                }
+
                 if (!apiData.records || apiData.records.length === 0) {
                     setStatus("已到達資料最末端，無更多資料。");
                     break;
