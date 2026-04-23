@@ -6358,7 +6358,6 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             const imgElements = Array.from(element?.querySelectorAll('img') || []);
             imgElements.forEach(img => {
                 if (img.dataset.originalSrc) {
-                    img.crossOrigin = "anonymous";
                     img.src = img.dataset.originalSrc;
                     delete img.dataset.originalSrc;
                 }
