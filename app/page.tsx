@@ -7325,12 +7325,15 @@ export default function App() {
 
           if (uploadError) throw uploadError;
 
-                    // 🌟 終極修復：如果你把儲存桶換成了【Cloudflare R2】，請務必改用下方寫法！
-                    // ⚠️ 請務必將下方的網址換成你在 Cloudflare R2 儀表板中取得的「公開網域 (Public Dev URL)」：
-                    const R2_PUBLIC_DOMAIN = "https://pub-xxxxxx.r2.dev"; // 👈 請把這行換成你的實際 R2 公開網址
-                    let finalUrl = `${R2_PUBLIC_DOMAIN}/${fileName}`;
+          // 🌟 預設用法：自動取得 Supabase 的公開圖片網址
+          const { data } = supabase.storage.from('card-images').getPublicUrl(fileName);
+          let finalUrl = data.publicUrl;
 
-                    return finalUrl;
+          // ⚠️ 如果你「真的」有把儲存桶換成 Cloudflare R2，請把上面的 finalUrl 註解掉，並將下方換成你的真實網址：
+          // const R2_PUBLIC_DOMAIN = "https://pub-你的真實網址.r2.dev"; 
+          // let finalUrl = `${R2_PUBLIC_DOMAIN}/${fileName}`;
+
+          return finalUrl;
       } catch (err) {
           console.error("圖片上傳失敗:", err);
           // 🌟 增加錯誤提示
