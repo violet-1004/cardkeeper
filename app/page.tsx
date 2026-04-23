@@ -7309,35 +7309,30 @@ export default function App() {
   const openModal = (type, data = {}) => setModalState({ type, data });
   const closeModal = () => setModalState({ type: null, data: null });
 
-  // 🌟 新增：共用的圖片上傳函式
-  const uploadImageToSupabase = async (base64String) => {
+  // 🌟 新增：共用的圖片上傳函式 (改為上傳至 R2)
+  const uploadImageToR2 = async (base64String) => {
       // 如果沒有圖片，或是已經是 http 網址，就直接回傳
       if (!base64String || base64String.startsWith('http')) return base64String;
 
       try {
-          const res = await fetch(base64String);
-          const blob = await res.blob();
-          const fileName = `image_${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
-          
-          const { error: uploadError } = await supabase.storage
-              .from('card-images') // 統一使用同一個儲存桶
-              .upload(fileName, blob, { contentType: 'image/jpeg' });
+          // 呼叫後端 API 來處理 R2 上傳
+          const res = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: base64String })
+          });
 
-          if (uploadError) throw uploadError;
+          if (!res.ok) {
+              const errData = await res.json();
+              throw new Error(errData.error || '上傳失敗');
+          }
 
-          // 🌟 預設用法：自動取得 Supabase 的公開圖片網址
-          const { data } = supabase.storage.from('card-images').getPublicUrl(fileName);
-          let finalUrl = data.publicUrl;
-
-          // ⚠️ 如果你「真的」有把儲存桶換成 Cloudflare R2，請把上面的 finalUrl 註解掉，並將下方換成你的真實網址：
-          // const R2_PUBLIC_DOMAIN = "https://pub-你的真實網址.r2.dev"; 
-          // let finalUrl = `${R2_PUBLIC_DOMAIN}/${fileName}`;
-
-          return finalUrl;
+          const data = await res.json();
+          return data.url;
       } catch (err) {
           console.error("圖片上傳失敗:", err);
           // 🌟 增加錯誤提示
-          alert(`圖片上傳失敗！\n錯誤訊息: ${err.message || '未知錯誤'}\n請檢查 Supabase 儲存空間是否已滿 (402) 或網路連線 (502)。`);
+          alert(`圖片上傳失敗！\n錯誤訊息: ${err.message || '未知錯誤'}\n請檢查後端 R2 綁定與設定。`);
           return null;
       }
   };
@@ -7414,7 +7409,7 @@ export default function App() {
 
       // 🌟 1. 單筆資料的圖片上傳
       if (data.image) {
-          const uploadedUrl = await uploadImageToSupabase(data.image);
+          const uploadedUrl = await uploadImageToR2(data.image);
           // 🌟 如果上傳失敗 (回傳 null) 且原本是 base64 (代表是新圖片)，則中斷儲存，避免資料損壞
           if (uploadedUrl === null && data.image.startsWith('data:')) {
               return; 
@@ -7427,7 +7422,7 @@ export default function App() {
           const processedData = await Promise.all(data.map(async (item) => {
               let imageUrl = item.image;
               if (imageUrl && imageUrl.startsWith('data:')) {
-                   const uploaded = await uploadImageToSupabase(imageUrl);
+                   const uploaded = await uploadImageToR2(imageUrl);
                    imageUrl = uploaded;
               }
               return { ...item, image: imageUrl };
@@ -7839,7 +7834,7 @@ export default function App() {
       const dataToSave = { ...data, groupId: data.groupId || currentGroupId };
 
       if (dataToSave.image && !dataToSave.image.startsWith('http')) {
-          const uploaded = await uploadImageToSupabase(dataToSave.image);
+              const uploaded = await uploadImageToR2(dataToSave.image);
           if (uploaded === null) return; // Stop if upload failed
           dataToSave.image = uploaded;
       }
