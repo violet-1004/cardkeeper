@@ -160,14 +160,15 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
                 const data: any = await response.json();
 
-                if (!data.records || data.records.length === 0) {
+                const apiData = data.data || data; // 🌟 支援有包裝或無包裝的資料結構
+                if (!apiData.records || apiData.records.length === 0) {
                     setStatus("已到達資料最末端，無更多資料。");
                     break;
                 }
 
-                const formattedBatch = data.records.map((record: any) => formatCard(record, Number(selectedSeriesId)));
+                const formattedBatch = apiData.records.map((record: any) => formatCard(record, Number(selectedSeriesId)));
                 allFormattedCards = allFormattedCards.concat(formattedBatch);
-                tempCursor = data.next || null;
+                tempCursor = apiData.next || null;
                 if (!tempCursor) break;
             }
 
@@ -211,14 +212,15 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
                 const data: any = await response.json();
 
-                if (!data.records || data.records.length === 0) {
+                const apiData = data.data || data; // 🌟 支援有包裝或無包裝的資料結構
+                if (!apiData.records || apiData.records.length === 0) {
                     setStatus("已到達資料最末端，無更多資料。");
                     break;
                 }
 
-                const formattedBatch = data.records.map((record: any) => formatBatch(record, channelMap, Number(selectedSeriesId)));
+                const formattedBatch = apiData.records.map((record: any) => formatBatch(record, channelMap, Number(selectedSeriesId)));
                 allFormattedBatches = allFormattedBatches.concat(formattedBatch);
-                tempCursor = data.next || null;
+                tempCursor = apiData.next || null;
                 if (!tempCursor) break;
             }
 
