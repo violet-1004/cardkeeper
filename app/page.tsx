@@ -6283,26 +6283,54 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             }));
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // 🌟 終極殺手鐧：在 html-to-image 處理前，強制將所有圖片轉為 Base64！
-            // 徹底解決 Safari 的 Canvas 快取 Bug (多張圖片變成同一張)，以及代理伺服器防刷問題！
-            imgElements.forEach(img => {
+            // 🌟 匯出前：將所有圖片透過 fetch + proxy 轉為 Base64，徹底解決 CORS 與 Safari 破圖問題
+            await Promise.all(imgElements.map(async img => {
+                if (img.src.startsWith('data:')) return;
+                
+                const originalSrc = img.src;
+                let blob = null;
+                
                 try {
-                    if (img.src.startsWith('data:') || !img.complete || img.naturalHeight === 0) return;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.naturalWidth || img.width || 100;
-                    canvas.height = img.naturalHeight || img.height || 100;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // 壓縮避免 OOM
-                    
-                    img.dataset.originalSrc = img.src; // 備份原始網址
-                    img.removeAttribute('crossOrigin'); // 移除跨域標籤
-                    img.src = dataUrl;
+                    // 1. 嘗試直接抓取 (若為同源或 Supabase CORS 已開放，並加入 cache no-cache 防止 Safari 快取干擾)
+                    const res = await fetch(originalSrc, { cache: 'no-cache' });
+                    if (res.ok) {
+                        blob = await res.blob();
+                    } else {
+                        throw new Error('Direct fetch failed');
+                    }
                 } catch (e) {
-                    console.warn('Canvas Base64 轉換失敗:', e);
+                    // 2. 被 CORS 擋住時，透過代理抓取 (專治未設定 CORS 的 Supabase 或外部圖床)
+                    const encodedUrl = encodeURIComponent(originalSrc);
+                    const proxies = [
+                        `https://api.allorigins.win/raw?url=${encodedUrl}`,
+                        `https://corsproxy.io/?${encodedUrl}`,
+                        `https://images.weserv.nl/?url=${encodedUrl}&w=800`
+                    ];
+                    for (const proxy of proxies) {
+                        try {
+                            const pRes = await fetch(proxy, { cache: 'no-cache' });
+                            if (pRes.ok) {
+                                blob = await pRes.blob();
+                                break;
+                            }
+                        } catch (err) {}
+                    }
                 }
-            });
-            await new Promise(resolve => setTimeout(resolve, 300)); // 讓 DOM 有時間重新渲染 Base64
+                
+                if (blob) {
+                    const base64 = await new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                    img.dataset.originalSrc = originalSrc;
+                    img.removeAttribute('srcset'); // 移除 Next.js 加上的 srcset 避免干擾 html-to-image
+                    img.src = base64;
+                }
+            }));
+            
+            // 讓 DOM 有時間重新渲染 Base64
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             if (is4x6Mode) {
                 const pages = element.querySelectorAll('.export-page');
