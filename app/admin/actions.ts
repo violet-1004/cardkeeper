@@ -21,8 +21,18 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
         // 1. 判斷圖片網址格式
         if (externalUrl.startsWith('data:')) {
             // 處理前端上傳的 Base64 圖片格式
-            const [header, base64Data] = externalUrl.split(',');
-            contentType = header.split(':')[1].split(';')[0];
+            const commaIndex = externalUrl.indexOf(',');
+            if (commaIndex === -1) throw new Error("無效的圖片資料格式");
+            
+            const header = externalUrl.slice(0, commaIndex);
+            let base64Data = externalUrl.slice(commaIndex + 1);
+            
+            const mimeMatch = header.match(/^data:([^;]+)/);
+            contentType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            
+            if (base64Data.includes('%')) base64Data = decodeURIComponent(base64Data);
+            base64Data = base64Data.replace(/[^A-Za-z0-9+/=]/g, ''); // 徹底移除所有非法字元
+            
             const byteString = atob(base64Data);
             arrayBuffer = new ArrayBuffer(byteString.length);
             const uint8Array = new Uint8Array(arrayBuffer);
@@ -50,7 +60,8 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
 
     } catch (error) {
         console.error("R2 上傳失敗:", error);
-        return externalUrl; // 發生任何錯誤時，安全退回使用原本的外部網址
+        // 如果原本是 Base64，失敗時退回空字串，避免把資料庫塞爆導致 500 錯誤
+        return externalUrl.startsWith('data:') ? '' : externalUrl;
     }
 }
 
