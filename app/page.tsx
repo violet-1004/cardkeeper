@@ -7315,11 +7315,18 @@ export default function App() {
       if (!base64String || base64String.startsWith('http')) return base64String;
 
       try {
-          // 呼叫後端 API 來處理 R2 上傳
+                // 將 Base64 轉為 Blob (利用 fetch 原生支援解析 data URI 的特性)
+                const resBase64 = await fetch(base64String);
+                const blob = await resBase64.blob();
+
+                // 1. 將圖片檔案放入 FormData
+                const formData = new FormData();
+                formData.append('file', blob, 'upload.jpg');
+
+                // 2. 發送請求 (🌟 絕對不要寫 headers，讓瀏覽器自動加上帶有 boundary 的 Content-Type)
           const res = await fetch('/api/upload', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ image: base64String })
+                    body: formData
           });
 
           if (!res.ok) {
