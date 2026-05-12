@@ -8,23 +8,25 @@ export async function POST(request: Request) {
     const env = getRequestContext().env as any;
     if (!env.BUCKET) throw new Error("R2 尚未綁定");
 
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-
-    // 確保 file 存在且真的是一個檔案物件 (File)
-    if (!file || typeof file === 'string') {
-      return NextResponse.json({ error: '找不到有效的檔案' }, { status: 400 });
+    // 1. 捨棄容易出錯的 request.formData()，直接讀取原始二進位資料
+    const arrayBuffer = await request.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      return NextResponse.json({ error: '找不到檔案內容' }, { status: 400 });
     }
 
-    // 1. 產生唯一檔名，避免重複
-    const fileExt = file.name.split('.').pop();
+    // 2. 從網址的 Query 參數中取得前端傳來的檔名與類型
+    const url = new URL(request.url);
+    const originalName = url.searchParams.get('name') || 'upload.jpg';
+    const mimeType = url.searchParams.get('type') || 'image/jpeg';
+
+    // 3. 產生唯一檔名，避免重複
+    const fileExt = originalName.split('.').pop() || 'jpg';
     const fileName = `card_${Date.now()}.${fileExt}`;
     const r2PublicUrl = "https://pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev";
 
-    // 2. 轉換檔案並上傳至 R2
-    const arrayBuffer = await file.arrayBuffer();
+    // 4. 直接將 ArrayBuffer 寫入 R2
     await env.BUCKET.put(fileName, arrayBuffer, {
-      httpMetadata: { contentType: file.type },
+      httpMetadata: { contentType: mimeType },
     });
 
     const finalUrl = `${r2PublicUrl}/${fileName}`;
