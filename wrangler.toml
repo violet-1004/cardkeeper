@@ -9,3 +9,7 @@ binding = "DB"
 database_name = "my-card-db"
 database_id = "12bd1cc8-3276-4e33-80a2-4dbf528a6371"
 migrations_dir = "drizzle"  # 👈 加上這行，告訴 Wrangler 去哪裡找檔案
+
+[[r2_buckets]]
+binding = "BUCKET" # Or whatever the env variable name is
+bucket_name = "cardkeeper-images"
