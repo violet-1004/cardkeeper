@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    unoptimized: true, // 🌟 關閉 Cloudflare 不支援的預設圖片壓縮
     remotePatterns: [
       {
         protocol: 'https',
@@ -19,5 +20,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig; 
-// 如果您的檔案是 .mjs，最後一行應該是 export default nextConfig;
+export default nextConfig;
