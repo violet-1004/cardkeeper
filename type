@@ -1,5 +1,5 @@
 git add .
-git commit -m "0420 子類修正-6"
+git commit -m "0512 圖片搬家"
 git push
 
 npx vercel --prod

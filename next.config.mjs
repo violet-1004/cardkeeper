@@ -1,15 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config, { nextRuntime }) => {
-    // 🌟 核心防爆機制：告訴 Webpack 直接使用 Cloudflare 原生的 node:async_hooks
-    if (nextRuntime === 'edge') {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        'async_hooks': 'node:async_hooks'
-      };
-    }
-    return config;
-  }
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev', // 🌟 請換成您的 R2 公開網域
+        port: '',
+        pathname: '/**', // 允許該網域下的所有圖片路徑
+      },
+      // 如果您還有保留一些 Supabase 的圖片，可以把 Supabase 也留著
+      {
+        protocol: 'https',
+        hostname: 'qvmypjngydubsigeeial.supabase.co',
+        port: '',
+        pathname: '/**',
+      }
+    ],
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig; 
+// 如果您的檔案是 .mjs，最後一行應該是 export default nextConfig;
