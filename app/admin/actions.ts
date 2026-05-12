@@ -12,16 +12,33 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
         const env = getRequestContext().env as any;
         if (!env.BUCKET) throw new Error("R2 尚未綁定");
 
-        // 🌟 請將這裡替換成您剛剛在後台複製的 R2 公開網址
-        const R2_PUBLIC_URL = "pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev"; 
+        // 🌟 補上 https:// 確保回傳正確的絕對網址
+        const R2_PUBLIC_URL = "https://pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev"; 
 
-        // 1. 抓取外部圖片
-        const response = await fetch(externalUrl);
-        if (!response.ok) return externalUrl; // 如果抓不到，就退回使用原網址
+        let arrayBuffer: ArrayBuffer;
+        let contentType: string;
 
-        // 2. 轉換為 ArrayBuffer 以便上傳
-        const arrayBuffer = await response.arrayBuffer();
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        // 1. 判斷圖片網址格式
+        if (externalUrl.startsWith('data:')) {
+            // 處理前端上傳的 Base64 圖片格式
+            const [header, base64Data] = externalUrl.split(',');
+            contentType = header.split(':')[1].split(';')[0];
+            const byteString = atob(base64Data);
+            arrayBuffer = new ArrayBuffer(byteString.length);
+            const uint8Array = new Uint8Array(arrayBuffer);
+            for (let i = 0; i < byteString.length; i++) {
+                uint8Array[i] = byteString.charCodeAt(i);
+            }
+        } else if (externalUrl.startsWith('http')) {
+            // 抓取外部 HTTP/HTTPS 圖片
+            const response = await fetch(externalUrl);
+            if (!response.ok) return externalUrl;
+            arrayBuffer = await response.arrayBuffer();
+            contentType = response.headers.get('content-type') || 'image/jpeg';
+        } else {
+            // 若是不支援的格式 (例如相對路徑)，則直接退回
+            return externalUrl;
+        }
 
         // 3. 寫入 R2
         await env.BUCKET.put(fileName, arrayBuffer, {
