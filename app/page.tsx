@@ -7709,6 +7709,9 @@ export default function App() {
       // 1. 處理批次的加入與移除 (支援系列、子類、通路)
       if (type === 'seriesId' || type === 'type' || type === 'channel') {
           nextBatches = nextBatches.map(b => {
+                // 🌟 護城河：絕對不修改其他團體的批次資料
+                if (String(b.groupId) !== String(currentGroupId)) return b;
+
               const isSelected = uniqueSelectedBatchIds.includes(String(b.id));
               let wasInTarget = false;
               
@@ -7740,6 +7743,9 @@ export default function App() {
       const batchNewValues = new Map(batchesToUpdateDb.map(b => [String(b.id), b[type]]));
 
       nextCards = nextCards.map(c => {
+            // 🌟 護城河：絕對不修改其他團體的小卡資料
+            if (String(c.groupId) !== String(currentGroupId)) return c;
+
           // 如果卡片屬於某個剛被操作的批次，自動同步該屬性
           if (c.batchId && modifiedBatchIds.has(String(c.batchId))) {
               const newBatchValue = batchNewValues.get(String(c.batchId));
