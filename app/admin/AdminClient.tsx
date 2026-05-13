@@ -155,7 +155,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             for (let i = 0; i < fetchPages; i++) {
                 setStatus(`正在抓取小卡第 ${i + 1} 頁 (已累積 ${allFormattedCards.length} 筆)...`);
                 const url = tempCursor ? `/api/crawler/card?cursor=${tempCursor}&api_id=${apiIdInput}` : `/api/crawler/card?api_id=${apiIdInput}`;
-                const response = await fetch(url);
+                const response = await fetch(url, { cache: 'no-store' });
 
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
                 const data: any = await response.json();
@@ -212,7 +212,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             for (let i = 0; i < fetchPages; i++) {
                 setStatus(`正在抓取批次第 ${i + 1} 頁 (已累積 ${allFormattedBatches.length} 筆)...`);
                 const url = tempCursor ? `/api/crawler/batches?cursor=${tempCursor}&api_id=${apiIdInput}` : `/api/crawler/batches?api_id=${apiIdInput}`;
-                const response = await fetch(url);
+                const response = await fetch(url, { cache: 'no-store' });
 
                 if (!response.ok) throw new Error(`API 請求失敗 (${response.status}): ${await response.text()}`);
                 const data: any = await response.json();

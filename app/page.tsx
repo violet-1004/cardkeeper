@@ -6291,8 +6291,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                 let blob = null;
                 
                 try {
-                    // 1. 嘗試直接抓取 (若為同源或 Supabase CORS 已開放，並加入 cache no-cache 防止 Safari 快取干擾)
-                    const res = await fetch(originalSrc, { cache: 'no-cache' });
+                    // 1. 嘗試直接抓取 (加入時間戳完全避開瀏覽器快取，強制觸發 R2 的 CORS 標頭)
+                    const fetchUrl = originalSrc + (originalSrc.includes('?') ? '&' : '?') + 't=' + Date.now();
+                    const res = await fetch(fetchUrl, { cache: 'no-store' });
                     if (res.ok) {
                         blob = await res.blob();
                     } else {
