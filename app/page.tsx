@@ -6618,7 +6618,6 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                     src={card.image} 
                                     alt="卡片圖片" 
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                                    crossOrigin="anonymous"
                                     decoding="sync"
                                     loading="eager"
                                 />
