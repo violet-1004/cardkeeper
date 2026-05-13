@@ -31,8 +31,12 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
     const availableTypes = useMemo(() => {
         let filteredSeries = seriesList;
         if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.group_id) === String(filterGroupId));
+        
+        console.log(`正在為群組 ${filterGroupId} 計算類型，當前系列總數:`, filteredSeries.length);
+        
         if (filterSubunit) filteredSeries = filteredSeries.filter(s => s.subunit === filterSubunit);
-        const types = new Set(filteredSeries.map(s => s.type).filter(Boolean));
+        // 🌟 防禦機制：過濾掉字串形式的 null / undefined
+        const types = new Set(filteredSeries.map(s => (s.type === 'null' || s.type === 'undefined') ? null : s.type).filter(Boolean));
         return Array.from(types);
     }, [seriesList, filterGroupId, filterSubunit]);
 
@@ -40,7 +44,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         let list = seriesList;
         if (filterGroupId) list = list.filter(s => String(s.group_id) === String(filterGroupId));
         if (filterSubunit) list = list.filter(s => s.subunit === filterSubunit);
-        if (filterType) list = list.filter(s => s.type === filterType);
+        if (filterType) list = list.filter(s => String(s.type) === String(filterType)); // 🌟 統一轉字串進行嚴格比對
         
         return list.sort((a, b) => {
             const dateA = a.date ? new Date(a.date).getTime() : 253402214400000;

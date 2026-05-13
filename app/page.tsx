@@ -6285,6 +6285,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 
             // 🌟 匯出前：將所有圖片透過 fetch + proxy 轉為 Base64，徹底解決 CORS 與 Safari 破圖問題
             await Promise.all(imgElements.map(async img => {
+                img.decoding = 'sync'; // 🌟 強制同步解碼，防堵 Safari 在渲染時將其視為透明
                 if (img.src.startsWith('data:')) return;
                 
                 const originalSrc = img.src;
@@ -6328,6 +6329,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                     img.dataset.originalSrc = originalSrc;
                     img.removeAttribute('srcset'); // 移除 Next.js 加上的 srcset 避免干擾 html-to-image
                     img.src = base64;
+                    
+                    // 🌟 致命錯誤修復：等待 Base64 完全被瀏覽器解碼並準備好繪製，否則擷取畫面會拍到灰底
+                    try {
+                        await img.decode();
+                    } catch (err) {}
                 }
             }));
             
@@ -6608,14 +6614,13 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                     >
                         <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`}>
                             {card.image ? (
-                                <Image 
+                                <img 
                                     src={card.image} 
                                     alt="卡片圖片" 
-                                    fill 
-                                    loading="eager" 
-                                    sizes="(max-width: 768px) 33vw, 20vw" 
-                                    className="object-cover pointer-events-none" 
-                                    unoptimized={true}
+                                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                                    crossOrigin="anonymous"
+                                    decoding="sync"
+                                    loading="eager"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
@@ -7084,12 +7089,20 @@ export default function App() {
       if (Math.abs(diffY) > Math.abs(diff)) return; // 垂直滑動忽略
       if (e.target.closest('input[type="range"]')) return; // 滑動條忽略
 
+      // 🌟 限制必須從螢幕邊緣 (50px 內) 開始滑動才觸發
+      const edgeThreshold = 50;
+      const screenWidth = window.innerWidth;
+      const isFromLeftEdge = touchStartX.current <= edgeThreshold;
+      const isFromRightEdge = touchStartX.current >= screenWidth - edgeThreshold;
+
+      if (!isFromLeftEdge && !isFromRightEdge) return;
+
       // 門檻 100px，避免誤觸
       if (Math.abs(diff) > 100) {
           const tabs = ['library', 'collection', 'bulk', 'inventory', 'export'];
           const currentIndex = tabs.indexOf(activeTab);
           
-          if (diff > 0) { // 左滑 (手指右->左) -> 下一頁
+          if (diff > 0 && isFromRightEdge) { // 左滑 (手指右->左) 且從右邊緣開始 -> 下一頁
               if (currentIndex < tabs.length - 1) {
                   setActiveTab(tabs[currentIndex + 1]);
                   setIsSelectionMode(false);
@@ -7097,7 +7110,7 @@ export default function App() {
                   setSelectedBatches([]);
                   setBatchCategorizeTarget(null);
               }
-          } else { // 右滑 (手指左->右) -> 上一頁
+          } else if (diff < 0 && isFromLeftEdge) { // 右滑 (手指左->右) 且從左邊緣開始 -> 上一頁
               if (currentIndex > 0) {
                   setActiveTab(tabs[currentIndex - 1]);
                   setIsSelectionMode(false);

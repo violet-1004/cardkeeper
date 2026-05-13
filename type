@@ -1,5 +1,5 @@
 git add .
-git commit -m "0513 通路批量修正"
+git commit -m "0513 通路/匯出修正"
 git push
 
 npx vercel --prod
