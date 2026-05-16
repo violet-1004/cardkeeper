@@ -23,14 +23,14 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
     const availableSubunits = useMemo(() => {
         let filteredSeries = seriesList;
-        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.group_id) === String(filterGroupId));
+        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId) === String(filterGroupId));
         const subunits = new Set(filteredSeries.map(s => s.subunit).filter(Boolean));
         return Array.from(subunits);
     }, [seriesList, filterGroupId]);
 
     const availableTypes = useMemo(() => {
         let filteredSeries = seriesList;
-        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.group_id) === String(filterGroupId));
+        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId) === String(filterGroupId));
         
         console.log(`正在為群組 ${filterGroupId} 計算類型，當前系列總數:`, filteredSeries.length);
         
@@ -42,7 +42,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
     const filteredSeriesList = useMemo(() => {
         let list = seriesList;
-        if (filterGroupId) list = list.filter(s => String(s.group_id) === String(filterGroupId));
+        if (filterGroupId) list = list.filter(s => String(s.groupId) === String(filterGroupId));
         if (filterSubunit) list = list.filter(s => s.subunit === filterSubunit);
         if (filterType) list = list.filter(s => String(s.type) === String(filterType)); // 🌟 統一轉字串進行嚴格比對
         
@@ -86,7 +86,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         const newSeries = {
             id: Date.now(),
             name: newSeriesForm.name.trim(),
-            group_id: Number(filterGroupId),
+            groupId: Number(filterGroupId),
             shortName: newSeriesForm.shortName.trim() || null,
             subunit: newSeriesForm.subunit.trim() || null,
             type: newSeriesForm.type.trim() || null,
@@ -204,13 +204,6 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
 
-            // 🌟 寫入成功後，立刻同步更新前端畫面狀態，達成瞬間出現的效果
-            setCards(prev => {
-                const newCardsMap = new Map(prev.map(c => [String(c.id), c]));
-                uniqueCards.forEach(c => newCardsMap.set(String(c.id), c));
-                return Array.from(newCardsMap.values());
-            });
-
             setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。`);
         } catch (error: any) {
             console.error('小卡同步失敗:', error);
@@ -279,13 +272,6 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             if (insertedCount === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
-
-            // 🌟 寫入成功後，立刻同步更新前端畫面狀態，達成瞬間出現的效果
-            setBatches(prev => {
-                const newBatchesMap = new Map(prev.map(b => [String(b.id), b]));
-                uniqueBatches.forEach(b => newBatchesMap.set(String(b.id), b));
-                return Array.from(newBatchesMap.values());
-            });
 
             setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。`);
         } catch (error: any) {
