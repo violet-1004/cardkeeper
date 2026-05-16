@@ -191,7 +191,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             
             const uniqueCards = Array.from(uniqueCardsMap.values());
             let insertedCount = 0;
-            const CHUNK_SIZE = 50;
+            const CHUNK_SIZE = 10; // 🌟 配合 Cloudflare Worker 單次請求最多 50 個子請求 (Subrequests) 的嚴格限制
             
             for (let i = 0; i < uniqueCards.length; i += CHUNK_SIZE) {
                 const chunk = uniqueCards.slice(i, i + CHUNK_SIZE);
@@ -260,7 +260,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             
             const uniqueBatches = Array.from(uniqueBatchesMap.values());
             let insertedCount = 0;
-            const CHUNK_SIZE = 50;
+            const CHUNK_SIZE = 10; // 🌟 配合 Cloudflare Worker 單次請求最多 50 個子請求的嚴格限制
             
             for (let i = 0; i < uniqueBatches.length; i += CHUNK_SIZE) {
                 const chunk = uniqueBatches.slice(i, i + CHUNK_SIZE);

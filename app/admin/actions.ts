@@ -84,7 +84,7 @@ export async function upsertCards(cards: any[]) {
     if (!cards || cards.length === 0) return 0;
 
     const db = getDb();
-    const CHUNK_SIZE = 25; // 限制單次資料庫寫入與併發請求數
+    const CHUNK_SIZE = 10; // 🌟 限制單次資料庫寫入與併發請求數 (防堵 Cloudflare 50 個子請求限制)
 
     for (let i = 0; i < cards.length; i += CHUNK_SIZE) {
         const chunk = cards.slice(i, i + CHUNK_SIZE);
@@ -126,7 +126,7 @@ export async function upsertBatches(batches: any[]) {
     if (!batches || batches.length === 0) return 0;
 
     const db = getDb();
-    const CHUNK_SIZE = 25;
+    const CHUNK_SIZE = 10; // 🌟 防堵 Cloudflare 50 個子請求限制
 
     for (let i = 0; i < batches.length; i += CHUNK_SIZE) {
         const chunk = batches.slice(i, i + CHUNK_SIZE);
