@@ -111,12 +111,12 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         "HYEONGJUN": 1773335705390, "TAEYOUNG": 1773335737259, "SEONGMIN": 1773335759275
     };
 
-    const formatCard = (card: any, targetSeriesId: any) => ({
-        id: card.id, name: card.name, member_id: memberIdMap[card.artistName] || null,
-        image: card.thumbnailUrl, type: card.typeId, series_id: targetSeriesId, group_id: 1773331625412
+    const formatCard = (card: any, targetSeriesId: any, targetGroupId: any) => ({
+        id: String(card.id), name: String(card.name || '未命名'), member_id: memberIdMap[card.artistName] ? String(memberIdMap[card.artistName]) : null,
+        image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, series_id: String(targetSeriesId), group_id: String(targetGroupId)
     });
 
-    const formatBatch = (record: any, channelMap: any, targetSeriesId: any) => {
+    const formatBatch = (record: any, channelMap: any, targetSeriesId: any, targetGroupId: any) => {
         let channelId = null, batchNum = null, type = '簽售卡';
         const name = record.name;
 
@@ -142,14 +142,15 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         if (record.media && record.media.length > 0) imageUrl = record.media[0].thumbnailUrl || record.media[0].url;
 
         return {
-            id: record.id, name: record.name, type: type, channel: channelId, batch_number: batchNum,
-            date: record.releaseDate, group_id: 1773331625412, series_id: targetSeriesId, image: imageUrl
+            id: String(record.id), name: String(name || '未命名'), type: String(type), channel: channelId ? String(channelId) : null, batch_number: batchNum ? String(batchNum) : null,
+            date: record.releaseDate || null, group_id: String(targetGroupId), series_id: String(targetSeriesId), image: imageUrl || null
         };
     };
 
     const syncCards = async () => {
         try {
             if (fetchPages < 1) return;
+            if (!filterGroupId) return setStatus("錯誤：請先在上方「篩選條件」選擇「團體」！");
             if (!selectedSeriesId) return setStatus("錯誤：請先在上方選擇要匯入的「系列」！");
             if (!apiIdInput) return setStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
 
@@ -175,7 +176,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                     break;
                 }
 
-                const formattedBatch = apiData.records.map((record: any) => formatCard(record, Number(selectedSeriesId)));
+            const formattedBatch = apiData.records.map((record: any) => formatCard(record, selectedSeriesId, filterGroupId));
                 allFormattedCards = allFormattedCards.concat(formattedBatch);
                 tempCursor = apiData.next || null;
                 if (!tempCursor) break;
@@ -212,6 +213,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
     const syncBatches = async () => {
         try {
             if (fetchPages < 1) return;
+            if (!filterGroupId) return setStatus("錯誤：請先在上方「篩選條件」選擇「團體」！");
             if (!selectedSeriesId) return setStatus("錯誤：請先在上方選擇要匯入的「系列」！");
             if (!apiIdInput) return setStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
 
@@ -242,7 +244,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                     break;
                 }
 
-                const formattedBatch = apiData.records.map((record: any) => formatBatch(record, channelMap, Number(selectedSeriesId)));
+            const formattedBatch = apiData.records.map((record: any) => formatBatch(record, channelMap, selectedSeriesId, filterGroupId));
                 allFormattedBatches = allFormattedBatches.concat(formattedBatch);
                 tempCursor = apiData.next || null;
                 if (!tempCursor) break;
