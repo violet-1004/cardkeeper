@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 export const runtime = 'edge';
 
@@ -11,12 +10,11 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Missing api_id' }, { status: 400 });
     }
 
-    // 🌟 修正：對應批次 (Batches) 的專屬 API 格式
-    let kocaUrl = `https://koca.shop/api/series/${apiId}/batches`;
+    // 🌟 完美對應您提供的小卡 (Cards) 專屬 API 格式
+    let kocaUrl = `https://koca.shop/api/series/${apiId}/items?type=idol_card`;
     
-    // 🌟 如果前端有傳遞「下一頁」的指標，就補上 cursor 參數
     if (cursor) {
-        kocaUrl += `?cursor=${cursor}`; // 批次網址本身沒有參數，所以這裡用 ?
+        kocaUrl += `&cursor=${cursor}`; // 小卡網址已經有 type 參數，所以這裡用 &
     }
 
     try {
