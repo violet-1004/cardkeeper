@@ -81,22 +81,32 @@ export async function upsertCards(cards: any[]) {
         const chunk = cards.slice(i, i + CHUNK_SIZE);
         
         const processedChunk = await Promise.all(chunk.map(async (card) => {
-            if (card.image && !card.image.includes('r2.dev')) {
-                const fileName = `cards/${card.seriesId}/${card.id}.jpg`;
-                card.image = await uploadImageToR2(card.image, fileName);
+            let image = card.image;
+            const seriesId = card.seriesId || card.series_id;
+            if (image && !image.includes('r2.dev')) {
+                const fileName = `cards/${seriesId}/${card.id}.jpg`;
+                image = await uploadImageToR2(image, fileName);
             }
-            return card;
+            return {
+                id: String(card.id),
+                name: card.name,
+                member_id: card.memberId || card.member_id || null,
+                image: image || null,
+                type: card.type || null,
+                series_id: seriesId || null,
+                group_id: card.groupId || card.group_id || null,
+            };
         }));
 
         await db.insert(schema.uiCards).values(processedChunk).onConflictDoUpdate({
             target: schema.uiCards.id,
             set: {
                 name: sql`excluded.name`,
-                memberId: sql`excluded.member_id`,
+                member_id: sql`excluded.member_id`,
                 image: sql`excluded.image`,
                 type: sql`excluded.type`,
-                seriesId: sql`excluded.series_id`,
-                groupId: sql`excluded.group_id`,
+                series_id: sql`excluded.series_id`,
+                group_id: sql`excluded.group_id`,
             }
         });
     }
@@ -113,11 +123,22 @@ export async function upsertBatches(batches: any[]) {
         const chunk = batches.slice(i, i + CHUNK_SIZE);
         
         const processedChunk = await Promise.all(chunk.map(async (batch) => {
-            if (batch.image && !batch.image.includes('r2.dev')) {
+            let image = batch.image;
+            if (image && !image.includes('r2.dev')) {
                 const fileName = `batches/${batch.id}.jpg`;
-                batch.image = await uploadImageToR2(batch.image, fileName);
+                image = await uploadImageToR2(image, fileName);
             }
-            return batch;
+            return {
+                id: String(batch.id),
+                name: batch.name,
+                type: batch.type || null,
+                channel: batch.channel || null,
+                batch_number: batch.batchNumber || batch.batch_number || null,
+                date: batch.date || null,
+                group_id: batch.groupId || batch.group_id || null,
+                series_id: batch.seriesId || batch.series_id || null,
+                image: image || null,
+            };
         }));
 
         await db.insert(schema.batches).values(processedChunk).onConflictDoUpdate({
@@ -126,10 +147,10 @@ export async function upsertBatches(batches: any[]) {
                 name: sql`excluded.name`,
                 type: sql`excluded.type`,
                 channel: sql`excluded.channel`,
-                batchNumber: sql`excluded.batch_number`,
+                batch_number: sql`excluded.batch_number`,
                 date: sql`excluded.date`,
-                groupId: sql`excluded.group_id`,
-                seriesId: sql`excluded.series_id`,
+                group_id: sql`excluded.group_id`,
+                series_id: sql`excluded.series_id`,
                 image: sql`excluded.image`,
             }
         });
