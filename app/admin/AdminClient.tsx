@@ -112,8 +112,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
     };
 
     const formatCard = (card: any, targetSeriesId: any, targetGroupId: any) => ({
-        id: String(card.id), name: String(card.name || '未命名'), member_id: memberIdMap[card.artistName] ? String(memberIdMap[card.artistName]) : null,
-        image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, series_id: String(targetSeriesId), group_id: String(targetGroupId)
+        id: String(card.id), name: String(card.name || '未命名'), memberId: memberIdMap[card.artistName] ? String(memberIdMap[card.artistName]) : null,
+        image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, seriesId: String(targetSeriesId), groupId: String(targetGroupId)
     });
 
     const formatBatch = (record: any, channelMap: any, targetSeriesId: any, targetGroupId: any) => {
@@ -142,8 +142,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         if (record.media && record.media.length > 0) imageUrl = record.media[0].thumbnailUrl || record.media[0].url;
 
         return {
-            id: String(record.id), name: String(name || '未命名'), type: String(type), channel: channelId ? String(channelId) : null, batch_number: batchNum ? String(batchNum) : null,
-            date: record.releaseDate || null, group_id: String(targetGroupId), series_id: String(targetSeriesId), image: imageUrl || null
+            id: String(record.id), name: String(name || '未命名'), type: String(type), channel: channelId ? String(channelId) : null, batchNumber: batchNum ? String(batchNum) : null,
+            date: record.releaseDate || null, groupId: String(targetGroupId), seriesId: String(targetSeriesId), image: imageUrl || null
         };
     };
 
@@ -203,6 +203,14 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             if (insertedCount === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
+
+            // 🌟 寫入成功後，立刻同步更新前端畫面狀態，達成瞬間出現的效果
+            setCards(prev => {
+                const newCardsMap = new Map(prev.map(c => [String(c.id), c]));
+                uniqueCards.forEach(c => newCardsMap.set(String(c.id), c));
+                return Array.from(newCardsMap.values());
+            });
+
             setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。`);
         } catch (error: any) {
             console.error('小卡同步失敗:', error);
@@ -271,6 +279,14 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             if (insertedCount === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
+
+            // 🌟 寫入成功後，立刻同步更新前端畫面狀態，達成瞬間出現的效果
+            setBatches(prev => {
+                const newBatchesMap = new Map(prev.map(b => [String(b.id), b]));
+                uniqueBatches.forEach(b => newBatchesMap.set(String(b.id), b));
+                return Array.from(newBatchesMap.values());
+            });
+
             setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。`);
         } catch (error: any) {
             console.error('批次同步失敗:', error);

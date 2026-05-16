@@ -82,7 +82,7 @@ export async function upsertCards(cards: any[]) {
         
         const processedChunk = await Promise.all(chunk.map(async (card) => {
             if (card.image && !card.image.includes('r2.dev')) {
-                const fileName = `cards/${card.series_id}/${card.id}.jpg`;
+                const fileName = `cards/${card.seriesId}/${card.id}.jpg`;
                 card.image = await uploadImageToR2(card.image, fileName);
             }
             return card;
@@ -92,11 +92,11 @@ export async function upsertCards(cards: any[]) {
             target: schema.uiCards.id,
             set: {
                 name: sql`excluded.name`,
-                member_id: sql`excluded.member_id`,
+                memberId: sql`excluded.member_id`,
                 image: sql`excluded.image`,
                 type: sql`excluded.type`,
-                series_id: sql`excluded.series_id`,
-                group_id: sql`excluded.group_id`,
+                seriesId: sql`excluded.series_id`,
+                groupId: sql`excluded.group_id`,
             }
         });
     }
@@ -126,10 +126,10 @@ export async function upsertBatches(batches: any[]) {
                 name: sql`excluded.name`,
                 type: sql`excluded.type`,
                 channel: sql`excluded.channel`,
-                batch_number: sql`excluded.batch_number`,
+                batchNumber: sql`excluded.batch_number`,
                 date: sql`excluded.date`,
-                group_id: sql`excluded.group_id`,
-                series_id: sql`excluded.series_id`,
+                groupId: sql`excluded.group_id`,
+                seriesId: sql`excluded.series_id`,
                 image: sql`excluded.image`,
             }
         });
