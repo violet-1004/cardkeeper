@@ -88,7 +88,7 @@ export async function upsertCards(cards: any[]) {
                 image = await uploadImageToR2(image, fileName);
             }
             return {
-                id: String(card.id),
+                id: Number(card.id),
                 name: card.name,
                 member_id: card.memberId || card.member_id || null,
                 image: image || null,
@@ -129,7 +129,7 @@ export async function upsertBatches(batches: any[]) {
                 image = await uploadImageToR2(image, fileName);
             }
             return {
-                id: String(batch.id),
+                id: Number(batch.id),
                 name: batch.name,
                 type: batch.type || null,
                 channel: batch.channel || null,
