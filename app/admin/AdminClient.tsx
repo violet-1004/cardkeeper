@@ -23,14 +23,14 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
     const availableSubunits = useMemo(() => {
         let filteredSeries = seriesList;
-        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId) === String(filterGroupId));
+        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId || s.group_id) === String(filterGroupId));
         const subunits = new Set(filteredSeries.map(s => s.subunit).filter(Boolean));
         return Array.from(subunits);
     }, [seriesList, filterGroupId]);
 
     const availableTypes = useMemo(() => {
         let filteredSeries = seriesList;
-        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId) === String(filterGroupId));
+        if (filterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId || s.group_id) === String(filterGroupId));
         
         console.log(`正在為群組 ${filterGroupId} 計算類型，當前系列總數:`, filteredSeries.length);
         
@@ -42,7 +42,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
     const filteredSeriesList = useMemo(() => {
         let list = seriesList;
-        if (filterGroupId) list = list.filter(s => String(s.groupId) === String(filterGroupId));
+        if (filterGroupId) list = list.filter(s => String(s.groupId || s.group_id) === String(filterGroupId));
         if (filterSubunit) list = list.filter(s => s.subunit === filterSubunit);
         if (filterType) list = list.filter(s => String(s.type) === String(filterType)); // 🌟 統一轉字串進行嚴格比對
         

@@ -63,7 +63,16 @@ export async function updateSeriesApi(id: number, api: string) {
 
 export async function insertSeries(newSeries: any) {
     const db = getDb();
-    await db.insert(schema.series).values(newSeries);
+    await db.insert(schema.series).values({
+        id: newSeries.id ? Number(newSeries.id) : Date.now(),
+        name: newSeries.name,
+        group_id: (newSeries.groupId || newSeries.group_id) ? Number(newSeries.groupId || newSeries.group_id) : null,
+        short_name: newSeries.shortName || newSeries.short_name || null,
+        subunit: newSeries.subunit || null,
+        type: newSeries.type || null,
+        date: newSeries.date || null,
+        api: newSeries.api || null
+    });
 }
 
 export async function fetchChannels() {
@@ -90,11 +99,11 @@ export async function upsertCards(cards: any[]) {
             return {
                 id: Number(card.id),
                 name: card.name,
-                member_id: card.memberId || card.member_id || null,
+                member_id: (card.memberId || card.member_id) ? Number(card.memberId || card.member_id) : null,
                 image: image || null,
                 type: card.type || null,
-                series_id: seriesId || null,
-                group_id: card.groupId || card.group_id || null,
+                series_id: seriesId ? Number(seriesId) : null,
+                group_id: (card.groupId || card.group_id) ? Number(card.groupId || card.group_id) : null,
             };
         }));
 
@@ -135,8 +144,8 @@ export async function upsertBatches(batches: any[]) {
                 channel: batch.channel || null,
                 batch_number: batch.batchNumber || batch.batch_number || null,
                 date: batch.date || null,
-                group_id: batch.groupId || batch.group_id || null,
-                series_id: batch.seriesId || batch.series_id || null,
+                group_id: (batch.groupId || batch.group_id) ? Number(batch.groupId || batch.group_id) : null,
+                series_id: (batch.seriesId || batch.series_id) ? Number(batch.seriesId || batch.series_id) : null,
                 image: image || null,
             };
         }));
