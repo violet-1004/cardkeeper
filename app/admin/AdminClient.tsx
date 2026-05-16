@@ -188,7 +188,17 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             const uniqueCardsMap = new Map();
             allFormattedCards.forEach(card => uniqueCardsMap.set(card.id, card));
             
-            const insertedCount = await upsertCards(Array.from(uniqueCardsMap.values()));
+            const uniqueCards = Array.from(uniqueCardsMap.values());
+            let insertedCount = 0;
+            const CHUNK_SIZE = 50;
+            
+            for (let i = 0; i < uniqueCards.length; i += CHUNK_SIZE) {
+                const chunk = uniqueCards.slice(i, i + CHUNK_SIZE);
+                setStatus(`正在將小卡寫入資料庫與圖床 (${Math.min(i + CHUNK_SIZE, uniqueCards.length)} / ${uniqueCards.length})...`);
+                await upsertCards(chunk);
+                insertedCount += chunk.length;
+            }
+
             if (insertedCount === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
@@ -245,7 +255,17 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             const uniqueBatchesMap = new Map();
             allFormattedBatches.forEach(batch => uniqueBatchesMap.set(batch.id, batch));
             
-            const insertedCount = await upsertBatches(Array.from(uniqueBatchesMap.values()));
+            const uniqueBatches = Array.from(uniqueBatchesMap.values());
+            let insertedCount = 0;
+            const CHUNK_SIZE = 50;
+            
+            for (let i = 0; i < uniqueBatches.length; i += CHUNK_SIZE) {
+                const chunk = uniqueBatches.slice(i, i + CHUNK_SIZE);
+                setStatus(`正在將批次寫入資料庫與圖床 (${Math.min(i + CHUNK_SIZE, uniqueBatches.length)} / ${uniqueBatches.length})...`);
+                await upsertBatches(chunk);
+                insertedCount += chunk.length;
+            }
+
             if (insertedCount === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
