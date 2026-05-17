@@ -7121,6 +7121,9 @@ export default function App() {
                 }
                 if (options.limit) params.append('limit', String(options.limit));
                 
+                // 🌟 加入時間戳，徹底無視 Cloudflare 邊緣快取與瀏覽器快取
+                params.append('_t', String(Date.now()));
+                
                 const response = await fetch(`/api/data?${params.toString()}`, { cache: 'no-store' });
                 if (!response.ok) {
                     const errText = await response.text();

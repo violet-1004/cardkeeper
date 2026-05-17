@@ -1,5 +1,5 @@
 'use server';
-
+import { revalidatePath } from 'next/cache';
 import { getRequestContext } from '@cloudflare/next-on-pages';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, sql } from 'drizzle-orm';
@@ -119,6 +119,9 @@ export async function upsertCards(cards: any[]) {
             }
         });
     }
+
+    // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
+    revalidatePath('/', 'layout');
     return cards.length;
 }
 
@@ -164,5 +167,8 @@ export async function upsertBatches(batches: any[]) {
             }
         });
     }
+
+    // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
+    revalidatePath('/', 'layout');
     return batches.length;
 }
