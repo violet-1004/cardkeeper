@@ -1876,7 +1876,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 
   const getCardQuantity = (cardId) => inventoryMap[String(cardId)]?.total || 0;
   
-  const hasUnassignedCards = currentCards.some(c => !c.memberId || String(c.memberId) === 'null');
+  const hasUnassignedCards = (cards || []).some(c => !c.memberId || String(c.memberId) === 'null');
 
   const handleAddNewCard = () => {
     openModal('card', {
