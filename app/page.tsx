@@ -557,8 +557,12 @@ const MemberItem = ({ member, isSelected, onClick, onLongPress, onDoubleClick })
       onDoubleClick={onDoubleClick}
       className="flex flex-col items-center gap-1 cursor-pointer min-w-[64px] select-none active:scale-95 transition-transform"
     >
-      <div className={`w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${isSelected ? 'border-indigo-600 scale-105 shadow-md' : 'border-transparent'}`}>
-        <img src={member.image} className="w-full h-full object-cover pointer-events-none" alt={member.name} />
+      <div className={`w-16 h-16 rounded-full overflow-hidden border-2 flex items-center justify-center bg-gray-100 transition-all ${isSelected ? 'border-indigo-600 scale-105 shadow-md' : 'border-transparent'}`}>
+        {member.image ? (
+            <img src={member.image} className="w-full h-full object-cover pointer-events-none" alt={member.name} />
+        ) : (
+            <Users className="w-6 h-6 text-gray-400" />
+        )}
       </div>
       <span className={`text-xs font-medium ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`}>{member.name}</span>
     </div>
@@ -1626,8 +1630,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   useEffect(() => {
       if (uniqueSubunits.length > 0) {
           const isValid = uniqueSubunits.some(s => s.name === filterSubunit);
-          if (filterSubunit === 'All' || !isValid) {
-              setFilterSubunit(uniqueSubunits[0].name);
+          if (filterSubunit !== 'All' && !isValid) {
+              setFilterSubunit('All');
           }
       } else {
           setFilterSubunit('All'); 
@@ -1872,6 +1876,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
 
   const getCardQuantity = (cardId) => inventoryMap[String(cardId)]?.total || 0;
   
+  const hasUnassignedCards = currentCards.some(c => !c.memberId || String(c.memberId) === 'null');
+
   const handleAddNewCard = () => {
     openModal('card', {
       memberId: filterMemberId !== 'All' ? filterMemberId : '',
@@ -1927,6 +1933,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                 onDoubleClick={() => openModal('member', m)}
              />
            ))}
+           {hasUnassignedCards && (
+             <MemberItem 
+                member={{ id: 'null', name: '全體/無成員', image: '' }} 
+                isSelected={filterMemberId === 'null'}
+                onClick={() => setFilterMemberId(filterMemberId === 'null' ? 'All' : 'null')}
+                onLongPress={() => handleLongPress('memberId', 'null', '全體/無成員')}
+             />
+           )}
            <button onClick={() => openModal('member', { subunit: filterSubunit !== 'All' ? filterSubunit : '' })} className="flex flex-col items-center gap-1 min-w-[64px] group">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 group-hover:bg-indigo-50 group-hover:border-indigo-300 transition-colors">
                 <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500" />
@@ -3895,8 +3909,8 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     useEffect(() => {
         if (availableSubunits.length > 0) {
             const availableIds = availableSubunits.map(s => s.id);
-            if (filterSubunit === 'All' || !availableIds.includes(filterSubunit)) {
-                setFilterSubunit(availableSubunits[0].id);
+            if (filterSubunit !== 'All' && !availableIds.includes(filterSubunit)) {
+                setFilterSubunit('All');
             }
         } else {
             setFilterSubunit('All');

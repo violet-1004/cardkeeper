@@ -118,8 +118,18 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         
         // 🌟 新增：將 api 資料的 name 與 members 表的 name_2 比對
         if (!memberId && Array.isArray(membersList) && membersList.length > 0) {
-            const recordName = String(card.name || '').toUpperCase();
-            const matchedMember = membersList.find(m => m.name_2 && String(m.group_id || m.groupId) === String(targetGroupId) && recordName.includes(String(m.name_2).toUpperCase()));
+            const recordName = String(card.name || '').toUpperCase().replace(/\s+/g, '');
+            const matchedMember = membersList.find(m => {
+                const mGroupId = String(m.group_id || m.groupId || '');
+                if (mGroupId !== String(targetGroupId)) return false;
+                
+                const name2 = String(m.name_2 || m.name2 || '').toUpperCase().replace(/\s+/g, '');
+                const name1 = String(m.name || '').toUpperCase().replace(/\s+/g, '');
+                
+                if (name2 && recordName.includes(name2)) return true;
+                if (name1 && recordName.includes(name1)) return true;
+                return false;
+            });
             if (matchedMember) {
                 memberId = String(matchedMember.id);
             }
