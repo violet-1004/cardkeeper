@@ -4609,6 +4609,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             if (c.uid === uid) {
                 const updated = { ...c, [field]: value };
                 if (field === 'buyPrice') updated.isManual = (value !== '' && Number(value) !== 0);
+                // 🌟 新增：如果設定了售出價錢，且尚未有日期，自動補上今日日期，確保能正確同步至「紀錄」頁籤
+                if (field === 'sellPrice' && Number(value) > 0 && !updated.sellDate) {
+                    updated.sellDate = new Date().toISOString().split('T')[0];
+                }
                 return updated;
             }
             return c;
@@ -4635,6 +4639,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             if (m.id === id) {
                 const updated = { ...m, [field]: value };
                 if (field === 'buyPrice') updated.isManual = (value !== '' && Number(value) !== 0);
+                // 🌟 新增：自動補上日期，確保雜物售出能進入紀錄
+                if (field === 'sellPrice' && Number(value) > 0 && !updated.sellDate) {
+                    updated.sellDate = new Date().toISOString().split('T')[0];
+                }
                 return updated;
             }
             return m;
@@ -4707,6 +4715,9 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                     }
                 } else if (field === 'buyPrice') {
                     updated.isManual = (value !== '' && Number(value) !== 0);
+                } else if (field === 'sellPrice' && Number(value) > 0 && !updated.sellDate) {
+                    // 🌟 新增：自動補上日期，確保專輯售出能進入紀錄
+                    updated.sellDate = new Date().toISOString().split('T')[0];
                 }
                 return updated;
             }

@@ -136,7 +136,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         }
 
         return {
-            id: String(card.id), name: String(card.name || '未命名'), memberId,
+            id: String(card.id), name: String(card.name || '未命名'), memberId, members_id: memberId,
             image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, seriesId: String(targetSeriesId), groupId: String(targetGroupId)
         };
     };
@@ -188,8 +188,12 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                     const membersData = await membersRes.json();
                     // 🌟 相容陣列或物件格式，確保一定能拿到成員清單
                     // 🌟 嚴格防呆：確保 membersList 絕對是一個陣列，避免後續 .find() 發生錯誤
-                    const dataList = (membersData as any)?.data;
-                    membersList = Array.isArray(membersData) ? membersData : (Array.isArray(dataList) ? dataList : []);
+                    let list: any = membersData;
+                    if (!Array.isArray(list)) {
+                        if (list && Array.isArray(list?.data)) list = list.data;
+                        else if (list && Array.isArray(list?.records)) list = list.records;
+                    }
+                    membersList = Array.isArray(list) ? list : [];
                 }
             } catch (e) {
                 console.error("無法讀取成員列表", e);
@@ -230,7 +234,27 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             const uniqueCardsMap = new Map();
             allFormattedCards.forEach(card => uniqueCardsMap.set(card.id, card));
             
-            const uniqueCards = Array.from(uniqueCardsMap.values());
+            setStatus("正在比對現存小卡，排除已存在的資料...");
+            let existingCardIds = new Set();
+            try {
+                const cardsRes = await fetch(`/api/data?table=ui_cards&paginate=true&_t=${Date.now()}`, { cache: 'no-store' });
+                if (cardsRes.ok) {
+                    const cardsData = await cardsRes.json();
+                    let list: any = cardsData;
+                    if (!Array.isArray(list)) {
+                        if (list && Array.isArray(list?.data)) list = list.data;
+                        else if (list && Array.isArray(list?.records)) list = list.records;
+                    }
+                    if (Array.isArray(list)) {
+                        list.forEach((c: any) => existingCardIds.add(String(c.id)));
+                    }
+                }
+            } catch (e) {
+                console.error("無法讀取現有小卡列表", e);
+            }
+            
+            // 🌟 過濾掉資料庫已經存在的小卡，僅保留新小卡進行寫入
+            const uniqueCards = Array.from(uniqueCardsMap.values()).filter(card => !existingCardIds.has(String(card.id)));
             let insertedCount = 0;
             const CHUNK_SIZE = 10; // 🌟 配合 Cloudflare Worker 單次請求最多 50 個子請求 (Subrequests) 的嚴格限制
             
