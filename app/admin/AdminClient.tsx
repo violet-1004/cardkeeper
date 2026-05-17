@@ -111,14 +111,30 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         "HYEONGJUN": 1773335705390, "TAEYOUNG": 1773335737259, "SEONGMIN": 1773335759275
     };
 
-    const formatCard = (card: any, targetSeriesId: any, targetGroupId: any) => ({
-        id: String(card.id), name: String(card.name || '未命名'), memberId: (card.artistName && memberIdMap[card.artistName.toUpperCase().trim()]) ? String(memberIdMap[card.artistName.toUpperCase().trim()]) : null,
-        image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, seriesId: String(targetSeriesId), groupId: String(targetGroupId)
-    });
+    const formatCard = (card: any, targetSeriesId: any, targetGroupId: any, membersList: any[] = []) => {
+        // 🌟 防呆：確保 artistName 絕對是字串，避免 .toUpperCase() 崩潰
+        const safeArtistName = String(card.artistName || '').toUpperCase().trim();
+        let memberId = safeArtistName && memberIdMap[safeArtistName] ? String(memberIdMap[safeArtistName]) : null;
+        
+        // 🌟 新增：將 api 資料的 name 與 members 表的 name_2 比對
+        if (!memberId && Array.isArray(membersList) && membersList.length > 0) {
+            const recordName = String(card.name || '').toUpperCase();
+            const matchedMember = membersList.find(m => m.name_2 && String(m.group_id || m.groupId) === String(targetGroupId) && recordName.includes(String(m.name_2).toUpperCase()));
+            if (matchedMember) {
+                memberId = String(matchedMember.id);
+            }
+        }
+
+        return {
+            id: String(card.id), name: String(card.name || '未命名'), memberId,
+            image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, seriesId: String(targetSeriesId), groupId: String(targetGroupId)
+        };
+    };
 
     const formatBatch = (record: any, channelMap: any, targetSeriesId: any, targetGroupId: any) => {
         let channelId = null, batchNum = null, type = '簽售卡';
-        const name = record.name;
+        // 🌟 防呆：避免 API 傳來缺少 name 的資料導致 .match() 崩潰
+        const name = String(record.name || '');
 
         let match = name.match(/DtC\s*:\s*E\s+([a-zA-Z]+)?\s*([\d.]+)?/);
         if (match) {
@@ -154,6 +170,21 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             if (!selectedSeriesId) return setStatus("錯誤：請先在上方選擇要匯入的「系列」！");
             if (!apiIdInput) return setStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
 
+            setStatus("正在讀取成員列表以進行名稱比對...");
+            let membersList: any[] = [];
+            try {
+                const membersRes = await fetch(`/api/data?table=members&_t=${Date.now()}`, { cache: 'no-store' });
+                if (membersRes.ok) {
+                    const membersData = await membersRes.json();
+                    // 🌟 相容陣列或物件格式，確保一定能拿到成員清單
+                    // 🌟 嚴格防呆：確保 membersList 絕對是一個陣列，避免後續 .find() 發生錯誤
+                    const dataList = (membersData as any)?.data;
+                    membersList = Array.isArray(membersData) ? membersData : (Array.isArray(dataList) ? dataList : []);
+                }
+            } catch (e) {
+                console.error("無法讀取成員列表", e);
+            }
+
             let allFormattedCards: any[] = [];
             let tempCursor = currentCursor;
 
@@ -176,7 +207,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                     break;
                 }
 
-            const formattedBatch = apiData.records.map((record: any) => formatCard(record, selectedSeriesId, filterGroupId));
+            const formattedBatch = apiData.records.map((record: any) => formatCard(record, selectedSeriesId, filterGroupId, membersList));
                 allFormattedCards = allFormattedCards.concat(formattedBatch);
                 tempCursor = apiData.next || null;
                 if (!tempCursor) break;
