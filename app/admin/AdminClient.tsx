@@ -112,7 +112,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
     };
 
     const formatCard = (card: any, targetSeriesId: any, targetGroupId: any) => ({
-        id: String(card.id), name: String(card.name || '未命名'), memberId: memberIdMap[card.artistName] ? String(memberIdMap[card.artistName]) : null,
+        id: String(card.id), name: String(card.name || '未命名'), memberId: (card.artistName && memberIdMap[card.artistName.toUpperCase().trim()]) ? String(memberIdMap[card.artistName.toUpperCase().trim()]) : null,
         image: card.thumbnailUrl || null, type: card.typeId ? String(card.typeId) : null, seriesId: String(targetSeriesId), groupId: String(targetGroupId)
     });
 
@@ -204,7 +204,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
 
-            setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。`);
+            setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。\n(請點擊左上角「小卡管家」回到主畫面查看)`);
         } catch (error: any) {
             console.error('小卡同步失敗:', error);
             setStatus(`發生錯誤: ${error.message}`);
@@ -273,7 +273,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
 
-            setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。`);
+            setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。\n(請點擊左上角「小卡管家」回到主畫面查看)`);
         } catch (error: any) {
             console.error('批次同步失敗:', error);
             setStatus(`發生錯誤: ${error.message}`);

@@ -7121,7 +7121,7 @@ export default function App() {
                 }
                 if (options.limit) params.append('limit', String(options.limit));
                 
-                const response = await fetch(`/api/data?${params.toString()}`);
+                const response = await fetch(`/api/data?${params.toString()}`, { cache: 'no-store' });
                 if (!response.ok) {
                     const errText = await response.text();
                     let errData: any = {};
