@@ -2240,6 +2240,15 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
   const [hideSelling, setHideSelling] = useState(false);
   const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
   const [filterInvStatus, setFilterInvStatus] = useState('All');
+  const [filterCustomList, setFilterCustomList] = useState('All');
+  const [showColsSlider, setShowColsSlider] = useState(false);
+
+  useEffect(() => {
+      if (!showColsSlider) return;
+      const handleClick = () => setShowColsSlider(false);
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+  }, [showColsSlider]);
 
   const [isMarkMode, setIsMarkMode] = useState(false);
   const [cardMarks, setCardMarks] = useState(() => {
@@ -2570,6 +2579,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
          if (filterInvStatus === '囤貨' && stats.hoarded <= 0) return false;
          if (filterInvStatus === '到貨' && stats.arrived <= 0) return false;
      }
+
+     // 🌟 收藏冊篩選
+     if (filterCustomList !== 'All') {
+         const targetList = (customLists || []).find(l => String(l.id) === String(filterCustomList));
+         if (!targetList) return false;
+         if (!(targetList.items || []).some(item => String(item.cardId) === String(card.id))) return false;
+     }
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
@@ -2715,16 +2731,36 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                              <Trash2 className="w-4 h-4" />
                          </button>
                      )}
-                     <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0 flex-1 sm:flex-none">
-                       <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
-                       <select 
-                          value={cols}
-                          onChange={(e) => setCols(Number(e.target.value))}
-                          className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer w-full"
-                       >
-                          {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                       </select>
-                    </div>
+                     
+                     <div className="relative flex items-center justify-center flex-shrink-0">
+                         <button
+                             onClick={(e) => {
+                                 e.stopPropagation();
+                                 setShowColsSlider(!showColsSlider);
+                             }}
+                             className={`p-2 rounded-lg transition-all h-8 w-8 flex items-center justify-center flex-shrink-0 ${showColsSlider ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                             title="調整排數"
+                         >
+                             <Grid className="w-4 h-4" />
+                         </button>
+                         {showColsSlider && (
+                             <div 
+                                 className="absolute top-[calc(100%+8px)] right-0 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-50 flex items-center gap-3 animate-fade-in"
+                                 onClick={(e) => e.stopPropagation()}
+                             >
+                                 <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排數</span>
+                                 <input 
+                                     type="range" 
+                                     min="1" 
+                                     max="15" 
+                                     value={cols} 
+                                     onChange={(e) => setCols(Number(e.target.value))} 
+                                     className="w-24 sm:w-32 accent-indigo-600 cursor-pointer"
+                                 />
+                                 <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
+                             </div>
+                         )}
+                     </div>
 
                    <button 
                        onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
@@ -2764,6 +2800,28 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             <option value="未發貨">未發貨</option>
                             <option value="囤貨">囤貨</option>
                             <option value="到貨">到貨</option>
+                        </select>
+                    </div>
+
+                    {/* 🌟 新增的資料夾篩選按鈕 */}
+                    <div className="relative flex items-center justify-center flex-shrink-0">
+                        <button
+                            className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${
+                                filterCustomList !== 'All' ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                            }`}
+                            title="切換收藏冊篩選"
+                        >
+                            <Folder className="w-4 h-4" />
+                        </button>
+                        <select
+                            value={filterCustomList}
+                            onChange={(e) => setFilterCustomList(e.target.value)}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
+                        >
+                            <option value="All">所有收藏冊</option>
+                            {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
+                                <option key={list.id} value={list.id}>{list.title}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -6934,7 +6992,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                   <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
                                   <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
                                       <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer" />
-                                      <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6 多張分割</label>
+                                      <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6</label>
                                   </div>
                                   {is4x6Mode && (
                                       <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">
