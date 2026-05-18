@@ -6420,17 +6420,27 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             const safeString = (val) => val ? String(val) : '';
             const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
-            const getMSort = (c) => {
+            const getMSortArray = (c) => {
                 const m = memberMap[String(c.memberId)];
-                let sort = m ? safeNum(m.sortOrder, 999) : 999;
+                let baseSort = m ? safeNum(m.sortOrder, 999) : 999;
                 if (c.memberId2 && c.memberId2.length > 0) {
                     const subSorts = c.memberId2.map(id => {
                         const subM = memberMap[String(id)];
                         return subM ? safeNum(subM.sortOrder, 999) : 999;
-                    });
-                    if (subSorts.length > 0) sort = Math.min(...subSorts);
+                    }).sort((a, b) => a - b);
+                    return subSorts;
                 }
-                return sort;
+                return [baseSort];
+            };
+
+            const compareMSortArrays = (arrA, arrB) => {
+                const len = Math.max(arrA.length, arrB.length);
+                for (let i = 0; i < len; i++) {
+                    const valA = i < arrA.length ? arrA[i] : 999;
+                    const valB = i < arrB.length ? arrB[i] : 999;
+                    if (valA !== valB) return valA - valB;
+                }
+                return 0;
             };
 
             const hasBatchA = !!cardA.batchId;
@@ -6455,9 +6465,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                 if (dateA_series !== dateB_series) return dateA_series - dateB_series;
                 const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
                 if (nameCompare !== 0) return nameCompare;
-                const mSortA = getMSort(cardA);
-                const mSortB = getMSort(cardB);
-                if (mSortA !== mSortB) return mSortA - mSortB;
+                const mSortCompare = compareMSortArrays(getMSortArray(cardA), getMSortArray(cardB));
+                if (mSortCompare !== 0) return mSortCompare;
                 return safeString(cardA.id).localeCompare(safeString(cardB.id));
             }
 
@@ -6478,9 +6487,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
             if (nameCompare !== 0) return nameCompare;
 
-            const mSortA = getMSort(cardA);
-            const mSortB = getMSort(cardB);
-            if (mSortA !== mSortB) return mSortA - mSortB;
+            const mSortCompare = compareMSortArrays(getMSortArray(cardA), getMSortArray(cardB));
+            if (mSortCompare !== 0) return mSortCompare;
             return safeString(cardA.id).localeCompare(safeString(cardB.id));
         });
 
