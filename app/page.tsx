@@ -1672,6 +1672,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
               const obj = (arr || []).find(x => String(x.id) === String(value));
               return effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
           }
+          if (type === 'memberId2') {
+              const cardSubMembers = c.memberId2 || [];
+              return cardSubMembers.includes(String(value));
+          }
           return String(c[type]) === String(value);
       });
       
@@ -1803,7 +1807,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
     if (filterMemberId !== 'All') {
         if (String(card.memberId) !== String(filterMemberId)) return false;
         
-        const isGroup = filterMemberId === 'null' || currentMembers.some(m => String(m.id) === String(filterMemberId) && (m.name.includes('그룹') || m.name.includes('團體') || m.name.toLowerCase().includes('group')));
+        const isGroup = currentMembers.some(m => String(m.id) === String(filterMemberId) && (m.name.includes('그룹') || m.name.includes('團體') || m.name.toLowerCase().includes('group')));
         if (isGroup && filterSubMembers.length > 0) {
             const cardSubMembers = card.memberId2 || [];
             if (cardSubMembers.length === 0) return false;
@@ -1972,12 +1976,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                 onDoubleClick={() => openModal('member', m)}
              />
            ))}
-           <MemberItem 
-              member={{ id: 'null', name: '無成員', image: '' }} 
-              isSelected={filterMemberId === 'null'}
-              onClick={() => setFilterMemberId(filterMemberId === 'null' ? 'All' : 'null')}
-              onLongPress={() => handleLongPress('memberId', 'null', '無成員')}
-           />
+           {hasUnassignedCards && (
+               <MemberItem 
+                  member={{ id: 'null', name: '無成員', image: '' }} 
+                  isSelected={filterMemberId === 'null'}
+                  onClick={() => setFilterMemberId(filterMemberId === 'null' ? 'All' : 'null')}
+                  onLongPress={() => handleLongPress('memberId', 'null', '無成員')}
+               />
+           )}
            <button onClick={() => openModal('member', { subunit: filterSubunit !== 'All' ? filterSubunit : '' })} className="flex flex-col items-center gap-1 min-w-[64px] group">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 group-hover:bg-indigo-50 group-hover:border-indigo-300 transition-colors">
                 <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500" />
@@ -1985,21 +1991,21 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
               <span className="text-xs text-gray-400">新增成員</span>
            </button>
         </div>
-        {(filterMemberId === 'null' || currentMembers.some(m => String(m.id) === String(filterMemberId) && (m.name.includes('그룹') || m.name.includes('團體') || m.name.toLowerCase().includes('group')))) && currentMembers.length > 0 && (
+        {currentMembers.some(m => String(m.id) === String(filterMemberId) && (m.name.includes('그룹') || m.name.includes('團體') || m.name.toLowerCase().includes('group'))) && currentMembers.length > 0 && (
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar px-1 mt-1">
                 <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap bg-gray-100 px-2 py-1 rounded-md">包含成員</span>
                 {currentMembers.map(m => {
                     const isSelected = filterSubMembers.includes(String(m.id));
                     return (
-                        <button 
+                        <FilterTagItem 
                             key={m.id}
+                            text={m.name}
+                            isSelected={isSelected}
                             onClick={() => {
                                 setFilterSubMembers(prev => prev.includes(String(m.id)) ? prev.filter(id => id !== String(m.id)) : [...prev, String(m.id)]);
                             }}
-                            className={`px-3 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 font-bold' : 'bg-white text-gray-600 border-gray-200'}`}
-                        >
-                            {m.name}
-                        </button>
+                            onLongPress={() => handleLongPress('memberId2', m.id, m.name)}
+                        />
                     );
                 })}
             </div>
@@ -2222,6 +2228,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                             const obj = (arr || []).find(x => String(x.id) === String(value));
                                             return effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
                                         }
+                                    if (type === 'memberId2') {
+                                        const cardSubMembers = card.memberId2 || [];
+                                        return cardSubMembers.includes(String(value));
+                                    }
                                         return String(card[type]) === String(value);
                                     })();
                                     return (
@@ -2590,7 +2600,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
 
          if (filterMembers.length > 0) {
              if (!filterMembers.includes(String(card.memberId))) return false;
-             const isGroup = filterMembers.some(id => id === 'null' || (memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))));
+             const isGroup = filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group')));
              if (isGroup && filterSubMembers.length > 0) {
                  const cardSubMembers = card.memberId2 || [];
                  if (cardSubMembers.length === 0) return false;
@@ -2891,7 +2901,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
             {availableMembers.length > 0 && (
                 <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
             )}
-            {filterMembers.some(id => id === 'null' || (memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group')))) && (members || []).length > 0 && (
+            {filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))) && (members || []).length > 0 && (
                 <RenderFilterSection label="包含成員" options={members} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
             )}
             {availableTypes.length > 0 && (
@@ -6348,7 +6358,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         const filtered = subunitFilteredCards.filter(c => {
             if (filterMembers.length > 0) {
                 if (!filterMembers.includes(String(c.memberId))) return false;
-                const isGroup = filterMembers.some(id => id === 'null' || (memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))));
+                const isGroup = filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group')));
                 if (isGroup && filterSubMembers.length > 0) {
                     const cardSubMembers = c.memberId2 || [];
                     if (cardSubMembers.length === 0) return false;
@@ -7058,7 +7068,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       <div className="space-y-3 p-4 bg-white rounded-xl border shadow-sm">
                           <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />
                           <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
-                          {filterMembers.some(id => id === 'null' || (memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group')))) && (members || []).length > 0 && (
+                          {filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))) && (members || []).length > 0 && (
                               <RenderFilterSection label="包含成員" options={members} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
                           )}
                           <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
@@ -8125,6 +8135,9 @@ export default function App() {
                   const obj = (arr || []).find(x => String(x.id) === String(value));
                   const effectiveVal = (!c[type] || c[type] === 'null' || c[type] === 'undefined') ? 'null' : String(c[type]);
                   baseMatch = effectiveVal === String(value) || (obj && effectiveVal === String(obj.name));
+              } else if (type === 'memberId2') {
+                  const cardSubMembers = c.memberId2 || [];
+                  baseMatch = cardSubMembers.includes(String(value));
               } else {
                   baseMatch = String(c[type]) === String(value);
               }
@@ -8132,8 +8145,15 @@ export default function App() {
           })();
           
           if (isSelected && !wasInTarget) {
-              const newValue = value === 'null' ? null : value;
-              const newCard = { ...c, [type]: newValue };
+              let newCard;
+              if (type === 'memberId2') {
+                  const newArray = [...(c.memberId2 || [])];
+                  if (!newArray.includes(String(value))) newArray.push(String(value));
+                  newCard = { ...c, memberId2: newArray };
+              } else {
+                  const newValue = value === 'null' ? null : value;
+                  newCard = { ...c, [type]: newValue };
+              }
               if (type === 'seriesId' && categorizeSubBatchId) {
                   newCard.batchId = categorizeSubBatchId;
                   const targetBatch = nextBatches.find(b => String(b.id) === String(categorizeSubBatchId));
@@ -8154,7 +8174,13 @@ export default function App() {
               else cardsToUpdateDb.push(newCard);
               return newCard;
           } else if (!isSelected && wasInTarget) {
-              const newCard = { ...c, [type]: '' };
+              let newCard;
+              if (type === 'memberId2') {
+                  const newArray = (c.memberId2 || []).filter(id => id !== String(value));
+                  newCard = { ...c, memberId2: newArray };
+              } else {
+                  newCard = { ...c, [type]: '' };
+              }
               if (type === 'seriesId') {
                   newCard.batchId = ''; // 移出系列時，連同批次一併清空
               }
@@ -8187,6 +8213,9 @@ export default function App() {
               type: c.type || null,
               member_id: c.memberId || null
           };
+          if (type === 'memberId2') {
+              payload.member_id2 = c.memberId2;
+          }
           await supabase.from('ui_cards').update(payload).eq('id', c.id);
       }
 
