@@ -1568,7 +1568,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
             {activeModal === 'list' && (
                 <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
                     <div className="space-y-2">
-                        {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
+                        {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
                             <button 
                                 key={list.id}
                                 onClick={() => handleAddToList(list.id, prompt("備註文字"))}
@@ -2819,7 +2819,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
                         >
                             <option value="All">所有收藏冊</option>
-                            {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
+                            {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
                                 <option key={list.id} value={list.id}>{list.title}</option>
                             ))}
                         </select>
@@ -5967,6 +5967,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [exportEndRow, setExportEndRow] = useState(0); // 0 代表全部
     const [isHideMode, setIsHideMode] = useState(false);
     const [hiddenCardIds, setHiddenCardIds] = useState(new Set());
+    const [showExportLayout, setShowExportLayout] = useState(false);
     
     const [is4x6Mode, setIs4x6Mode] = useState(false);
     const [cardsPerPage, setCardsPerPage] = useState(8);
@@ -6225,6 +6226,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         setIsHideMode(false);
         setHiddenCardIds(new Set());
         setCustomExportTitle(null); // 🌟 切換視圖時重置標題
+        setShowExportLayout(false);
     }, [activeView]);
 
     // 從資料庫清單中讀取跨裝置的自訂排序
@@ -6440,17 +6442,19 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     // ==========================================
     const handleSaveList = async () => {
         if(listTitleInput.trim()) {
-            const payload = { title: listTitleInput.trim(), groupId: listGroupIdInput || currentGroupId };
+            let payload;
             if (editingListId) {
-                payload.id = editingListId;
-                setCustomLists((customLists || []).map(l => l.id === editingListId ? { ...l, ...payload } : l));
+                const existingList = (customLists || []).find(l => l.id === editingListId) || {};
+                payload = { 
+                    ...existingList,
+                    title: listTitleInput.trim(), 
+                    groupId: listGroupIdInput || currentGroupId 
+                };
+                setCustomLists((customLists || []).map(l => l.id === editingListId ? payload : l));
             } else {
                 const { data: { user } } = await supabase.auth.getUser();
-                payload.id = Date.now().toString(); // 🌟 復原為純數字，相容資料庫的 bigint 格式
-                payload.items = [];
-                if (user) {
-                    payload.userId = user.id;
-                }
+                payload = { id: Date.now().toString(), title: listTitleInput.trim(), groupId: listGroupIdInput || currentGroupId, items: [] };
+                if (user) payload.userId = user.id;
                 setCustomLists([...(customLists || []), payload]);
             }
             
@@ -6922,7 +6926,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                   <div className="no-export no-print mb-6 space-y-4 px-4 sm:px-8 mt-4 sm:mt-8 max-w-[1200px] mx-auto">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border shadow-sm gap-4 sm:gap-0">
                           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                              <button onClick={() => setActiveView(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+                              <button onClick={() => showExportLayout ? setShowExportLayout(false) : setActiveView(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
                                   <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                               </button>
                               <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{displayExportTitle}</h1>
@@ -6960,6 +6964,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
+                              {!showExportLayout && (
+                                  <button onClick={() => setShowExportLayout(true)} className="px-3 py-1.5 rounded-lg transition-all h-8 flex items-center justify-center bg-black text-white hover:bg-gray-800 text-xs font-bold whitespace-nowrap shadow-sm gap-1 ml-1">
+                                      <Share2 className="w-3 h-3" /> 輸出
+                                  </button>
+                              )}
                           </div>
                       </div>
 
@@ -6977,32 +6986,34 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
                           </div>
                           
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-4 border-t mt-2">
-                              <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">匯出範圍</span>
-                                  <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
-                                  <span className="text-xs font-bold text-gray-400">-</span>
-                                  <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
-                                  <span className="text-xs text-gray-500">排 (共 {maxRows} 排)</span>
-                              </div>
-                              
-                              <div className="hidden sm:block w-px h-6 bg-gray-200"></div>
-
-                              <div className="flex items-center gap-3">
-                                  <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
-                                  <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
-                                      <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer" />
-                                      <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6</label>
+                          {showExportLayout && (
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-4 border-t mt-2">
+                                  <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">匯出範圍</span>
+                                      <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
+                                      <span className="text-xs font-bold text-gray-400">-</span>
+                                      <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
+                                      <span className="text-xs text-gray-500">排 (共 {maxRows} 排)</span>
                                   </div>
-                                  {is4x6Mode && (
-                                      <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">
-                                          <span className="text-xs text-indigo-700 font-bold">每張</span>
-                                          <input type="number" min="1" max="50" value={cardsPerPage} onChange={e => setCardsPerPage(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-white border rounded text-xs font-bold p-1 outline-none focus:border-indigo-400 text-indigo-700" />
-                                          <span className="text-xs text-indigo-700 font-bold">卡片</span>
+                                  
+                                  <div className="hidden sm:block w-px h-6 bg-gray-200"></div>
+
+                                  <div className="flex items-center gap-3">
+                                      <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
+                                      <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
+                                          <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer" />
+                                          <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6</label>
                                       </div>
-                                  )}
+                                      {is4x6Mode && (
+                                          <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">
+                                              <span className="text-xs text-indigo-700 font-bold">每張</span>
+                                              <input type="number" min="1" max="50" value={cardsPerPage} onChange={e => setCardsPerPage(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-white border rounded text-xs font-bold p-1 outline-none focus:border-indigo-400 text-indigo-700" />
+                                              <span className="text-xs text-indigo-700 font-bold">卡片</span>
+                                          </div>
+                                      )}
+                                  </div>
                               </div>
-                          </div>
+                          )}
                       </div>
 
                       {isHideMode && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-bold rounded-lg text-center border border-red-100">隱藏模式：點擊卡片可將其從匯出圖片中隱藏 (已隱藏 {hiddenCardIds.size} 張)</div>}
@@ -7010,65 +7021,74 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                   </div>
 
                   {/* --- 匯出繪製區塊 --- */}
-                  {is4x6Mode ? (
-                      <div className="flex flex-col gap-6 sm:gap-10 pb-20 items-center px-4 sm:px-8 print:block print:p-0 print:m-0">
-                          {chunkedCards.map((chunk, i) => (
-                              <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: cols >= 4 ? '1200px' : '800px', aspectRatio: cols >= 4 ? '3/2' : '2/3' }}>
-                                  <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
-                                      <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-1 sm:gap-2 min-w-0">
-                                          <span 
-                                              contentEditable 
-                                              suppressContentEditableWarning 
-                                              onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
-                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                              className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text min-w-[50px]"
-                                              title="點擊直接修改標題"
-                                          >
-                                              {displayExportTitle}
-                                          </span>
-                                          <span className="whitespace-nowrap flex-shrink-0">({i+1}/{chunkedCards.length})</span>
-                                      </h1>
-                                      <div className="text-right flex-shrink-0 ml-2">
-                                          <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
-                                          <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                  {showExportLayout ? (
+                      is4x6Mode ? (
+                          <div className="flex flex-col gap-6 sm:gap-10 pb-20 items-center px-4 sm:px-8 print:block print:p-0 print:m-0">
+                              {chunkedCards.map((chunk, i) => (
+                                  <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: cols >= 4 ? '1200px' : '800px', aspectRatio: cols >= 4 ? '3/2' : '2/3' }}>
+                                      <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
+                                          <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-1 sm:gap-2 min-w-0">
+                                              <span 
+                                                  contentEditable 
+                                                  suppressContentEditableWarning 
+                                                  onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
+                                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                                  className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text min-w-[50px]"
+                                                  title="點擊直接修改標題"
+                                              >
+                                                  {displayExportTitle}
+                                              </span>
+                                              <span className="whitespace-nowrap flex-shrink-0">({i+1}/{chunkedCards.length})</span>
+                                          </h1>
+                                          <div className="text-right flex-shrink-0 ml-2">
+                                              <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
+                                              <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                                          </div>
                                       </div>
+                                      <CardGrid displayCards={chunk} />
                                   </div>
-                                  <CardGrid displayCards={chunk} />
-                              </div>
-                          ))}
-                          {chunkedCards.length === 0 && <div className="text-center py-20 text-gray-400 w-full">沒有符合條件的卡片</div>}
-                      </div>
-                  ) : (
-                      <div className="export-page bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative max-w-[1400px] mx-auto border-x border-gray-200/50">
-                          <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
-                              <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight min-w-0">
-                                  <span 
-                                      contentEditable 
-                                      suppressContentEditableWarning 
-                                      onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                      className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text inline-block min-w-[50px]"
-                                      title="點擊直接修改標題"
-                                  >
-                                      {displayExportTitle}
-                                  </span>
-                              </h1>
-                              <div className="text-right flex-shrink-0 ml-2">
-                                  <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
-                                  <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
-                              </div>
+                              ))}
+                              {chunkedCards.length === 0 && <div className="text-center py-20 text-gray-400 w-full">沒有符合條件的卡片</div>}
                           </div>
-                          <CardGrid displayCards={cardsToRender} />
+                      ) : (
+                          <div className="export-page bg-white p-4 sm:p-8 shadow-none min-h-screen w-full relative max-w-[1400px] mx-auto border-x border-gray-200/50">
+                              <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
+                                  <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight min-w-0">
+                                      <span 
+                                          contentEditable 
+                                          suppressContentEditableWarning 
+                                          onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                          className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text inline-block min-w-[50px]"
+                                          title="點擊直接修改標題"
+                                      >
+                                          {displayExportTitle}
+                                      </span>
+                                  </h1>
+                                  <div className="text-right flex-shrink-0 ml-2">
+                                      <div className="text-xs sm:text-sm font-bold text-gray-400">CardKeeper</div>
+                                      <div className="text-[10px] sm:text-xs text-gray-300">{new Date().toLocaleDateString()}</div>
+                                  </div>
+                              </div>
+                              <CardGrid displayCards={cardsToRender} />
+                              {displayCards.length === 0 && <div className="text-center py-20 text-gray-400 w-full">沒有符合條件的卡片</div>}
+                          </div>
+                      )
+                  ) : (
+                      <div className="max-w-[1200px] mx-auto px-4 sm:px-8 pb-20 w-full">
+                          <CardGrid displayCards={displayCards} />
                           {displayCards.length === 0 && <div className="text-center py-20 text-gray-400 w-full">沒有符合條件的卡片</div>}
                       </div>
                   )}
               </div>
 
-              <div className="fixed bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
-                  <button onClick={(e) => { e.preventDefault(); handleExportPNG(displayExportTitle); }} disabled={isExporting} className="bg-indigo-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
-                      <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出長圖'}
-                  </button>
-              </div>
+              {showExportLayout && (
+                  <div className="fixed bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
+                      <button onClick={(e) => { e.preventDefault(); handleExportPNG(displayExportTitle); }} disabled={isExporting} className="bg-indigo-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
+                          <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出長圖'}
+                      </button>
+                  </div>
+              )}
 
               {exportedImages.length > 0 && (
                   <Modal title="圖片已產生" onClose={() => setExportedImages([])} className="max-w-2xl" footer={
@@ -7163,7 +7183,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
           <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
                       <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
                            <div className="flex items-center gap-3 min-w-0">
                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
@@ -8714,7 +8734,7 @@ export default function App() {
       {activeModal === 'bulkList' && (
           <Modal title="批量加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
               <div className="space-y-2">
-                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
                       <button 
                           key={list.id}
                           onClick={async () => {
