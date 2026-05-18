@@ -1998,7 +1998,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         {currentMembers.some(m => String(m.id) === String(filterMemberId) && (m.name.includes('그룹') || m.name.includes('團體') || m.name.toLowerCase().includes('group'))) && currentMembers.length > 0 && (
             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar px-1 mt-1">
                 <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap bg-gray-100 px-2 py-1 rounded-md">包含成員</span>
-                {currentMembers.map(m => {
+                {displayMembers.map(m => {
                     const isSelected = filterSubMembers.includes(String(m.id));
                     return (
                         <FilterTagItem 
@@ -2910,7 +2910,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
             )}
             {filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))) && (members || []).length > 0 && (
-                <RenderFilterSection label="包含成員" options={members} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
+                <RenderFilterSection label="包含成員" options={(members || []).filter(m => String(m.groupId) === String(currentGroupId) && (filterSubunits.length === 0 || filterSubunits.includes(m.subunit))).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
             )}
             {availableTypes.length > 0 && (
                 <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
@@ -7094,7 +7094,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                           <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />
                           <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
                           {filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))) && (members || []).length > 0 && (
-                              <RenderFilterSection label="包含成員" options={members} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
+                              <RenderFilterSection label="包含成員" options={(members || []).filter(m => String(m.groupId) === String(currentGroupId) && (filterSubunits.length === 0 || filterSubunits.includes(m.subunit))).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
                           )}
                           <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
                           {activeView === 'selling' && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
@@ -8231,17 +8231,21 @@ export default function App() {
       }
       
       for(const c of cardsToUpdateDb) {
+          // 🌟 改用 upsert 完整覆寫，徹底解決後端 UPDATE API 可能忽略 member_id2 欄位的問題
           const payload = {
+              id: c.id,
+              group_id: c.groupId || null,
+              member_id: c.memberId || null,
               series_id: c.seriesId || null,
               batch_id: c.batchId || null,
-              channel: c.channel || null,
+              name: c.name || null,
               type: c.type || null,
-              member_id: c.memberId || null
+              channel: c.channel || null,
+              image: c.image || null,
+              is_wishlist: c.isWishlist || false,
+              member_id2: c.memberId2 || []
           };
-          if (type === 'memberId2') {
-              payload.member_id2 = c.memberId2;
-          }
-          await supabase.from('ui_cards').update(payload).eq('id', c.id);
+          await supabase.from('ui_cards').upsert(payload);
       }
 
       // 🌟 改為清空 selectedItems
