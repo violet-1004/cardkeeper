@@ -1027,7 +1027,7 @@ function SeriesFilterModal({
 
     return (
         <Modal title="系列與版本篩選" onClose={onClose} className="max-w-md">
-             <div className="p-2">
+             <div className="px-5 py-3 sm:px-6 sm:py-4">
                  <RenderList 
                     label="系列類型" 
                     options={seriesTypes} 
@@ -2294,13 +2294,19 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
   const [filterInvStatus, setFilterInvStatus] = useState('All');
   const [filterCustomList, setFilterCustomList] = useState('All');
   const [showColsSlider, setShowColsSlider] = useState(false);
+  const [showInvStatusPopup, setShowInvStatusPopup] = useState(false);
+  const [showCustomListPopup, setShowCustomListPopup] = useState(false);
 
   useEffect(() => {
-      if (!showColsSlider) return;
-      const handleClick = () => setShowColsSlider(false);
+      if (!showColsSlider && !showInvStatusPopup && !showCustomListPopup) return;
+      const handleClick = () => {
+          setShowColsSlider(false);
+          setShowInvStatusPopup(false);
+          setShowCustomListPopup(false);
+      };
       document.addEventListener('click', handleClick);
       return () => document.removeEventListener('click', handleClick);
-  }, [showColsSlider]);
+  }, [showColsSlider, showInvStatusPopup, showCustomListPopup]);
 
   const [isMarkMode, setIsMarkMode] = useState(false);
   const [cardMarks, setCardMarks] = useState(() => {
@@ -2740,14 +2746,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
                 const isSelected = current.includes(String(id));
                 return (
-                    <FilterTagItem 
+                    <button 
                         key={id}
-                        text={name}
-                        isSelected={isSelected}
                         onClick={() => onChange(String(id))}
-                        onLongPress={() => {}} 
-                        onDoubleClick={() => {}}
-                    />
+                        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    >
+                        {name}
+                    </button>
                 )
             })}
         </div>
@@ -2805,6 +2810,8 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                              onClick={(e) => {
                                  e.stopPropagation();
                                  setShowColsSlider(!showColsSlider);
+                                 setShowInvStatusPopup(false);
+                                 setShowCustomListPopup(false);
                              }}
                              className={`p-2 rounded-lg transition-all h-8 w-8 flex items-center justify-center flex-shrink-0 ${showColsSlider ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                              title="調整排數"
@@ -2849,48 +2856,84 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                     
                     <div className="relative flex items-center justify-center flex-shrink-0">
                         <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowInvStatusPopup(!showInvStatusPopup);
+                                setShowColsSlider(false);
+                                setShowCustomListPopup(false);
+                            }}
                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${
                                 filterInvStatus === '未發貨' ? 'bg-red-50 text-red-500' :
                                 filterInvStatus === '囤貨' ? 'bg-blue-50 text-blue-500' :
                                 filterInvStatus === '到貨' ? 'bg-green-50 text-green-500' :
                                 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                             }`}
-                            title="切換庫存狀態篩選"
+                            title="庫存狀態篩選"
                         >
                             <Package className="w-4 h-4" />
                         </button>
-                        <select
-                            value={filterInvStatus}
-                            onChange={(e) => setFilterInvStatus(e.target.value)}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
-                        >
-                            <option value="All">無篩選</option>
-                            <option value="未發貨">未發貨</option>
-                            <option value="囤貨">囤貨</option>
-                            <option value="到貨">到貨</option>
-                        </select>
+                        {showInvStatusPopup && (
+                            <div 
+                                className="absolute top-[calc(100%+8px)] right-0 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto bg-white p-2 rounded-xl shadow-xl border border-gray-100 z-50 flex items-center gap-2 animate-fade-in"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap ml-1">狀態</span>
+                                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                                    {['All', '未發貨', '囤貨', '到貨'].map(opt => (
+                                        <button
+                                            key={opt}
+                                            onClick={() => { setFilterInvStatus(opt); setShowInvStatusPopup(false); }}
+                                            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterInvStatus === opt ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                        >
+                                            {opt === 'All' ? '無篩選' : opt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* 🌟 新增的資料夾篩選按鈕 */}
                     <div className="relative flex items-center justify-center flex-shrink-0">
                         <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowCustomListPopup(!showCustomListPopup);
+                                setShowColsSlider(false);
+                                setShowInvStatusPopup(false);
+                            }}
                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${
                                 filterCustomList !== 'All' ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                             }`}
-                            title="切換收藏冊篩選"
+                            title="收藏冊篩選"
                         >
                             <Folder className="w-4 h-4" />
                         </button>
-                        <select
-                            value={filterCustomList}
-                            onChange={(e) => setFilterCustomList(e.target.value)}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
-                        >
-                            <option value="All">所有收藏冊</option>
-                            {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
-                                <option key={list.id} value={list.id}>{list.title}</option>
-                            ))}
-                        </select>
+                        {showCustomListPopup && (
+                            <div 
+                                className="absolute top-[calc(100%+8px)] right-0 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto bg-white p-2 rounded-xl shadow-xl border border-gray-100 z-50 flex items-center gap-2 animate-fade-in"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap ml-1">收藏冊</span>
+                                <div className="flex items-center gap-1.5 max-w-[250px] overflow-x-auto no-scrollbar">
+                                    <button
+                                        onClick={() => { setFilterCustomList('All'); setShowCustomListPopup(false); }}
+                                        className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === 'All' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                    >
+                                        全部
+                                    </button>
+                                    {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
+                                        <button
+                                            key={list.id}
+                                            onClick={() => { setFilterCustomList(list.id); setShowCustomListPopup(false); }}
+                                            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === list.id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                        >
+                                            {list.title}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
@@ -4544,7 +4587,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                 )}
                                 {detailLevel > 0 && (
                                     <div className="px-0.5 sm:px-1 bg-white pt-1 pb-1">
-                                        <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
+                                        <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 truncate">{memberName}</div>
                                         <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
                                         {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                                     </div>
