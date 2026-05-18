@@ -1,5 +1,5 @@
 git add .
-git commit -m "0518 雙人卡"
+git commit -m "0518 雙人卡-3"
 git push
 
 npx vercel --prod

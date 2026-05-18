@@ -1073,7 +1073,11 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
 
     const card = cards.find(c => String(c.id) === String(initialCard.id)) || initialCard;
 
-    const memberName = members.find(m => String(m.id) === String(card.memberId))?.name;
+    let memberName = members.find(m => String(m.id) === String(card.memberId))?.name;
+    const subMemberNames = (card.memberId2 || []).map(id => members.find(m => String(m.id) === String(id))?.name).filter(Boolean);
+    if (subMemberNames.length > 0) {
+        memberName = memberName ? `${memberName} · ${subMemberNames.join('\\')}` : subMemberNames.join('\\');
+    }
     const groupName = groups.find(g => String(g.id) === String(card.groupId))?.name;
     
     const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
@@ -2189,7 +2193,11 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const { arrived, unshipped, hoarded, total } = invStats;
                         const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
 
-                        const memberName = (members || []).find(m => String(m.id) === String(card.memberId))?.name;
+                        let memberName = (members || []).find(m => String(m.id) === String(card.memberId))?.name;
+                        const subMemberNames = (card.memberId2 || []).map(id => (members || []).find(m => String(m.id) === String(id))?.name).filter(Boolean);
+                        if (subMemberNames.length > 0) {
+                            memberName = memberName ? `${memberName} · ${subMemberNames.join('\\')}` : subMemberNames.join('\\');
+                        }
                         // 🌟 補回名稱顯示邏輯
                         const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                         const seriesName = cardSeries?.shortName || cardSeries?.name;
@@ -2946,7 +2954,11 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const isOwned = total > 0;
                 const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
                 
-                const memberName = memberMap[String(card.memberId)]?.name;
+                let memberName = memberMap[String(card.memberId)]?.name;
+                const subMemberNames = (card.memberId2 || []).map(id => memberMap[String(id)]?.name).filter(Boolean);
+                if (subMemberNames.length > 0) {
+                    memberName = memberName ? `${memberName} · ${subMemberNames.join('\\')}` : subMemberNames.join('\\');
+                }
                 const cardSeries = seriesMap[String(card.seriesId)];
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
                 const cardBatch = batchMap[String(card.batchId)];
@@ -4488,7 +4500,11 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                         const count = localItems.filter(i => String(i.cardId) === String(card.id)).length;
                         const isSelected = count > 0;
 
-                        const memberName = memberMap[String(card.memberId)]?.name;
+                        let memberName = memberMap[String(card.memberId)]?.name;
+                        const subMemberNames = (card.memberId2 || []).map(id => memberMap[String(id)]?.name).filter(Boolean);
+                        if (subMemberNames.length > 0) {
+                            memberName = memberName ? `${memberName} · ${subMemberNames.join('\\')}` : subMemberNames.join('\\');
+                        }
                         const cardSeries = seriesMap[String(card.seriesId)];
                         const seriesName = cardSeries?.shortName || cardSeries?.name;
                         const cardBatch = batchMap[String(card.batchId)];
@@ -6404,6 +6420,19 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             const safeString = (val) => val ? String(val) : '';
             const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
 
+            const getMSort = (c) => {
+                const m = memberMap[String(c.memberId)];
+                let sort = m ? safeNum(m.sortOrder, 999) : 999;
+                if (c.memberId2 && c.memberId2.length > 0) {
+                    const subSorts = c.memberId2.map(id => {
+                        const subM = memberMap[String(id)];
+                        return subM ? safeNum(subM.sortOrder, 999) : 999;
+                    });
+                    if (subSorts.length > 0) sort = Math.min(...subSorts);
+                }
+                return sort;
+            };
+
             const hasBatchA = !!cardA.batchId;
             const hasBatchB = !!cardB.batchId;
 
@@ -6426,10 +6455,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                 if (dateA_series !== dateB_series) return dateA_series - dateB_series;
                 const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
                 if (nameCompare !== 0) return nameCompare;
-                const mA = memberMap[String(cardA.memberId)];
-                const mB = memberMap[String(cardB.memberId)];
-                const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
-                const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+                const mSortA = getMSort(cardA);
+                const mSortB = getMSort(cardB);
                 if (mSortA !== mSortB) return mSortA - mSortB;
                 return safeString(cardA.id).localeCompare(safeString(cardB.id));
             }
@@ -6451,10 +6478,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
             if (nameCompare !== 0) return nameCompare;
 
-            const mA = memberMap[String(cardA.memberId)];
-            const mB = memberMap[String(cardB.memberId)];
-            const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
-            const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+            const mSortA = getMSort(cardA);
+            const mSortB = getMSort(cardB);
             if (mSortA !== mSortB) return mSortA - mSortB;
             return safeString(cardA.id).localeCompare(safeString(cardB.id));
         });
