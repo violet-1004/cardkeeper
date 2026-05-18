@@ -72,7 +72,8 @@ export const uiCards = sqliteTable("ui_cards", {
   type: text("type"),
   channel: text("channel"),
   image: text("image"),
-  is_wishlist: integer("is_wishlist") 
+  is_wishlist: integer("is_wishlist"),
+  member_id2: text('member_id2', { mode: 'json' }),
 });
 
 export const uiInventory = sqliteTable("ui_inventory", {
