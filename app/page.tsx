@@ -1619,6 +1619,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   }, [subunits, currentMembers, currentGroupId]);
 
   useEffect(() => {
+    setFilterSubunit('All'); // 🌟 切換團體時先重置，讓下方的 effect 自動選取新團體的第一個分隊
     setFilterMemberId('All');
     setFilterSeriesId('All');
     setFilterBatchId('All');
@@ -1630,8 +1631,9 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   useEffect(() => {
       if (uniqueSubunits.length > 0) {
           const isValid = uniqueSubunits.some(s => s.name === filterSubunit);
-          if (filterSubunit !== 'All' && !isValid) {
-              setFilterSubunit('All');
+          // 🌟 若尚未選擇分隊 (All) 或是所選分隊不存在，自動預設選取第一個分隊
+          if (filterSubunit === 'All' || !isValid) {
+              setFilterSubunit(uniqueSubunits[0].name);
           }
       } else {
           setFilterSubunit('All'); 
@@ -1730,7 +1732,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       if (filterSubunit !== 'All' && s.subunit !== filterSubunit) return false;
       if (filterSeriesType !== 'All' && s.type !== filterSeriesType) return false;
       return true;
-  }).sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
+  }).sort((a, b) => {
+      const parseTime = (d) => {
+          if (!d || d === 'null' || d === 'undefined') return 253402214400000; // 視為西元 9999 年 (最新)
+          const t = new Date(d).getTime();
+          return isNaN(t) ? 253402214400000 : t;
+      };
+      const timeDiff = parseTime(b.date) - parseTime(a.date);
+      if (timeDiff !== 0) return timeDiff;
+      return Number(b.id) - Number(a.id); // 相同日期或皆無日期時，新建立的優先
+  });
   
   const currentBatches = (batches || []).filter(b => {
       if (String(b.groupId) !== String(currentGroupId)) return false;
@@ -1760,9 +1771,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           return sortOrderA - sortOrderB;
       }
       
-      const dateA = a.date ? new Date(a.date).getTime() : 253402214400000;
-      const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
-      if (dateA !== dateB) return dateA - dateB;
+      const parseTime = (d) => {
+          if (!d || d === 'null' || d === 'undefined') return 0;
+          const t = new Date(d).getTime();
+          return isNaN(t) ? 0 : t;
+      };
+      const dateA = parseTime(a.date);
+      const dateB = parseTime(b.date);
+      if (dateA !== dateB) return dateB - dateA;
       
       const nameA = a.name || '';
       const nameB = b.name || '';
@@ -1810,8 +1826,14 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       // 1. 系列時間 (越舊越前)
       const sA = (series || []).find(s => String(s.id) === String(cardA.seriesId));
       const sB = (series || []).find(s => String(s.id) === String(cardB.seriesId));
-      const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
-      const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+      const parseTime = (d) => {
+          if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+          const t = new Date(d).getTime();
+          return isNaN(t) ? 253402214400000 : t;
+      };
+      
+      const dateA_series = parseTime(sA?.date);
+      const dateB_series = parseTime(sB?.date);
 
       if (!hasBatchA && !hasBatchB) {
           // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
@@ -1838,8 +1860,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       // 3. 批次時間 (越舊越前)
       const bA = (batches || []).find(b => String(b.id) === String(cardA.batchId));
       const bB = (batches || []).find(b => String(b.id) === String(cardB.batchId));
-      const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
-      const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+      const dateA_batch = parseTime(bA?.date);
+      const dateB_batch = parseTime(bB?.date);
       if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
 
       // 4. 批次名稱
@@ -2217,6 +2239,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
   const [detailLevel, setDetailLevel] = useState(2); // 2: all, 1: partial, 0: none
   const [hideSelling, setHideSelling] = useState(false);
   const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
+  const [filterInvStatus, setFilterInvStatus] = useState('All');
 
   const [isMarkMode, setIsMarkMode] = useState(false);
   const [cardMarks, setCardMarks] = useState(() => {
@@ -2426,7 +2449,16 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       if (filterSeriesType !== 'All') {
           filtered = filtered.filter(s => s.type === filterSeriesType);
       }
-      return filtered.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+      return filtered.sort((a, b) => {
+          const parseTime = (d) => {
+              if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+              const t = new Date(d).getTime();
+              return isNaN(t) ? 253402214400000 : t;
+          };
+          const timeDiff = parseTime(b.date) - parseTime(a.date);
+          if (timeDiff !== 0) return timeDiff;
+          return Number(b.id) - Number(a.id);
+      });
   }, [baseCards, series, filterSeriesType, filterSubunits]);
 
   const availableBatchesList = useMemo(() => {
@@ -2438,7 +2470,16 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       if (filterSeries.length > 0) {
           filtered = filtered.filter(b => filterSeries.includes(String(b.seriesId)));
       }
-      return filtered.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+      return filtered.sort((a, b) => {
+          const parseTime = (d) => {
+              if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+              const t = new Date(d).getTime();
+              return isNaN(t) ? 253402214400000 : t;
+          };
+          const timeDiff = parseTime(b.date) - parseTime(a.date);
+          if (timeDiff !== 0) return timeDiff;
+          return Number(b.id) - Number(a.id);
+      });
   }, [baseCards, batches, filterSeries, filterSubunits, series]);
 
   useEffect(() => {
@@ -2521,6 +2562,14 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
          if (!(inventoryMap[card.id]?.total > 0) && !(inventoryMap[String(card.id)]?.total > 0)) return false;
          if (hideSelling && (salesMap[card.id] || salesMap[String(card.id)])) return false;
      }
+     
+     // 🌟 庫存狀態篩選
+     if (filterInvStatus !== 'All') {
+         const stats = inventoryMap[card.id] || inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+         if (filterInvStatus === '未發貨' && stats.unshipped <= 0) return false;
+         if (filterInvStatus === '囤貨' && stats.hoarded <= 0) return false;
+         if (filterInvStatus === '到貨' && stats.arrived <= 0) return false;
+     }
      return true;
   }).sort((cardA, cardB) => {
       const safeString = (val) => val ? String(val) : '';
@@ -2535,8 +2584,14 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       // 1. 系列時間 (越舊越前)
       const sA = seriesMap[String(cardA.seriesId)];
       const sB = seriesMap[String(cardB.seriesId)];
-      const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
-      const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+      const parseTime = (d) => {
+          if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+          const t = new Date(d).getTime();
+          return isNaN(t) ? 253402214400000 : t;
+      };
+      
+      const dateA_series = parseTime(sA?.date);
+      const dateB_series = parseTime(sB?.date);
 
       if (!hasBatchA && !hasBatchB) {
           // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
@@ -2563,8 +2618,8 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       // 3. 批次時間 (越舊越前)
       const bA = batchMap[String(cardA.batchId)];
       const bB = batchMap[String(cardB.batchId)];
-      const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
-      const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+      const dateA_batch = parseTime(bA?.date);
+      const dateB_batch = parseTime(bB?.date);
       if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
 
       // 4. 批次名稱
@@ -2675,7 +2730,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                        onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
                        className="px-3 py-1 rounded-lg transition-all h-8 flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold whitespace-nowrap"
                    >
-                       {sortDirection === 'asc' ? '舊到新' : '新到舊'}
+                       {sortDirection === 'asc' ? '舊' : '新'}
                    </button>
 
                     <button
@@ -2687,6 +2742,30 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                         {detailLevel === 1 && <Eye className="w-4 h-4 opacity-50" />}
                         {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
                     </button>
+                    
+                    <div className="relative flex items-center justify-center flex-shrink-0">
+                        <button
+                            className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${
+                                filterInvStatus === '未發貨' ? 'bg-red-50 text-red-500' :
+                                filterInvStatus === '囤貨' ? 'bg-blue-50 text-blue-500' :
+                                filterInvStatus === '到貨' ? 'bg-green-50 text-green-500' :
+                                'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                            }`}
+                            title="切換庫存狀態篩選"
+                        >
+                            <Package className="w-4 h-4" />
+                        </button>
+                        <select
+                            value={filterInvStatus}
+                            onChange={(e) => setFilterInvStatus(e.target.value)}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
+                        >
+                            <option value="All">無篩選</option>
+                            <option value="未發貨">未發貨</option>
+                            <option value="囤貨">囤貨</option>
+                            <option value="到貨">到貨</option>
+                        </select>
+                    </div>
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
                     <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
@@ -3188,11 +3267,16 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
         if (filterBatchSubunit !== 'All') list = list.filter(s => s.subunit === filterBatchSubunit);
         if (filterBatchSeriesType !== 'All') list = list.filter(s => s.type === filterBatchSeriesType);
         
-        // 🌟 使用 getTime() 確保在所有瀏覽器環境 (含 Safari/iOS) 都能正確比較日期
+        // 🌟 使用 getTime() 確保在所有瀏覽器環境 (含 Safari/iOS) 都能正確比較日期，並改為新到舊
         return list.sort((a, b) => {
-            const dateA = a.date ? new Date(a.date).getTime() : 253402214400000; // 如果沒日期放到最後
-            const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
-            return dateA - dateB;
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
         });
     }, [series, filterBatchSeriesType, filterBatchSubunit]);
 
@@ -3217,9 +3301,14 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                 return sortOrderA - sortOrderB;
             }
             
-            const dateA = a.date ? new Date(a.date).getTime() : 253402214400000;
-            const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
-            if (dateA !== dateB) return dateA - dateB;
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 0;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 0 : t;
+            };
+            const dateA = parseTime(a.date);
+            const dateB = parseTime(b.date);
+            if (dateA !== dateB) return dateB - dateA; // 新到舊
             const nameA = a.name || '';
             const nameB = b.name || '';
             return nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
@@ -3265,7 +3354,16 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                 }
             });
         });
-        return (series || []).filter(s => seriesIds.has(String(s.id)));
+        return (series || []).filter(s => seriesIds.has(String(s.id))).sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
     }, [setRecords, cards, series]);
 
     const filteredRecords = useMemo(() => {
@@ -3349,7 +3447,16 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                 image: s?.image,
                 stats: albumInventory[albumId]
             };
-        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+        }).sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
     }, [albumInventory, series]);
 
     // 🌟 確保專輯詳情頁面的資料與庫存同步 (當刪除庫存時，強制更新 viewingAlbum)
@@ -3965,7 +4072,16 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             filtered = filtered.filter(s => s.subunit === filterSubunit);
         }
         if (filterSeriesType !== 'All') filtered = filtered.filter(s => s.type === filterSeriesType);
-        return filtered.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+        return filtered.sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
     }, [cards, series, filterSeriesType, filterSubunit]);
 
     const availableBatchesList = useMemo(() => {
@@ -3975,7 +4091,16 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
              filtered = filtered.filter(b => validSeriesIds.has(String(b.seriesId)));
         }
         if (filterSeries.length > 0) filtered = filtered.filter(b => filterSeries.includes(String(b.seriesId)));
-        return filtered.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+        return filtered.sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
     }, [cards, batches, filterSeries, filterSubunit, series]);
 
     // 🌟 3. 連動篩選重置邏輯 (與 CollectionTab 一致)
@@ -4071,8 +4196,14 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             // 1. 系列時間 (越舊越前)
             const sA = seriesMap[String(cardA.seriesId)];
             const sB = seriesMap[String(cardB.seriesId)];
-            const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
-            const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            
+            const dateA_series = parseTime(sA?.date);
+            const dateB_series = parseTime(sB?.date);
 
             if (!hasBatchA && !hasBatchB) {
                 // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
@@ -4099,8 +4230,8 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             // 3. 批次時間 (越舊越前)
             const bA = batchMap[String(cardA.batchId)];
             const bB = batchMap[String(cardB.batchId)];
-            const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
-            const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+            const dateA_batch = parseTime(bA?.date);
+            const dateB_batch = parseTime(bB?.date);
             if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
 
             // 4. 批次名稱
@@ -5236,8 +5367,17 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
       if (filterSeriesType !== 'All') {
           list = list.filter(s => s.type === filterSeriesType);
       }
-      // 依日期排序，方便查找
-      return list.sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
+      // 依日期排序 (新到舊)，方便查找
+      return list.sort((a, b) => {
+          const parseTime = (d) => {
+              if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+              const t = new Date(d).getTime();
+              return isNaN(t) ? 253402214400000 : t;
+          };
+          const timeDiff = parseTime(b.date) - parseTime(a.date);
+          if (timeDiff !== 0) return timeDiff;
+          return Number(b.id) - Number(a.id);
+      });
   }, [extraOptions.series, filterSeriesType]);
 
   const handleDuplicate = () => {
@@ -5468,7 +5608,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                </div>
                <FormCapsuleSelect 
                 label="所屬系列"
-                options={extraOptions.series || []}
+                options={filteredSeries} // 🌟 改用排序過的陣列
                 value={form.seriesId}
                 onChange={val => setForm({...form, seriesId: val})}
                 renderOption={s => s.name}
@@ -5953,7 +6093,16 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         if (filterSeriesType !== 'All') {
             filtered = filtered.filter(s => s.type === filterSeriesType);
         }
-        return filtered.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+        return filtered.sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
     }, [poolCards, series, filterSeriesType, filterSubunits]);
 
     const availableBatchesList = useMemo(() => {
@@ -5965,7 +6114,16 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         if (filterSeries.length > 0) {
             filtered = filtered.filter(b => filterSeries.includes(String(b.seriesId)));
         }
-        return filtered.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+        return filtered.sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
     }, [poolCards, batches, filterSeries, filterSubunits, series]);
 
     useEffect(() => {
@@ -6101,8 +6259,14 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 
             const sA = seriesMap[String(cardA.seriesId)];
             const sB = seriesMap[String(cardB.seriesId)];
-            const dateA_series = sA?.date ? new Date(sA.date).getTime() : 253402214400000;
-            const dateB_series = sB?.date ? new Date(sB.date).getTime() : 253402214400000;
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            
+            const dateA_series = parseTime(sA?.date);
+            const dateB_series = parseTime(sB?.date);
 
             if (!hasBatchA && !hasBatchB) {
                 // 🌟 無批次排序：系列時間 -> 小卡名稱 -> 成員順序
@@ -6126,8 +6290,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             if (sortA_type !== sortB_type) return sortA_type - sortB_type;
             const bA = batchMap[String(cardA.batchId)];
             const bB = batchMap[String(cardB.batchId)];
-            const dateA_batch = bA?.date ? new Date(bA.date).getTime() : 253402214400000;
-            const dateB_batch = bB?.date ? new Date(bB.date).getTime() : 253402214400000;
+            const dateA_batch = parseTime(bA?.date);
+            const dateB_batch = parseTime(bB?.date);
             if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
             const nameA = safeString(bA?.name);
             const nameB = safeString(bB?.name);
@@ -6722,7 +6886,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                   onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
                                   className="px-3 py-1 rounded-lg transition-all h-8 flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold whitespace-nowrap"
                               >
-                                  {sortDirection === 'asc' ? '舊到新' : '新到舊'}
+                                  {sortDirection === 'asc' ? '舊' : '新'}
                               </button>
                               {typeof activeView === 'object' && activeView.id && !String(activeView.id).startsWith('sys_sort_') && (
                                   <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 shadow-sm border border-indigo-100">

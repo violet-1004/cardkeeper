@@ -1,5 +1,5 @@
 git add .
-git commit -m "0517 API修正-12"
+git commit -m "0518 修正篩選"
 git push
 
 npx vercel --prod
