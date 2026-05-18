@@ -1568,7 +1568,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
             {activeModal === 'list' && (
                 <Modal title="加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
                     <div className="space-y-2">
-                        {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
+                        {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
                             <button 
                                 key={list.id}
                                 onClick={() => handleAddToList(list.id, prompt("備註文字"))}
@@ -1594,6 +1594,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   const [filterType, setFilterType] = useState('All');
   const [filterChannel, setFilterChannel] = useState('All');
   
+  const [filterSubMembers, setFilterSubMembers] = useState([]);
+
   const [editingOption, setEditingOption] = useState(null);
 
   const currentMembers = (members || []).filter(m => String(m.groupId) === String(currentGroupId));
@@ -1626,6 +1628,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
     setFilterType('All');
     setFilterChannel('All');
     setFilterSeriesType('All');
+    setFilterSubMembers([]);
   }, [currentGroupId]);
 
   useEffect(() => {
@@ -1639,6 +1642,10 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
           setFilterSubunit('All'); 
       }
   }, [uniqueSubunits, filterSubunit]);
+
+  useEffect(() => {
+      setFilterSubMembers([]);
+  }, [filterMemberId]);
 
   // 🌟 核心選取邏輯：支援完美切換 (點擊已選取則取消，點擊未選取則加入)
   const handleSelectAdd = (cardId) => {
@@ -1793,7 +1800,16 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         if (!mem || mem.subunit !== filterSubunit) return false;
     }
     
-    if (filterMemberId !== 'All' && String(card.memberId) !== String(filterMemberId)) return false;
+    if (filterMemberId !== 'All') {
+        if (String(card.memberId) !== String(filterMemberId)) return false;
+        
+        if (filterMemberId === 'null' && filterSubMembers.length > 0) {
+            const cardSubMembers = card.memberId2 || [];
+            if (cardSubMembers.length === 0) return false;
+            const hasMatchingMember = filterSubMembers.some(id => cardSubMembers.includes(String(id)));
+            if (!hasMatchingMember) return false;
+        }
+    }
     if (filterSeriesId !== 'All' && String(card.seriesId) !== String(filterSeriesId)) return false;
     if (filterSeriesType !== 'All' && filterSeriesId === 'All') {
         const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
@@ -1955,14 +1971,12 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                 onDoubleClick={() => openModal('member', m)}
              />
            ))}
-           {hasUnassignedCards && (
-             <MemberItem 
-                member={{ id: 'null', name: '全體/無成員', image: '' }} 
-                isSelected={filterMemberId === 'null'}
-                onClick={() => setFilterMemberId(filterMemberId === 'null' ? 'All' : 'null')}
-                onLongPress={() => handleLongPress('memberId', 'null', '全體/無成員')}
-             />
-           )}
+           <MemberItem 
+              member={{ id: 'null', name: '團體/無成員', image: '' }} 
+              isSelected={filterMemberId === 'null'}
+              onClick={() => setFilterMemberId(filterMemberId === 'null' ? 'All' : 'null')}
+              onLongPress={() => handleLongPress('memberId', 'null', '團體/無成員')}
+           />
            <button onClick={() => openModal('member', { subunit: filterSubunit !== 'All' ? filterSubunit : '' })} className="flex flex-col items-center gap-1 min-w-[64px] group">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 group-hover:bg-indigo-50 group-hover:border-indigo-300 transition-colors">
                 <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500" />
@@ -1970,6 +1984,25 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
               <span className="text-xs text-gray-400">新增成員</span>
            </button>
         </div>
+        {filterMemberId === 'null' && currentMembers.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar px-1 mt-1">
+                <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap bg-gray-100 px-2 py-1 rounded-md">包含成員</span>
+                {currentMembers.map(m => {
+                    const isSelected = filterSubMembers.includes(String(m.id));
+                    return (
+                        <button 
+                            key={m.id}
+                            onClick={() => {
+                                setFilterSubMembers(prev => prev.includes(String(m.id)) ? prev.filter(id => id !== String(m.id)) : [...prev, String(m.id)]);
+                            }}
+                            className={`px-3 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 font-bold' : 'bg-white text-gray-600 border-gray-200'}`}
+                        >
+                            {m.name}
+                        </button>
+                    );
+                })}
+            </div>
+        )}
       </section>
 
       <section>
@@ -2296,6 +2329,11 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
   const [filterTypes, setFilterTypes] = useState([]);
   const [filterChannels, setFilterChannels] = useState([]);
 
+  const [filterSubMembers, setFilterSubMembers] = useState([]);
+  useEffect(() => {
+      setFilterSubMembers([]);
+  }, [filterMembers]);
+
   const [showSeriesModal, setShowSeriesModal] = useState(false);
   const [filterSeriesType, setFilterSeriesType] = useState('All');
   const [filterSeries, setFilterSeries] = useState([]);
@@ -2359,7 +2397,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
 
   const cardToListsMap = useMemo(() => {
       const map = {};
-      (customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === String(currentGroupId))).forEach(list => {
+      (customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).forEach(list => {
           (list.items || []).forEach(item => {
               const cardId = String(item.cardId);
               if (!map[cardId]) {
@@ -2417,7 +2455,9 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
 
   const availableMembers = useMemo(() => {
       const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
-      return (members || []).filter(m => ids.has(String(m.id)));
+      const mems = (members || []).filter(m => ids.has(String(m.id)));
+      if (ids.has('null')) mems.push({ id: 'null', name: '團體/無成員', sortOrder: -1 });
+      return mems.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
   }, [subunitFilteredCards, members]);
 
   const availableTypes = useMemo(() => {
@@ -2547,7 +2587,15 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
              if (!belongsToSubunit) return false;
          }
 
-         if (filterMembers.length > 0 && !filterMembers.includes(String(card.memberId))) return false;
+         if (filterMembers.length > 0) {
+             if (!filterMembers.includes(String(card.memberId))) return false;
+             if (String(card.memberId) === 'null' && filterSubMembers.length > 0) {
+                 const cardSubMembers = card.memberId2 || [];
+                 if (cardSubMembers.length === 0) return false;
+                 const hasMatchingMember = filterSubMembers.some(id => cardSubMembers.includes(String(id)));
+                 if (!hasMatchingMember) return false;
+             }
+         }
          if (filterSeries.length > 0 && !filterSeries.includes(String(card.seriesId))) return false;
          
          if (filterSeriesType !== 'All' && filterSeries.length === 0) {
@@ -2819,7 +2867,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
                         >
                             <option value="All">所有收藏冊</option>
-                            {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
+                            {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
                                 <option key={list.id} value={list.id}>{list.title}</option>
                             ))}
                         </select>
@@ -2840,6 +2888,9 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
             )}
             {availableMembers.length > 0 && (
                 <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
+            )}
+            {filterMembers.includes('null') && (members || []).length > 0 && (
+                <RenderFilterSection label="包含成員" options={members} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
             )}
             {availableTypes.length > 0 && (
                 <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
@@ -5401,7 +5452,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
   const [form, setForm] = useState({ 
     name: '', shortName: '', batchNumber: '', image: null, type: '', date: '', 
     seriesId: '', batchId: '', memberId: '', channel: '', memberIds: [], 
-    sortOrder: 0, api: '', // 🌟 補上這個
+    sortOrder: 0, api: '', memberId2: [],
     ...initialData,
     // 🌟 強制修正日期格式，避免 ISO String 導致 input date 顯示空白
     date: initialData.date ? String(initialData.date).split('T')[0] : ''
@@ -5712,6 +5763,20 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                 )}
              />
 
+             <FormCapsuleSelect 
+                label="包含成員 (多人卡/團體卡適用)"
+                options={extraOptions.members || []}
+                value={form.memberId2 || []}
+                onChange={val => setForm({...form, memberId2: val})}
+                multiple={true}
+                renderOption={m => (
+                  <>
+                    {m.image && <img src={m.image} className="w-4 h-4 rounded-full object-cover" />}
+                    {m.name}
+                  </>
+                )}
+             />
+
              {/* 🌟 新增：系列類型篩選 */}
              <FormCapsuleSelect 
                 label="系列類型篩選"
@@ -6004,6 +6069,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [filterTypes, setFilterTypes] = useState([]);
     const [filterColors, setFilterColors] = useState([]);
 
+    const [filterSubMembers, setFilterSubMembers] = useState([]);
+    useEffect(() => {
+        setFilterSubMembers([]);
+    }, [filterMembers]);
+
     const [showSeriesModal, setShowSeriesModal] = useState(false);
     const [filterSeriesType, setFilterSeriesType] = useState('All');
     const [filterSeries, setFilterSeries] = useState([]);
@@ -6113,7 +6183,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 
     const availableMembers = useMemo(() => {
         const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
-        return (members || []).filter(m => ids.has(String(m.id)));
+        const mems = (members || []).filter(m => ids.has(String(m.id)));
+        if (ids.has('null')) mems.push({ id: 'null', name: '團體/無成員', sortOrder: -1 });
+        return mems.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
     }, [subunitFilteredCards, members]);
 
     const availableTypes = useMemo(() => {
@@ -6272,7 +6344,15 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 
     const getDisplayCards = () => {
         const filtered = subunitFilteredCards.filter(c => {
-            if (filterMembers.length > 0 && !filterMembers.includes(String(c.memberId))) return false;
+            if (filterMembers.length > 0) {
+                if (!filterMembers.includes(String(c.memberId))) return false;
+                if (String(c.memberId) === 'null' && filterSubMembers.length > 0) {
+                    const cardSubMembers = c.memberId2 || [];
+                    if (cardSubMembers.length === 0) return false;
+                    const hasMatchingMember = filterSubMembers.some(id => cardSubMembers.includes(String(id)));
+                    if (!hasMatchingMember) return false;
+                }
+            }
             if (filterTypes.length > 0) {
                 const typeValue = String(c.type);
                 const typeObj = typeMap[typeValue];
@@ -6975,6 +7055,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       <div className="space-y-3 p-4 bg-white rounded-xl border shadow-sm">
                           <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />
                           <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />
+                          {filterMembers.includes('null') && (members || []).length > 0 && (
+                              <RenderFilterSection label="包含成員" options={members} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
+                          )}
                           <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
                           {activeView === 'selling' && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
                           <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group mt-2">
@@ -7183,7 +7266,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
           <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
                       <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
                            <div className="flex items-center gap-3 min-w-0">
                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
@@ -7409,6 +7492,10 @@ export default function App() {
                     }
                     if (typeof item.memberIds === 'string') {
                         try { item.memberIds = JSON.parse(item.memberIds) || []; } catch(e) { item.memberIds = []; }
+                    }
+                    // 🌟 處理 memberId2
+                    if (typeof item.memberId2 === 'string') {
+                        try { item.memberId2 = JSON.parse(item.memberId2) || []; } catch(e) { item.memberId2 = []; }
                     }
                     
                     // 🌟 修正：清除資料庫中錯誤儲存的字串 'null' 或 'undefined'，避免 UI 產生 null 標籤
@@ -7664,7 +7751,7 @@ export default function App() {
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
-          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist'],
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2'],
           subunit: ['id', 'groupId', 'name', 'sortOrder', 'user_id']
       };
 
@@ -8734,7 +8821,7 @@ export default function App() {
       {activeModal === 'bulkList' && (
           <Modal title="批量加入收藏冊" onClose={() => setActiveModal(null)} className="max-w-sm">
               <div className="space-y-2">
-                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && String(l.groupId) === String(currentGroupId)).map(list => (
+                  {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
                       <button 
                           key={list.id}
                           onClick={async () => {
