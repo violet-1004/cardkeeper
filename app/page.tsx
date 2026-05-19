@@ -1056,7 +1056,7 @@ function SeriesFilterModal({
     );
 }
 
-function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords, pocaCards }) {
+function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords }) {
     const [activeModal, setActiveModal] = useState(null); 
     const [tempInvData, setTempInvData] = useState(null);
     const saleFocusRef = useRef(null);
@@ -1095,8 +1095,6 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
     const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
     const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
-
-    const pocaData = (pocaCards || []).find(p => String(p.id) === String(card.pocoId));
 
     const myInventory = (inventory || [])
         .filter(i => String(i.cardId) === String(card.id))
@@ -1372,13 +1370,6 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     <TrendingUp className="w-4 h-4" />
                                 </div>
                                 <div className="font-bold text-gray-800 text-sm">販售</div>
-                                {pocaData && (
-                                    <div className="ml-2 flex items-center gap-2 bg-gray-100 px-2 py-0.5 rounded-lg text-[10px] text-gray-700 font-bold border border-gray-200">
-                                        <span className="text-indigo-600">POCA 售價: ${pocaData.price}</span>
-                                        <span className="w-px h-3 bg-gray-300"></span>
-                                        <span className="text-green-600">庫存: {pocaData.stocked_count} 張</span>
-                                    </div>
-                                )}
                             </div>
                             <div className="flex gap-1.5">
                                 {SALE_COLORS.map(c => (
@@ -2283,7 +2274,6 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                 {/* 🌟 顯示名稱 (與收藏頁籤一致) */}
                                 <div className="px-0.5 sm:px-1">
                                     <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5">{memberName}</div>
-                                    <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 truncate whitespace-nowrap">{memberName}</div>
                                     <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
                                     {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
                                 </div>
@@ -2306,7 +2296,6 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
   const [showColsSlider, setShowColsSlider] = useState(false);
   const [showInvStatusPopup, setShowInvStatusPopup] = useState(false);
   const [showCustomListPopup, setShowCustomListPopup] = useState(false);
-  const [showMobileSettings, setShowMobileSettings] = useState(false);
 
   useEffect(() => {
       if (!showColsSlider && !showInvStatusPopup && !showCustomListPopup) return;
@@ -2783,58 +2772,6 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                     {percentage}% ({ownedCount}/{totalCount})
                 </span>
             </h2>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-1 sm:px-2 gap-3">
-            <div className="flex items-center justify-between w-full sm:w-auto sm:justify-start sm:gap-4">
-                <h2 className="font-bold text-lg sm:text-xl flex items-center gap-2">
-                    我的收藏櫃 
-                    <span className="text-xs sm:text-sm font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                        {percentage}% ({ownedCount}/{totalCount})
-                    </span>
-                </h2>
-                <div className="hidden sm:flex items-center gap-2">
-                    <button
-                         onClick={() => { setIsMarkMode(!isMarkMode); }}
-                         className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${isMarkMode ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-                         title="標記模式 (點擊+1，長按或右鍵-1)"
-                     >
-                         <PenTool className="w-4 h-4" />
-                     </button>
-                     <button
-                        onClick={() => setDetailLevel(prev => (prev + 2) % 3)}
-                        className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${detailLevel > 0 ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
-                        title={detailLevel === 2 ? "顯示部分資訊" : detailLevel === 1 ? "隱藏所有資訊" : "顯示完整資訊"}
-                    >
-                        {detailLevel === 2 && <Eye className="w-4 h-4" />}
-                        {detailLevel === 1 && <Eye className="w-4 h-4 opacity-50" />}
-                        {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
-                    </button>
-                    <button 
-                       onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
-                       className="w-8 h-8 rounded-lg transition-all flex items-center justify-center flex-shrink-0 bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold"
-                   >
-                       {sortDirection === 'asc' ? 'O' : 'N'}
-                   </button>
-                   <div className="relative flex items-center justify-center flex-shrink-0">
-                         <button
-                             onClick={(e) => { e.stopPropagation(); setShowColsSlider(!showColsSlider); setShowInvStatusPopup(false); setShowCustomListPopup(false); }}
-                             className={`p-2 rounded-lg transition-all h-8 w-8 flex items-center justify-center flex-shrink-0 ${showColsSlider ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                             title="調整排數"
-                         >
-                             <Grid className="w-4 h-4" />
-                         </button>
-                         {showColsSlider && (
-                             <div 
-                                 className="absolute top-[calc(100%+8px)] right-0 bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-50 flex items-center gap-3 animate-fade-in"
-                                 onClick={(e) => e.stopPropagation()}
-                             >
-                                 <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排數</span>
-                                 <input type="range" min="1" max="15" value={cols} onChange={(e) => setCols(Number(e.target.value))} className="w-24 sm:w-32 accent-indigo-600 cursor-pointer" />
-                                 <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
-                             </div>
-                         )}
-                     </div>
-                </div>
-            </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                  <div className="flex items-center gap-2">
                      {viewMode === 'owned' && (
@@ -2861,7 +2798,6 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                              onClick={() => {
                                  if (confirm('確定要清除所有標記嗎？')) setCardMarks({});
                              }}
-                             onClick={() => { if (confirm('確定要清除所有標記嗎？')) setCardMarks({}); }}
                              className="p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 bg-red-50 text-red-500 hover:bg-red-100 shadow-sm"
                              title="清除所有標記"
                          >
@@ -2903,9 +2839,9 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
 
                    <button 
                        onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
-                       className="w-8 h-8 rounded-lg transition-all flex items-center justify-center flex-shrink-0 bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold"
+                       className="px-3 py-1 rounded-lg transition-all h-8 flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold whitespace-nowrap"
                    >
-                       {sortDirection === 'asc' ? 'O' : 'N'}
+                       {sortDirection === 'asc' ? '舊' : '新'}
                    </button>
 
                     <button
@@ -2999,69 +2935,6 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             </div>
                         )}
                     </div>
-                    <div className="relative sm:hidden">
-                        <button onClick={() => setShowMobileSettings(prev => !prev)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${showMobileSettings ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
-                            <Settings className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-                {showMobileSettings && (
-                    <div className="sm:hidden flex items-center gap-2 bg-gray-50 p-2 rounded-lg border -mt-1">
-                        <button
-                             onClick={() => { setIsMarkMode(!isMarkMode); }}
-                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${isMarkMode ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-                             title="標記模式 (點擊+1，長按或右鍵-1)"
-                         >
-                             <PenTool className="w-4 h-4" />
-                         </button>
-                         <button
-                            onClick={() => setDetailLevel(prev => (prev + 2) % 3)}
-                            className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${detailLevel > 0 ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}
-                            title={detailLevel === 2 ? "顯示部分資訊" : detailLevel === 1 ? "隱藏所有資訊" : "顯示完整資訊"}
-                        >
-                            {detailLevel === 2 && <Eye className="w-4 h-4" />}
-                            {detailLevel === 1 && <Eye className="w-4 h-4 opacity-50" />}
-                            {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
-                        </button>
-                        <button 
-                           onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
-                           className="w-8 h-8 rounded-lg transition-all flex items-center justify-center flex-shrink-0 bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold"
-                       >
-                           {sortDirection === 'asc' ? 'O' : 'N'}
-                       </button>
-                       <div className="relative flex items-center justify-center flex-shrink-0">
-                         <button
-                             onClick={(e) => {
-                                 e.stopPropagation();
-                                 setShowColsSlider(!showColsSlider);
-                                 setShowInvStatusPopup(false);
-                                 setShowCustomListPopup(false);
-                             }}
-                             className={`p-2 rounded-lg transition-all h-8 w-8 flex items-center justify-center flex-shrink-0 ${showColsSlider ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                             title="調整排數"
-                         >
-                             <Grid className="w-4 h-4" />
-                         </button>
-                         {showColsSlider && (
-                             <div 
-                                 className="absolute top-[calc(100%+8px)] right-0 bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-50 flex items-center gap-3 animate-fade-in"
-                                 onClick={(e) => e.stopPropagation()}
-                             >
-                                 <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排數</span>
-                                 <input 
-                                     type="range" 
-                                     min="1" 
-                                     max="15" 
-                                     value={cols} 
-                                     onChange={(e) => setCols(Number(e.target.value))} 
-                                     className="w-24 sm:w-32 accent-indigo-600 cursor-pointer"
-                                 />
-                                 <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
-                             </div>
-                         )}
-                     </div>
-                    </div>
-                )}
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center w-full sm:w-auto justify-between sm:justify-start">
                     <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
@@ -3216,7 +3089,6 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             <div className="px-0.5 sm:px-1">
                             <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 flex items-center gap-1 flex-wrap">
                                 <span>{memberName}</span>
-                                <span className="truncate">{memberName}</span>
                                 {detailLevel === 2 && cardToListsMap[String(card.id)] && (
                                     <span className="text-indigo-500 bg-indigo-50 px-1 rounded truncate font-medium normal-case">
                                         {cardToListsMap[String(card.id)].join(', ')}
@@ -7243,9 +7115,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               </div>
                               <button 
                                   onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
-                                  className="w-8 h-8 rounded-lg transition-all flex items-center justify-center flex-shrink-0 bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold"
+                                  className="px-3 py-1 rounded-lg transition-all h-8 flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-bold whitespace-nowrap"
                               >
-                                  {sortDirection === 'asc' ? 'O' : 'N'}
+                                  {sortDirection === 'asc' ? '舊' : '新'}
                               </button>
                               {typeof activeView === 'object' && activeView.id && !String(activeView.id).startsWith('sys_sort_') && (
                                   <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 shadow-sm border border-indigo-100">
@@ -7545,150 +7417,6 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
-// --- 6. 同步管理元件 ---
-function SyncTab({ currentGroupId, cards, pocaCards, members, series, batches, channels, types, subunits, onSyncData, onBindPoca }) {
-    const [subTab, setSubTab] = useState('crawler'); // 'crawler' | 'poca'
-
-    return (
-        <div className="space-y-6 pb-24">
-            <div className="px-2 space-y-2">
-                <div className="bg-gray-100 p-1 rounded-lg flex items-center w-fit">
-                    <button onClick={() => setSubTab('crawler')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${subTab === 'crawler' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>批次抓取設定</button>
-                    <button onClick={() => setSubTab('poca')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${subTab === 'poca' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>POCA對照設定</button>
-                </div>
-            </div>
-
-            {subTab === 'crawler' ? (
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm mx-2">
-                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><RefreshCw className="w-5 h-5 text-indigo-600" /> 資料同步管理</h3>
-                    <button onClick={onSyncData} className="bg-indigo-600 text-white px-6 py-2.5 rounded-full font-bold shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2">
-                        <RefreshCw className="w-4 h-4" /> 執行一般資料同步
-                    </button>
-                </div>
-            ) : (
-                <PocaMatchView 
-                    currentGroupId={currentGroupId}
-                    cards={cards} 
-                    pocaCards={pocaCards} 
-                    members={members} 
-                    series={series} 
-                    batches={batches} 
-                    channels={channels} 
-                    types={types} 
-                    subunits={subunits}
-                    onBindPoca={onBindPoca}
-                />
-            )}
-        </div>
-    );
-}
-
-function PocaMatchView({ currentGroupId, cards, pocaCards, members, series, batches, channels, types, subunits, onBindPoca }) {
-    const [selectedPoca, setSelectedPoca] = useState(null);
-    const [filterMember, setFilterMember] = useState('All');
-    const [filterSeries, setFilterSeries] = useState('All');
-
-    const unmappedPocaCards = (pocaCards || []).filter(p => !(cards || []).some(c => String(c.pocoId) === String(p.id)));
-
-    const filteredDbCards = (cards || []).filter(c => {
-        if (filterMember !== 'All' && String(c.memberId) !== String(filterMember)) return false;
-        if (filterSeries !== 'All' && String(c.seriesId) !== String(filterSeries)) return false;
-        return true;
-    });
-
-    const handleSyncPoca = async () => {
-        if (!confirm('確定要執行 PocaMarket 同步嗎？這將會爬取最新價格與庫存。')) return;
-        try {
-            const res = await fetch('/api/sync/poca', { method: 'POST' });
-            if (!res.ok) throw new Error('同步失敗');
-            alert('POCA 同步完成！請重新整理網頁載入最新資料。');
-            window.location.reload();
-        } catch (e) {
-            alert('同步發生錯誤: ' + e.message);
-        }
-    };
-
-    return (
-        <div className="flex flex-col md:flex-row gap-4 h-[75vh] px-2">
-            <div className="w-full md:w-1/3 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                    <h3 className="font-bold text-gray-800 text-sm">未對照 POCA ({unmappedPocaCards.length})</h3>
-                    <button onClick={handleSyncPoca} className="bg-black text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm hover:bg-gray-800">
-                        <RefreshCw className="w-3 h-3" /> 同步
-                    </button>
-                </div>
-                <div className="flex-1 overflow-y-auto no-scrollbar p-3">
-                    <div className="grid grid-cols-3 gap-2">
-                        {unmappedPocaCards.map(p => (
-                            <div 
-                                key={p.id} 
-                                onClick={() => setSelectedPoca(p)}
-                                className={`cursor-pointer rounded-lg border-2 overflow-hidden aspect-[2/3] relative transition-all ${selectedPoca?.id === p.id ? 'border-indigo-600 ring-2 ring-indigo-200 scale-95 shadow-md' : 'border-gray-100 hover:border-gray-300'}`}
-                            >
-                                {p.image ? <img src={p.image} alt={p.member_name_en} className="w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full bg-gray-100" />}
-                                <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] p-1 truncate font-bold text-center">
-                                    ${p.price} / {p.stocked_count}張
-                                </div>
-                            </div>
-                        ))}
-                        {unmappedPocaCards.length === 0 && <div className="col-span-3 text-center py-10 text-gray-400 text-sm">沒有未對照的小卡</div>}
-                    </div>
-                </div>
-            </div>
-
-            <div className="w-full md:w-2/3 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 space-y-3">
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-gray-400">成員</span>
-                        <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="border p-1.5 text-xs rounded-md outline-none font-medium flex-1">
-                            <option value="All">全部成員</option>
-                            {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                        <span className="text-[10px] font-bold text-gray-400 ml-2">系列</span>
-                        <select value={filterSeries} onChange={e => setFilterSeries(e.target.value)} className="border p-1.5 text-xs rounded-md outline-none font-medium flex-1">
-                            <option value="All">全部系列</option>
-                            {series.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                    </div>
-                    {selectedPoca && (
-                        <div className="bg-indigo-50 border border-indigo-100 p-2 rounded-lg text-xs text-indigo-700 font-bold flex items-center justify-between">
-                            <span>正在為 POCA (ID: {selectedPoca.id}) 尋找對應的小卡...</span>
-                            <span>請點擊下方卡片綁定</span>
-                        </div>
-                    )}
-                </div>
-                <div className="flex-1 overflow-y-auto no-scrollbar p-3">
-                     <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
-                         {filteredDbCards.map(c => {
-                             const isMapped = !!c.pocoId;
-                             return (
-                                 <div 
-                                    key={c.id} 
-                                    onClick={() => {
-                                        if (isMapped) return alert('此卡片已綁定 POCA');
-                                        if (selectedPoca) {
-                                            if (confirm('確定要將這張卡片與所選 POCA 綁定嗎？')) {
-                                                onBindPoca(c.id, selectedPoca.id);
-                                                setSelectedPoca(null);
-                                            }
-                                        } else {
-                                            alert('請先在左側選擇一張 POCA 小卡');
-                                        }
-                                    }}
-                                    className={`cursor-pointer rounded-lg border-2 overflow-hidden aspect-[2/3] relative transition-all ${isMapped ? 'opacity-40 cursor-not-allowed border-gray-100' : 'border-gray-200 hover:border-indigo-400'}`}
-                                 >
-                                     {c.image ? <img src={c.image} className="w-full h-full object-cover pointer-events-none" /> : <div className="w-full h-full bg-gray-100" />}
-                                     {isMapped && <div className="absolute top-1 right-1 bg-green-500 text-white p-1 rounded-full shadow"><Check className="w-3 h-3" /></div>}
-                                 </div>
-                             );
-                         })}
-                     </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 // --- 7. App Main Component ---
 export default function App() {
   const [activeTab, setActiveTab] = useState('library');
@@ -7708,9 +7436,9 @@ export default function App() {
   const [customLists, setCustomLists] = useState([]);
   const [sales, setSales] = useState([]);
   const [bulkRecords, setBulkRecords] = useState([]);
-  const [pocaCards, setPocaCards] = useState([]);
   const [subunits, setSubunits] = useState([]); // 🌟 新增 subunits 狀態
   const [appSettings, setAppSettings] = useState([]); // 🌟 新增全域設定狀態
+  const [pocaCards, setPocaCards] = useState([]);
   
   const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
 
@@ -7796,7 +7524,7 @@ export default function App() {
 
       // 門檻 100px，避免誤觸
       if (Math.abs(diff) > 100) {
-          const tabs = ['library', 'collection', 'bulk', 'inventory', 'export', 'sync'];
+          const tabs = ['library', 'collection', 'bulk', 'inventory', 'export'];
           const currentIndex = tabs.indexOf(activeTab);
           
           if (diff > 0 && isFromRightEdge) { // 左滑 (手指右->左) 且從右邊緣開始 -> 下一頁
@@ -8905,27 +8633,6 @@ export default function App() {
           showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
           setShowPrices={setExportShowPrices}
         />;
-      case 'sync':
-        return <SyncTab 
-            currentGroupId={currentGroupId}
-            cards={currentCards} pocaCards={pocaCards}
-            members={currentMembers} series={currentSeries} batches={currentBatches} channels={currentChannels} 
-            types={currentTypes} subunits={currentSubunits}
-            onSyncData={fetchCardData}
-            onBindPoca={async (cardId, pocaId) => {
-                setCards(prev => prev.map(c => String(c.id) === String(cardId) ? { ...c, pocoId: pocaId } : c));
-                try {
-                    const res = await fetch('/api/sync/poca-bind', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ui_card_id: cardId, poco_id: pocaId })
-                    });
-                    if (!res.ok) throw new Error('綁定失敗');
-                } catch (e) {
-                    alert(e.message);
-                }
-            }}
-        />;
       default: return null;
     }
   };
@@ -8949,7 +8656,6 @@ export default function App() {
                 { id: 'bulk', icon: Package, label: '管理' },
                 { id: 'inventory', icon: List, label: '紀錄' },
                 { id: 'export', icon: Share2, label: '輸出' },
-                { id: 'sync', icon: RefreshCw, label: '同步' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -9146,7 +8852,6 @@ export default function App() {
           onDeleteSource={handleDeleteSource}
           bulkRecords={bulkRecords}
           setBulkRecords={setBulkRecords}
-          pocaCards={pocaCards}
         />
       )}
 
