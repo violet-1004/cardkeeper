@@ -32,6 +32,7 @@ export async function GET(request: Request) {
             'ui_sales': schema.uiSales,
             'ui_settings': null, // 🌟 設為 null，避免 Webpack 靜態打包時報錯
             'ui_subunits': schema.uiSubunits,
+            'poca': schema.poca,
         };
 
         // 3. 從字典中取得對應的資料表
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
             'ui_cards': schema.uiCards, 'ui_inventory': schema.uiInventory, 'bulk_records': schema.bulkRecords,
             'custom_lists': schema.customLists, 'ui_sales': schema.uiSales, 'ui_settings': null, // 🌟 同樣設為 null
             'ui_subunits': schema.uiSubunits,
+            'poca': schema.poca,
         };
 
         const targetTable = schemaMap[table];
