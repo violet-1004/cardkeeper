@@ -7761,27 +7761,73 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
         try {
-            const targetUrl = 'https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new';
-            const res = await fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`);
-            const json = await res.json();
-            if (json.success && json.data?.results) {
-                const fetchedPocas = json.data.results.map(item => ({
-                    id: String(item.id),
-                    image: item.image,
-                    stocked_count: item.stocked_count,
-                    price: item.price,
-                }));
+            let page = 1;
+            let hasNext = true;
+            let allFetchedPocas = [];
 
-                for (let i = 0; i < fetchedPocas.length; i += 50) {
-                    const chunk = fetchedPocas.slice(i, i + 50);
-                    await supabase.from('poca').upsert(chunk);
+            // 🌟 採用並行翻頁抓取，突破單頁 20 筆限制
+            while (hasNext) {
+                const promises = [];
+                // 每次並發 5 個請求以加速 5000+ 筆資料的讀取
+                for (let i = 0; i < 5; i++) {
+                    const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new&page=${page + i}`;
+                    promises.push(
+                        fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`)
+                            .then(res => res.json())
+                            .catch(err => { console.error(err); return null; })
+                    );
                 }
 
-                const newPocasCamel = fetchedPocas.map(toCamelCase);
-                const newIds = new Set(newPocasCamel.map(p => p.id));
-                setPocaCards(prev => [...prev.filter(p => !newIds.has(p.id)), ...newPocasCamel]);
-                alert('POCA 資料同步完成！');
+                const results = await Promise.all(promises);
+                let gotEmptyOrSmallPage = false;
+
+                for (const json of results) {
+                    if (json && json.success && json.data?.results) {
+                        const fetchedPocas = json.data.results.map(item => ({
+                            id: String(item.id),
+                            image: String(item.image || item.imagePath || ''),
+                            // 🌟 強化容錯：兼容 API 各種可能的數量命名，並強制轉數字防 undefined 導致寫入報錯
+                            stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
+                            price: Number(item.price ?? 0),
+                        }));
+                        allFetchedPocas.push(...fetchedPocas);
+
+                        if (json.data.results.length === 0) {
+                            gotEmptyOrSmallPage = true;
+                        }
+                    } else {
+                        gotEmptyOrSmallPage = true;
+                    }
+                }
+
+                if (gotEmptyOrSmallPage || allFetchedPocas.length > 20000) {
+                    hasNext = false;
+                } else {
+                    page += 5;
+                }
             }
+
+            // 去除可能因為 API 更新延遲導致的重複卡片
+            const uniquePocasMap = new Map();
+            allFetchedPocas.forEach(p => uniquePocasMap.set(p.id, p));
+            allFetchedPocas = Array.from(uniquePocasMap.values());
+
+            let dbError = null;
+            // 🌟 降低 Chunk 大小，避免 SQLite 綁定變數上限報錯 (25筆 * 4欄位 = 100 variables)
+            for (let i = 0; i < allFetchedPocas.length; i += 25) {
+                const chunk = allFetchedPocas.slice(i, i + 25);
+                const res = await supabase.from('poca').upsert(chunk);
+                if (res?.error) {
+                    dbError = res.error.message || JSON.stringify(res.error);
+                    console.error("POCA Save Error:", res.error);
+                    break;
+                }
+            }
+
+            const newPocasCamel = allFetchedPocas.map(toCamelCase);
+            const newIds = new Set(newPocasCamel.map(p => p.id));
+            setPocaCards(prev => [...prev.filter(p => !newIds.has(p.id)), ...newPocasCamel]);
+            alert(`POCA 資料同步完成！共抓取 ${allFetchedPocas.length} 筆${dbError ? `\n⚠️ 寫入資料庫時發生部分錯誤: ${dbError}` : ''}`);
         } catch (e) {
             alert('爬蟲失敗: ' + e.message);
         }
@@ -7873,7 +7919,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 
                                 return (
                                 <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative group flex flex-col ${selectedLocalId === c.id ? 'border-pink-500 scale-95 shadow-md ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
-                                    <div className="aspect-[2/3] bg-gray-100 relative border-b border-gray-100 flex-shrink-0">
+                                    <div className="w-full aspect-[2/3] bg-gray-100 relative border-b border-gray-100 flex-shrink-0">
                                         {c.image ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
                                         {c.pocaCard && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow">已對照</div>}
                                     </div>
