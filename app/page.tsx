@@ -7417,27 +7417,346 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
-function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, currentGroupId, onSyncData }) {
+function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
     const [selectedPocaId, setSelectedPocaId] = useState(null);
     const [selectedLocalId, setSelectedLocalId] = useState(null);
 
-    // Right side filters
-    const [filterMemberId, setFilterMemberId] = useState('All');
-    const [filterSeriesId, setFilterSeriesId] = useState('All');
+    // --- Filters ---
+    const [filterSubunits, setFilterSubunits] = useState([]);
+    const [filterMembers, setFilterMembers] = useState([]);
+    const [filterSubMembers, setFilterSubMembers] = useState([]);
+    const [filterTypes, setFilterTypes] = useState([]);
+    const [filterChannels, setFilterChannels] = useState([]);
+    
+    const [showSeriesModal, setShowSeriesModal] = useState(false);
+    const [filterSeriesType, setFilterSeriesType] = useState('All');
+    const [filterSeries, setFilterSeries] = useState([]);
+    const [filterBatches, setFilterBatches] = useState([]);
 
-    const currentMembers = (members || []).filter(m => String(m.groupId) === String(currentGroupId));
-    const currentSeries = (series || []).filter(s => String(s.groupId) === String(currentGroupId));
+    useEffect(() => {
+        setFilterSubMembers([]);
+    }, [filterMembers]);
 
-    const filteredLocalCards = (cards || []).filter(c => {
-        if (String(c.groupId) !== String(currentGroupId)) return false;
-        if (filterMemberId !== 'All' && String(c.memberId) !== String(filterMemberId)) return false;
-        if (filterSeriesId !== 'All' && String(c.seriesId) !== String(filterSeriesId)) return false;
-        return true;
+    const seriesMap = useMemo(() => {
+        const map = {};
+        (series || []).forEach(s => map[String(s.id)] = s);
+        return map;
+    }, [series]);
+
+    const batchMap = useMemo(() => {
+        const map = {};
+        (batches || []).forEach(b => map[String(b.id)] = b);
+        return map;
+    }, [batches]);
+
+    const memberMap = useMemo(() => {
+        const map = {};
+        (members || []).forEach(m => map[String(m.id)] = m);
+        return map;
+    }, [members]);
+
+    const typeMap = useMemo(() => {
+        const map = {};
+        (types || []).forEach(t => { map[String(t.id)] = t; map[String(t.name)] = t; });
+        return map;
+    }, [types]);
+
+    const channelMap = useMemo(() => {
+        const map = {};
+        (channels || []).forEach(c => { map[String(c.id)] = c; map[String(c.name)] = c; });
+        return map;
+    }, [channels]);
+
+    const baseCards = (cards || []).filter(c => String(c.groupId) === String(currentGroupId));
+
+    const availableSubunits = useMemo(() => {
+        const usedNames = new Set();
+        baseCards.forEach(c => {
+            const m = memberMap[String(c.memberId)];
+            const s = seriesMap[String(c.seriesId)];
+            if (m && m.subunit) usedNames.add(m.subunit);
+            if (s && s.subunit) usedNames.add(s.subunit);
+        });
+        
+        const subunitSortMap = new Map();
+        (subunits || []).forEach(s => {
+            const current = subunitSortMap.get(s.name);
+            if (current === undefined || (s.sortOrder !== undefined && s.sortOrder < current)) {
+                subunitSortMap.set(s.name, s.sortOrder ?? 999);
+            }
+        });
+
+        return Array.from(usedNames).map(name => ({
+            id: name,
+            name: name,
+            sortOrder: subunitSortMap.has(name) ? subunitSortMap.get(name) : 999
+        })).sort((a, b) => a.sortOrder - b.sortOrder);
+    }, [baseCards, memberMap, seriesMap, subunits]);
+
+    useEffect(() => {
+        if (availableSubunits.length > 0) {
+            const availableIds = availableSubunits.map(s => s.id);
+            setFilterSubunits(prev => prev.filter(id => availableIds.includes(id)));
+        } else {
+            setFilterSubunits([]);
+        }
+    }, [availableSubunits]);
+
+    const subunitFilteredCards = useMemo(() => {
+        if (filterSubunits.length === 0) return baseCards;
+        return baseCards.filter(c => {
+            const m = memberMap[String(c.memberId)];
+            const s = seriesMap[String(c.seriesId)];
+            return (m && filterSubunits.includes(m.subunit)) || (s && filterSubunits.includes(s.subunit));
+        });
+    }, [baseCards, filterSubunits, memberMap, seriesMap]);
+
+    const availableMembers = useMemo(() => {
+        const ids = new Set(subunitFilteredCards.map(c => String(c.memberId)));
+        const mems = (members || []).filter(m => ids.has(String(m.id)));
+        if (ids.has('null')) mems.push({ id: 'null', name: '無成員', sortOrder: -1 });
+        return mems.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+    }, [subunitFilteredCards, members]);
+
+    const availableTypes = useMemo(() => {
+        const ids = new Set(subunitFilteredCards.map(c => String(c.type)).filter(Boolean));
+        const currentTypes = (types || []).filter(t => ids.has(String(t.id)) || ids.has(String(t.name)));
+        ids.forEach(id => {
+            if (!currentTypes.some(t => String(t.id) === id || String(t.name) === id)) {
+                currentTypes.push({ id, name: id === 'null' ? '未分類' : id, shortName: '', sortOrder: 999 });
+            }
+        });
+        return currentTypes.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+    }, [subunitFilteredCards, types]);
+
+    const availableChannels = useMemo(() => {
+        const ids = new Set(subunitFilteredCards.map(c => String(c.channel)).filter(Boolean));
+        const currentChannels = (channels || []).filter(c => ids.has(String(c.id)) || ids.has(String(c.name)));
+        ids.forEach(id => {
+            if (!currentChannels.some(c => String(c.id) === String(id) || String(c.name) === id)) currentChannels.push({ id, name: id === 'null' ? '未分類' : id, shortName: '' });
+        });
+        const freqMap = {};
+        subunitFilteredCards.forEach(c => { 
+            const effChannel = (!c.channel || c.channel === 'null' || c.channel === 'undefined') ? 'null' : String(c.channel);
+            if (effChannel !== 'null') freqMap[effChannel] = (freqMap[effChannel] || 0) + 1; 
+        });
+        return currentChannels.sort((a, b) => (freqMap[String(b.id)] || freqMap[String(b.name)] || 0) - (freqMap[String(a.id)] || freqMap[String(a.name)] || 0));
+    }, [subunitFilteredCards, channels]);
+    
+    const availableSeriesTypes = useMemo(() => {
+        const ids = new Set(baseCards.map(c => String(c.seriesId)));
+        return [...new Set((series || []).filter(s => ids.has(String(s.id))).map(s => s.type).filter(Boolean))];
+    }, [baseCards, series]);
+
+    const availableSeriesList = useMemo(() => {
+        let filtered = (series || []).filter(s => baseCards.some(c => String(c.seriesId) === String(s.id)));
+        if (filterSubunits.length > 0) {
+            filtered = filtered.filter(s => filterSubunits.includes(s.subunit));
+        }
+        if (filterSeriesType !== 'All') {
+            filtered = filtered.filter(s => s.type === filterSeriesType);
+        }
+        return filtered.sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
+    }, [baseCards, series, filterSeriesType, filterSubunits]);
+
+    const availableBatchesList = useMemo(() => {
+        let filtered = (batches || []).filter(b => baseCards.some(c => String(c.batchId) === String(b.id)));
+        if (filterSubunits.length > 0) {
+            const validSeriesIds = new Set((series || []).filter(s => filterSubunits.includes(s.subunit)).map(s => String(s.id)));
+            filtered = filtered.filter(b => validSeriesIds.has(String(b.seriesId)));
+        }
+        if (filterSeries.length > 0) {
+            filtered = filtered.filter(b => filterSeries.includes(String(b.seriesId)));
+        }
+        return filtered.sort((a, b) => {
+            const parseTime = (d) => {
+                if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? 253402214400000 : t;
+            };
+            const timeDiff = parseTime(b.date) - parseTime(a.date);
+            if (timeDiff !== 0) return timeDiff;
+            return Number(b.id) - Number(a.id);
+        });
+    }, [baseCards, batches, filterSeries, filterSubunits, series]);
+
+    useEffect(() => {
+        if (filterSeries.length > 0) {
+            const validSeries = filterSeries.filter(id => {
+                const s = seriesMap[id];
+                return s && (filterSeriesType === 'All' || s.type === filterSeriesType);
+            });
+            if (validSeries.length !== filterSeries.length) {
+                setFilterSeries(validSeries);
+            }
+        }
+        if (filterBatches.length > 0) {
+            const validBatches = filterBatches.filter(id => {
+                const b = batchMap[id];
+                if (!b) return false;
+                if (filterSeries.length > 0 && !filterSeries.includes(String(b.seriesId))) return false;
+                const s = seriesMap[String(b.seriesId)];
+                if (s && filterSeriesType !== 'All' && s.type !== filterSeriesType) return false;
+                return true;
+            });
+            if (validBatches.length !== filterBatches.length) {
+                setFilterBatches(validBatches);
+            }
+        }
+    }, [filterSeries, filterSeriesType, filterBatches, seriesMap, batchMap]);
+
+    const getSeriesSummary = () => {
+        const parts = [];
+        if (filterSeriesType !== 'All') parts.push(filterSeriesType);
+        if (filterSeries.length > 0) {
+            if (filterSeries.length === 1) {
+                parts.push(seriesMap[filterSeries[0]]?.name);
+            } else {
+                parts.push(`已選 ${filterSeries.length} 系列`);
+            }
+        }
+        if (filterBatches.length > 0) {
+            if (filterBatches.length === 1) {
+                parts.push(batchMap[filterBatches[0]]?.name);
+            } else {
+                parts.push(`已選 ${filterBatches.length} 批次`);
+            }
+        }
+        
+        return parts.length > 0 ? parts.join(' · ') : '全部系列';
+    };
+
+    const RenderFilterSection = ({ label, options, current, onChange, mapName }) => (
+        <div className="flex items-center gap-3 overflow-hidden">
+           <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap min-w-fit">{label}</span>
+           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+               {(options || []).map(opt => {
+                   const id = typeof opt === 'object' ? opt.id : opt;
+                   const name = mapName ? mapName(opt) : (typeof opt === 'object' ? opt.name : opt);
+                   const isSelected = current.includes(String(id));
+                   return (
+                       <button 
+                           key={id}
+                           onClick={() => onChange(String(id))}
+                           className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                       >
+                           {name}
+                       </button>
+                   )
+               })}
+           </div>
+        </div>
+     );
+   
+     const toggleFilter = (setFunc, val) => {
+         setFunc(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+     };
+
+    const filteredLocalCards = baseCards.filter(card => {
+         if (filterSubunits.length > 0 && filterMembers.length === 0) {
+             const mem = memberMap[String(card.memberId)];
+             const ser = seriesMap[String(card.seriesId)];
+             const belongsToSubunit = (mem && filterSubunits.includes(mem.subunit)) || (ser && filterSubunits.includes(ser.subunit));
+             if (!belongsToSubunit) return false;
+         }
+
+         if (filterMembers.length > 0) {
+             if (!filterMembers.includes(String(card.memberId))) return false;
+             const isGroup = filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group')));
+             if (isGroup && filterSubMembers.length > 0) {
+                 const cardSubMembers = card.memberId2 || [];
+                 if (cardSubMembers.length === 0) return false;
+                 const hasMatchingMember = filterSubMembers.some(id => cardSubMembers.includes(String(id)));
+                 if (!hasMatchingMember) return false;
+             }
+         }
+         if (filterSeries.length > 0 && !filterSeries.includes(String(card.seriesId))) return false;
+         
+         if (filterSeriesType !== 'All' && filterSeries.length === 0) {
+            const s = seriesMap[String(card.seriesId)];
+            if (!s || s.type !== filterSeriesType) return false;
+         }
+
+         const cType = (!card.type || card.type === 'null' || card.type === 'undefined') ? 'null' : String(card.type);
+         if (filterTypes.length > 0 && !filterTypes.includes(cType)) return false;
+         if (filterChannels.length > 0 && !filterChannels.includes(String(card.channel))) return false;
+         if (filterBatches.length > 0 && !filterBatches.includes(String(card.batchId))) return false;
+         
+         return true;
     });
 
-    const unmatchedPoca = (pocaCards || []).filter(p => !cards.some(c => String(c.pocoId) === String(p.id)));
+    filteredLocalCards.sort((cardA, cardB) => {
+      const safeString = (val) => val ? String(val) : '';
+      const safeNum = (val, defaultVal) => { const n = Number(val); return isNaN(n) ? defaultVal : n; };
+
+      const hasBatchA = !!cardA.batchId;
+      const hasBatchB = !!cardB.batchId;
+
+      if (hasBatchA !== hasBatchB) return hasBatchA ? -1 : 1;
+
+      const sA = seriesMap[String(cardA.seriesId)];
+      const sB = seriesMap[String(cardB.seriesId)];
+      const parseTime = (d) => {
+          if (!d || d === 'null' || d === 'undefined') return 253402214400000;
+          const t = new Date(d).getTime();
+          return isNaN(t) ? 253402214400000 : t;
+      };
+      
+      const dateA_series = parseTime(sA?.date);
+      const dateB_series = parseTime(sB?.date);
+
+      if (!hasBatchA && !hasBatchB) {
+          if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+          const nameCompare = safeString(cardA.name).localeCompare(safeString(cardB.name), 'zh-TW', { numeric: true });
+          if (nameCompare !== 0) return nameCompare;
+          const mA = memberMap[String(cardA.memberId)];
+          const mB = memberMap[String(cardB.memberId)];
+          const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+          const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+          if (mSortA !== mSortB) return mSortA - mSortB;
+          return safeString(cardA.id).localeCompare(safeString(cardB.id));
+      }
+
+      if (dateA_series !== dateB_series) return dateA_series - dateB_series;
+
+      const tA = typeMap[String(cardA.type)];
+      const tB = typeMap[String(cardB.type)];
+      const sortA_type = tA ? safeNum(tA.sortOrder, 999) : 999;
+      const sortB_type = tB ? safeNum(tB.sortOrder, 999) : 999;
+      if (sortA_type !== sortB_type) return sortA_type - sortB_type;
+
+      const bA = batchMap[String(cardA.batchId)];
+      const bB = batchMap[String(cardB.batchId)];
+      const dateA_batch = parseTime(bA?.date);
+      const dateB_batch = parseTime(bB?.date);
+      if (dateA_batch !== dateB_batch) return dateA_batch - dateB_batch;
+
+      const nameA = safeString(bA?.name);
+      const nameB = safeString(bB?.name);
+      const nameCompare = nameA.localeCompare(nameB, 'zh-TW', { numeric: true });
+      if (nameCompare !== 0) return nameCompare;
+
+      const mA = memberMap[String(cardA.memberId)];
+      const mB = memberMap[String(cardB.memberId)];
+      const mSortA = mA ? safeNum(mA.sortOrder, 999) : 999;
+      const mSortB = mB ? safeNum(mB.sortOrder, 999) : 999;
+      if (mSortA !== mSortB) return mSortA - mSortB;
+
+      return safeString(cardA.id).localeCompare(safeString(cardB.id));
+    });
+
+    const unmatchedPoca = (pocaCards || []).filter(p => !cards.some(c => String(c.pocaCard) === String(p.id)));
 
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
@@ -7451,8 +7770,6 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     image: item.image,
                     stocked_count: item.stocked_count,
                     price: item.price,
-                    member_name_en: item.member_name_en,
-                    group_name_en: item.group_name_en
                 }));
 
                 for (let i = 0; i < fetchedPocas.length; i += 50) {
@@ -7473,8 +7790,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
     const handleMatch = async () => {
         if (!selectedPocaId || !selectedLocalId) return;
-        await supabase.from('ui_cards').update({ poco_id: selectedPocaId }).eq('id', selectedLocalId);
-        setCards(prev => prev.map(c => String(c.id) === String(selectedLocalId) ? { ...c, pocoId: selectedPocaId } : c));
+        await supabase.from('ui_cards').update({ poca_card: selectedPocaId }).eq('id', selectedLocalId);
+        setCards(prev => prev.map(c => String(c.id) === String(selectedLocalId) ? { ...c, pocaCard: selectedPocaId } : c));
         setSelectedPocaId(null);
         setSelectedLocalId(null);
         alert('對照成功！');
@@ -7490,7 +7807,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             </div>
 
             {activeSubTab === 'poca_match' && (
-                <div className="flex flex-col md:flex-row gap-4 px-4 h-[75vh]">
+                <div className="flex flex-col md:flex-row gap-4 px-4 h-[85vh]">
                     <div className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
                         <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <h3 className="font-bold text-gray-800 text-sm">未對照 POCA 卡片 ({unmatchedPoca.length})</h3>
@@ -7498,13 +7815,13 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> 同步
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 gap-2 content-start">
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 content-start">
                             {unmatchedPoca.map(p => (
-                                <div key={p.id} onClick={() => setSelectedPocaId(p.id === selectedPocaId ? null : p.id)} className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all relative ${selectedPocaId === p.id ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent hover:border-indigo-300'}`}>
+                                <div key={p.id} onClick={() => setSelectedPocaId(p.id === selectedPocaId ? null : p.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative ${selectedPocaId === p.id ? 'border-indigo-600 scale-95 shadow-md ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-300'}`}>
                                     <div className="aspect-[2/3] bg-gray-100 relative">
                                         <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
                                         <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
-                                            <div className="text-[9px] text-white font-bold truncate">{p.memberNameEn}</div>
+                                            <div className="text-[9px] text-white font-bold truncate">{p.id}</div>
                                             <div className="text-[9px] text-green-300 font-bold">${p.price}</div>
                                         </div>
                                     </div>
@@ -7514,28 +7831,57 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         </div>
                     </div>
 
-                    <div className="md:hidden flex justify-center">
+                    <div className="md:hidden flex justify-center flex-shrink-0">
                         <button onClick={handleMatch} disabled={!selectedPocaId || !selectedLocalId} className="bg-black text-white px-8 py-3 rounded-full font-bold shadow-lg disabled:opacity-50">確認對照</button>
                     </div>
 
-                    <div className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden relative">
-                        <div className="p-3 border-b border-gray-100 space-y-2 bg-gray-50">
-                            <h3 className="font-bold text-gray-800 text-sm">資料庫小卡</h3>
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                                <select value={filterMemberId} onChange={e => setFilterMemberId(e.target.value)} className="text-xs border p-1.5 rounded bg-white outline-none"><option value="All">全部成員</option>{currentMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
-                                <select value={filterSeriesId} onChange={e => setFilterSeriesId(e.target.value)} className="text-xs border p-1.5 rounded bg-white outline-none max-w-[120px]"><option value="All">全部系列</option>{currentSeries.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                    <div className="flex-[1.5] bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden relative">
+                        <div className="p-3 border-b border-gray-100 space-y-3 bg-gray-50 flex-shrink-0">
+                            <h3 className="font-bold text-gray-800 text-sm">資料庫小卡 ({filteredLocalCards.length})</h3>
+                            <div className="space-y-2">
+                                {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />}
+                                {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />}
+                                {filterMembers.some(id => memberMap[id] && (memberMap[id].name.includes('그룹') || memberMap[id].name.includes('團體') || memberMap[id].name.toLowerCase().includes('group'))) && (members || []).length > 0 && (
+                                    <RenderFilterSection label="包含成員" options={(members || []).filter(m => String(m.groupId) === String(currentGroupId) && (filterSubunits.length === 0 || filterSubunits.includes(m.subunit))).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))} current={filterSubMembers} onChange={(val) => toggleFilter(setFilterSubMembers, val)} mapName={m => m.name} />
+                                )}
+                                {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />}
+                                {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannels} onChange={(val) => toggleFilter(setFilterChannels, val)} mapName={c => c.name} />}
+                                <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group">
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
+                                        <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                                        <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                                </div>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 gap-2 content-start">
-                            {filteredLocalCards.map(c => (
-                                <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all relative ${selectedLocalId === c.id ? 'border-pink-500 scale-95 shadow-md' : 'border-transparent hover:border-pink-300'}`}>
-                                    <div className="aspect-[2/3] bg-gray-100 relative">
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 content-start pb-20">
+                            {filteredLocalCards.map(c => {
+                                const cardSeries = seriesMap[String(c.seriesId)];
+                                const seriesName = cardSeries?.shortName || cardSeries?.name;
+                                const cardBatch = batchMap[String(c.batchId)];
+                                const effectiveType = (!c.type || c.type === 'null' || c.type === 'undefined') ? null : c.type;
+                                const typeObj = typeMap[String(effectiveType)];
+                                const displayType = typeObj ? (typeObj.shortName || typeObj.name) : effectiveType;
+                                const effectiveChannelId = (!c.channel || c.channel === 'null' || c.channel === 'undefined') ? null : c.channel;
+                                const channelObj = channelMap[String(effectiveChannelId)];
+                                const displayChannel = channelObj ? (channelObj.shortName || channelObj.name) : effectiveChannelId;
+                                const batchNumber = cardBatch?.batchNumber && cardBatch.batchNumber !== 'null' && cardBatch.batchNumber !== 'undefined' ? cardBatch.batchNumber : null;
+                                const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
+                                const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
+                                
+                                return (
+                                <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative group flex flex-col ${selectedLocalId === c.id ? 'border-pink-500 scale-95 shadow-md ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
+                                    <div className="aspect-[2/3] bg-gray-100 relative border-b border-gray-100 flex-shrink-0">
                                         {c.image ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
-                                        {c.pocoId && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold">已對照</div>}
+                                        {c.pocaCard && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow">已對照</div>}
                                     </div>
-                                    {selectedLocalId === c.id && <div className="absolute top-1 right-1 bg-pink-500 rounded-full w-4 h-4 flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
+                                    <div className="px-1 py-1 flex-1 flex flex-col justify-center bg-white">
+                                        <div className="text-[8px] font-bold text-gray-800 leading-tight line-clamp-2 text-center break-words">{displayTitle || '未命名卡片'}</div>
+                                    </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                         
                         <div className="hidden md:flex absolute bottom-4 inset-x-0 justify-center pointer-events-none">
@@ -7552,6 +7898,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     <button onClick={onSyncData} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700">執行資料同步</button>
                 </div>
             )}
+            
+            <SeriesFilterModal 
+                visible={showSeriesModal} onClose={() => setShowSeriesModal(false)}
+                seriesTypes={availableSeriesTypes} 
+                selectedSeriesType={filterSeriesType} 
+                setSeriesType={(val) => {
+                    setFilterSeriesType(val);
+                    if (val === 'All') { setFilterSeries([]); setFilterBatches([]); }
+                }}
+                series={availableSeriesList} 
+                selectedSeries={filterSeries} 
+                setSeries={setFilterSeries}
+                batches={availableBatchesList} selectedBatches={filterBatches} setBatches={setFilterBatches}
+            />
         </div>
     );
 }
@@ -8781,6 +9141,10 @@ export default function App() {
           groups={groups} 
           members={currentMembers} 
           series={currentSeries} 
+          batches={currentBatches}
+          channels={currentChannels}
+          types={currentTypes}
+          subunits={currentSubunits}
           currentGroupId={currentGroupId} 
           onSyncData={fetchCardData} 
         />;
