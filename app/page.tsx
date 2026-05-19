@@ -7576,6 +7576,7 @@ export default function App() {
   const [bulkRecords, setBulkRecords] = useState([]);
   const [subunits, setSubunits] = useState([]); // 🌟 新增 subunits 狀態
   const [appSettings, setAppSettings] = useState([]); // 🌟 新增全域設定狀態
+  const [pocaCards, setPocaCards] = useState([]); // 🌟 新增 POCA API 卡片資料狀態
   
   const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
 
@@ -7774,6 +7775,7 @@ export default function App() {
         setCustomLists(await fetchTable('custom_lists', false, { paginate: true }));
         setSales(await fetchTable('ui_sales', false, { paginate: true }));
         setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
+        setPocaCards(await fetchTable('poca', false, { paginate: true })); // 🌟 讀取 poca 爬蟲資料
     }
     fetchAllData();
   }, []);
