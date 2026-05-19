@@ -7417,6 +7417,144 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
+function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, currentGroupId, onSyncData }) {
+    const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
+    const [isCrawling, setIsCrawling] = useState(false);
+    const [selectedPocaId, setSelectedPocaId] = useState(null);
+    const [selectedLocalId, setSelectedLocalId] = useState(null);
+
+    // Right side filters
+    const [filterMemberId, setFilterMemberId] = useState('All');
+    const [filterSeriesId, setFilterSeriesId] = useState('All');
+
+    const currentMembers = (members || []).filter(m => String(m.groupId) === String(currentGroupId));
+    const currentSeries = (series || []).filter(s => String(s.groupId) === String(currentGroupId));
+
+    const filteredLocalCards = (cards || []).filter(c => {
+        if (String(c.groupId) !== String(currentGroupId)) return false;
+        if (filterMemberId !== 'All' && String(c.memberId) !== String(filterMemberId)) return false;
+        if (filterSeriesId !== 'All' && String(c.seriesId) !== String(filterSeriesId)) return false;
+        return true;
+    });
+
+    const unmatchedPoca = (pocaCards || []).filter(p => !cards.some(c => String(c.pocoId) === String(p.id)));
+
+    const handlePocaCrawl = async () => {
+        setIsCrawling(true);
+        try {
+            const res = await fetch('https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new');
+            const json = await res.json();
+            if (json.success && json.data?.results) {
+                const fetchedPocas = json.data.results.map(item => ({
+                    id: String(item.id),
+                    image: item.image,
+                    stocked_count: item.stocked_count,
+                    price: item.price,
+                    member_name_en: item.member_name_en,
+                    group_name_en: item.group_name_en
+                }));
+
+                for (let i = 0; i < fetchedPocas.length; i += 50) {
+                    const chunk = fetchedPocas.slice(i, i + 50);
+                    await supabase.from('poca').upsert(chunk);
+                }
+
+                const newPocasCamel = fetchedPocas.map(toCamelCase);
+                const newIds = new Set(newPocasCamel.map(p => p.id));
+                setPocaCards(prev => [...prev.filter(p => !newIds.has(p.id)), ...newPocasCamel]);
+                alert('POCA 資料同步完成！');
+            }
+        } catch (e) {
+            alert('爬蟲失敗: ' + e.message);
+        }
+        setIsCrawling(false);
+    };
+
+    const handleMatch = async () => {
+        if (!selectedPocaId || !selectedLocalId) return;
+        await supabase.from('ui_cards').update({ poco_id: selectedPocaId }).eq('id', selectedLocalId);
+        setCards(prev => prev.map(c => String(c.id) === String(selectedLocalId) ? { ...c, pocoId: selectedPocaId } : c));
+        setSelectedPocaId(null);
+        setSelectedLocalId(null);
+        alert('對照成功！');
+    };
+
+    return (
+        <div className="space-y-4 pb-24">
+            <div className="px-4 pt-4">
+                <div className="flex space-x-1 overflow-x-auto no-scrollbar bg-gray-100 p-1 rounded-full w-fit">
+                    <button onClick={() => setActiveSubTab('crawler')} className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeSubTab === 'crawler' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>批次抓取設定</button>
+                    <button onClick={() => setActiveSubTab('poca_match')} className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeSubTab === 'poca_match' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>POCA對照設定</button>
+                </div>
+            </div>
+
+            {activeSubTab === 'poca_match' && (
+                <div className="flex flex-col md:flex-row gap-4 px-4 h-[75vh]">
+                    <div className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                        <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="font-bold text-gray-800 text-sm">未對照 POCA 卡片 ({unmatchedPoca.length})</h3>
+                            <button onClick={handlePocaCrawl} disabled={isCrawling} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1">
+                                <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> 同步
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 gap-2 content-start">
+                            {unmatchedPoca.map(p => (
+                                <div key={p.id} onClick={() => setSelectedPocaId(p.id === selectedPocaId ? null : p.id)} className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all relative ${selectedPocaId === p.id ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent hover:border-indigo-300'}`}>
+                                    <div className="aspect-[2/3] bg-gray-100 relative">
+                                        <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
+                                        <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
+                                            <div className="text-[9px] text-white font-bold truncate">{p.memberNameEn}</div>
+                                            <div className="text-[9px] text-green-300 font-bold">${p.price}</div>
+                                        </div>
+                                    </div>
+                                    {selectedPocaId === p.id && <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="md:hidden flex justify-center">
+                        <button onClick={handleMatch} disabled={!selectedPocaId || !selectedLocalId} className="bg-black text-white px-8 py-3 rounded-full font-bold shadow-lg disabled:opacity-50">確認對照</button>
+                    </div>
+
+                    <div className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden relative">
+                        <div className="p-3 border-b border-gray-100 space-y-2 bg-gray-50">
+                            <h3 className="font-bold text-gray-800 text-sm">資料庫小卡</h3>
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                                <select value={filterMemberId} onChange={e => setFilterMemberId(e.target.value)} className="text-xs border p-1.5 rounded bg-white outline-none"><option value="All">全部成員</option>{currentMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+                                <select value={filterSeriesId} onChange={e => setFilterSeriesId(e.target.value)} className="text-xs border p-1.5 rounded bg-white outline-none max-w-[120px]"><option value="All">全部系列</option>{currentSeries.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 gap-2 content-start">
+                            {filteredLocalCards.map(c => (
+                                <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all relative ${selectedLocalId === c.id ? 'border-pink-500 scale-95 shadow-md' : 'border-transparent hover:border-pink-300'}`}>
+                                    <div className="aspect-[2/3] bg-gray-100 relative">
+                                        {c.image ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
+                                        {c.pocoId && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold">已對照</div>}
+                                    </div>
+                                    {selectedLocalId === c.id && <div className="absolute top-1 right-1 bg-pink-500 rounded-full w-4 h-4 flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="hidden md:flex absolute bottom-4 inset-x-0 justify-center pointer-events-none">
+                            <button onClick={handleMatch} disabled={!selectedPocaId || !selectedLocalId} className="bg-black text-white px-8 py-3 rounded-full font-bold shadow-[0_8px_30px_rgb(0,0,0,0.2)] disabled:opacity-50 pointer-events-auto flex items-center gap-2 hover:bg-gray-800 transition-colors"><ArrowLeft className="w-4 h-4" /> 確認對照</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeSubTab === 'crawler' && (
+                <div className="bg-white border rounded-xl p-6 shadow-sm text-center flex flex-col items-center mx-4">
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">批次抓取設定</h2>
+                    <p className="text-gray-500 mb-6">執行後端爬蟲程式以同步資料庫卡片資訊。</p>
+                    <button onClick={onSyncData} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700">執行資料同步</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // --- 7. App Main Component ---
 export default function App() {
   const [activeTab, setActiveTab] = useState('library');
@@ -7438,7 +7576,6 @@ export default function App() {
   const [bulkRecords, setBulkRecords] = useState([]);
   const [subunits, setSubunits] = useState([]); // 🌟 新增 subunits 狀態
   const [appSettings, setAppSettings] = useState([]); // 🌟 新增全域設定狀態
-  const [pocaCards, setPocaCards] = useState([]);
   
   const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
 
@@ -7637,7 +7774,6 @@ export default function App() {
         setCustomLists(await fetchTable('custom_lists', false, { paginate: true }));
         setSales(await fetchTable('ui_sales', false, { paginate: true }));
         setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
-        setPocaCards(await fetchTable('poca', false, { paginate: true }));
     }
     fetchAllData();
   }, []);
@@ -7842,7 +7978,7 @@ export default function App() {
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
-          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocoId'],
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2'],
           subunit: ['id', 'groupId', 'name', 'sortOrder', 'user_id']
       };
 
@@ -8633,6 +8769,18 @@ export default function App() {
           showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
           setShowPrices={setExportShowPrices}
         />;
+      case 'sync':
+        return <SyncTab 
+          cards={currentCards} 
+          setCards={setCards} 
+          pocaCards={pocaCards} 
+          setPocaCards={setPocaCards} 
+          groups={groups} 
+          members={currentMembers} 
+          series={currentSeries} 
+          currentGroupId={currentGroupId} 
+          onSyncData={fetchCardData} 
+        />;
       default: return null;
     }
   };
@@ -8655,6 +8803,7 @@ export default function App() {
                 { id: 'collection', icon:  CheckCircle, label: '收藏' },
                 { id: 'bulk', icon: Package, label: '管理' },
                 { id: 'inventory', icon: List, label: '紀錄' },
+                { id: 'sync', icon: RefreshCw, label: '同步' },
                 { id: 'export', icon: Share2, label: '輸出' },
               ].map(tab => (
                 <button
@@ -8852,6 +9001,7 @@ export default function App() {
           onDeleteSource={handleDeleteSource}
           bulkRecords={bulkRecords}
           setBulkRecords={setBulkRecords}
+          pocaCards={pocaCards}
         />
       )}
 
