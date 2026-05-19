@@ -74,6 +74,7 @@ export const uiCards = sqliteTable("ui_cards", {
   image: text("image"),
   is_wishlist: integer("is_wishlist"),
   member_id2: text('member_id2', { mode: 'json' }),
+  poco_id: integer("poco_id"),
 });
 
 export const uiInventory = sqliteTable("ui_inventory", {
@@ -124,4 +125,13 @@ export const uiSales = sqliteTable("ui_sales", {
   status: text("status"),
   note: text("note"),
   color: text("color") // 👈 補上這個顏色欄位
+});
+
+export const poca = sqliteTable("poca", {
+  id: integer("id").primaryKey(),
+  image: text("image").notNull(),
+  stocked_count: integer("stocked_count").notNull(),
+  price: text("price").notNull(),
+  member_name_en: text("member_name_en"),
+  group_name_en: text("group_name_en")
 });
