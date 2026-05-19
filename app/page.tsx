@@ -1056,7 +1056,7 @@ function SeriesFilterModal({
     );
 }
 
-function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords }) {
+function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords, pocaCards }) {
     const [activeModal, setActiveModal] = useState(null); 
     const [tempInvData, setTempInvData] = useState(null);
     const saleFocusRef = useRef(null);
