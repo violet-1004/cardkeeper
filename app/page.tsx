@@ -7442,7 +7442,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
         try {
-            const res = await fetch('https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new');
+            const targetUrl = 'https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new';
+            const res = await fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`);
             const json = await res.json();
             if (json.success && json.data?.results) {
                 const fetchedPocas = json.data.results.map(item => ({
