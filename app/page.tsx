@@ -7420,6 +7420,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
+    const [syncProgress, setSyncProgress] = useState('');
     const [selectedPocaId, setSelectedPocaId] = useState(null);
     const [selectedLocalId, setSelectedLocalId] = useState(null);
 
@@ -7756,10 +7757,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
     });
 
-    const unmatchedPoca = (pocaCards || []).filter(p => !cards.some(c => String(c.pocaCard) === String(p.id)));
+    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId && !cards.some(c => String(c.pocaId) === String(p.id)));
 
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
+        setSyncProgress('準備抓取...');
         try {
             let page = 1;
             let hasNext = true;
@@ -7788,10 +7790,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                             image: String(item.image || item.imagePath || ''),
                             // 🌟 強化容錯：兼容 API 各種可能的數量命名，並強制轉數字防 undefined 導致寫入報錯
                             stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
-                            price: Number(item.price ?? 0),
-                            // 🌟 加回這兩個欄位，防止 SQLite NOT NULL 報錯
-                            member_name_en: String(item.member_name_en || item.memberNameEn || ''),
-                            group_name_en: String(item.group_name_en || item.groupNameEn || '')
+                            price: Number(item.price ?? 0)
                         }));
                         allFetchedPocas.push(...fetchedPocas);
 
@@ -7802,6 +7801,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         gotEmptyOrSmallPage = true;
                     }
                 }
+                
+                setSyncProgress(`已抓取 ${allFetchedPocas.length} 筆...`);
 
                 if (gotEmptyOrSmallPage || allFetchedPocas.length > 20000) {
                     hasNext = false;
@@ -7817,9 +7818,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
             let dbError = null;
             let successCount = 0;
-            // 🌟 關鍵修復：降低 Chunk 大小到 15！(15筆 * 6個欄位 = 90個變數)，完美躲過 Cloudflare D1 100 個變數的極限！
-            for (let i = 0; i < allFetchedPocas.length; i += 15) {
-                const chunk = allFetchedPocas.slice(i, i + 15);
+            setSyncProgress(`準備寫入 ${allFetchedPocas.length} 筆...`);
+            // 🌟 降低 Chunk 大小到 20，避免超過 SQLite 單次寫入的綁定變數上限 (20筆 * 4欄位 = 80 variables)
+            for (let i = 0; i < allFetchedPocas.length; i += 20) {
+                const chunk = allFetchedPocas.slice(i, i + 20);
                 const res = await supabase.from('poca').upsert(chunk);
                 if (res?.error) {
                     if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
@@ -7827,6 +7829,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 } else {
                     successCount += chunk.length;
                 }
+                setSyncProgress(`寫入中 ${successCount}/${allFetchedPocas.length}...`);
             }
 
             const newPocasCamel = allFetchedPocas.map(toCamelCase);
@@ -7837,12 +7840,17 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             alert('爬蟲失敗: ' + e.message);
         }
         setIsCrawling(false);
+        setSyncProgress('');
     };
 
     const handleMatch = async () => {
         if (!selectedPocaId || !selectedLocalId) return;
-        await supabase.from('ui_cards').update({ poca_card: selectedPocaId }).eq('id', selectedLocalId);
-        setCards(prev => prev.map(c => String(c.id) === String(selectedLocalId) ? { ...c, pocaCard: selectedPocaId } : c));
+        
+        await supabase.from('ui_cards').update({ poca_id: selectedPocaId }).eq('id', selectedLocalId);
+        await supabase.from('poca').update({ card_id: selectedLocalId }).eq('id', selectedPocaId);
+        
+        setCards(prev => prev.map(c => String(c.id) === String(selectedLocalId) ? { ...c, pocaId: selectedPocaId } : c));
+        setPocaCards(prev => prev.map(p => String(p.id) === String(selectedPocaId) ? { ...p, cardId: selectedLocalId } : p));
         setSelectedPocaId(null);
         setSelectedLocalId(null);
         alert('對照成功！');
@@ -7863,7 +7871,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <h3 className="font-bold text-gray-800 text-sm">未對照 POCA 卡片 ({unmatchedPoca.length})</h3>
                             <button onClick={handlePocaCrawl} disabled={isCrawling} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1">
-                                <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> 同步
+                                <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> {isCrawling ? (syncProgress || '同步中...') : '同步'}
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 content-start">
@@ -7926,7 +7934,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer group relative select-none ${selectedLocalId === c.id ? 'scale-95' : ''}`}>
                                     <div className={`aspect-[2/3] rounded-lg bg-gray-100 overflow-hidden relative shadow-sm border transition-all ${selectedLocalId === c.id ? 'border-pink-500 ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
                                         {c.image ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
-                                        {c.pocaCard && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow z-10">已對照</div>}
+                                        {c.pocaId && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow z-10">已對照</div>}
                                         {selectedLocalId === c.id && <div className="absolute top-1 right-1 bg-pink-500 rounded-full w-4 h-4 flex items-center justify-center shadow z-10"><Check className="w-3 h-3 text-white" /></div>}
                                     </div>
                                     <div className="px-1 pt-1">
@@ -8393,7 +8401,7 @@ export default function App() {
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
-          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocaCard'],
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocaId'],
           subunit: ['id', 'groupId', 'name', 'sortOrder', 'user_id']
       };
 
