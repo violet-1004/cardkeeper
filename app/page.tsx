@@ -7789,6 +7789,9 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                             // 🌟 強化容錯：兼容 API 各種可能的數量命名，並強制轉數字防 undefined 導致寫入報錯
                             stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
                             price: Number(item.price ?? 0),
+                            // 🌟 致命修復：補回 API 缺少的欄位並給予預設空字串，防止資料庫 NOT NULL 限制引發 null 寫入失敗
+                            member_name_en: String(item.member_name_en || item.memberNameEn || ''),
+                            group_name_en: String(item.group_name_en || item.groupNameEn || '')
                         }));
                         allFetchedPocas.push(...fetchedPocas);
 
@@ -7813,21 +7816,23 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas = Array.from(uniquePocasMap.values());
 
             let dbError = null;
+            let successCount = 0;
             // 🌟 降低 Chunk 大小，避免 SQLite 綁定變數上限報錯 (25筆 * 4欄位 = 100 variables)
             for (let i = 0; i < allFetchedPocas.length; i += 25) {
                 const chunk = allFetchedPocas.slice(i, i + 25);
                 const res = await supabase.from('poca').upsert(chunk);
                 if (res?.error) {
-                    dbError = res.error.message || JSON.stringify(res.error);
+                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
                     console.error("POCA Save Error:", res.error);
-                    break;
+                } else {
+                    successCount += chunk.length;
                 }
             }
 
             const newPocasCamel = allFetchedPocas.map(toCamelCase);
             const newIds = new Set(newPocasCamel.map(p => p.id));
             setPocaCards(prev => [...prev.filter(p => !newIds.has(p.id)), ...newPocasCamel]);
-            alert(`POCA 資料同步完成！共抓取 ${allFetchedPocas.length} 筆${dbError ? `\n⚠️ 寫入資料庫時發生部分錯誤: ${dbError}` : ''}`);
+            alert(`POCA 資料同步完成！\n共抓取: ${allFetchedPocas.length} 筆\n成功寫入: ${successCount} 筆${dbError ? `\n⚠️ 部分錯誤: ${dbError}` : ''}`);
         } catch (e) {
             alert('爬蟲失敗: ' + e.message);
         }
@@ -7861,10 +7866,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> 同步
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 content-start">
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 content-start">
                             {unmatchedPoca.map(p => (
-                                <div key={p.id} onClick={() => setSelectedPocaId(p.id === selectedPocaId ? null : p.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative ${selectedPocaId === p.id ? 'border-indigo-600 scale-95 shadow-md ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-300'}`}>
-                                    <div className="aspect-[2/3] bg-gray-100 relative">
+                                <div key={p.id} onClick={() => setSelectedPocaId(p.id === selectedPocaId ? null : p.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative w-full flex flex-col min-w-0 ${selectedPocaId === p.id ? 'border-indigo-600 scale-95 shadow-md ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-300'}`}>
+                                    <div className="w-full aspect-[2/3] bg-gray-100 relative flex-none">
                                         <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
                                         <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
                                             <div className="text-[9px] text-white font-bold truncate">{p.id}</div>
@@ -7902,7 +7907,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 </div>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 content-start pb-20">
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 content-start pb-20">
                             {filteredLocalCards.map(c => {
                                 const cardSeries = seriesMap[String(c.seriesId)];
                                 const seriesName = cardSeries?.shortName || cardSeries?.name;
@@ -7918,8 +7923,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
                                 
                                 return (
-                                <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative group flex flex-col ${selectedLocalId === c.id ? 'border-pink-500 scale-95 shadow-md ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
-                                    <div className="w-full aspect-[2/3] bg-gray-100 relative border-b border-gray-100 flex-shrink-0">
+                                <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer rounded-lg border shadow-sm overflow-hidden transition-all relative group w-full flex flex-col min-w-0 ${selectedLocalId === c.id ? 'border-pink-500 scale-95 shadow-md ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
+                                    <div className="w-full aspect-[2/3] bg-gray-100 relative border-b border-gray-100 flex-none">
                                         {c.image ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
                                         {c.pocaCard && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow">已對照</div>}
                                     </div>
