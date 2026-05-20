@@ -7423,6 +7423,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     const [selectedPocaId, setSelectedPocaId] = useState(null);
     const [selectedLocalId, setSelectedLocalId] = useState(null);
     const [overwriteImage, setOverwriteImage] = useState(true);
+    const [pocaPage, setPocaPage] = useState(1);
+    const POCA_PER_PAGE = 100;
 
     // --- Filters ---
     const [filterSubunits, setFilterSubunits] = useState([]);
@@ -7470,7 +7472,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         return map;
     }, [channels]);
 
-    const baseCards = (cards || []).filter(c => String(c.groupId) === String(currentGroupId));
+    // 🌟 核心修正：從 POCA 卡片資料中，反向找出哪些本地卡片已經被對照，並補上 pocaCard 屬性
+    // 這樣即使重新整理，「已對照」的標籤也能正確顯示
+    const matchedCardMap = useMemo(() => {
+        const map = new Map();
+        (pocaCards || []).forEach(p => {
+            if (p.cardId) map.set(String(p.cardId), p.id);
+        });
+        return map;
+    }, [pocaCards]);
+
+    const baseCards = useMemo(() => {
+        // The `cards` prop is already the filtered `currentCards`
+        return (cards || []).map(c => matchedCardMap.has(String(c.id)) ? { ...c, pocaCard: matchedCardMap.get(String(c.id)) } : c);
+    }, [cards, matchedCardMap]);
 
     const availableSubunits = useMemo(() => {
         const usedNames = new Set();
@@ -7689,9 +7704,19 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             if (!s || s.type !== filterSeriesType) return false;
          }
 
-         const cType = (!card.type || card.type === 'null' || card.type === 'undefined') ? 'null' : String(card.type);
-         if (filterTypes.length > 0 && !filterTypes.includes(cType)) return false;
-         if (filterChannels.length > 0 && !filterChannels.includes(String(card.channel))) return false;
+         if (filterTypes.length > 0) {
+             const typeValue = (!card.type || card.type === 'null' || card.type === 'undefined') ? 'null' : String(card.type);
+             const typeObj = typeMap[typeValue];
+             const cardTypeMatches = typeObj ? (filterTypes.includes(String(typeObj.id)) || filterTypes.includes(typeObj.name)) : filterTypes.includes(typeValue);
+             if (!cardTypeMatches) return false;
+         }
+         
+         if (filterChannels.length > 0) {
+             const channelValue = (!card.channel || card.channel === 'null' || card.channel === 'undefined') ? 'null' : String(card.channel);
+             const channelObj = channelMap[channelValue];
+             const cardChannelMatches = channelObj ? (filterChannels.includes(String(channelObj.id)) || filterChannels.includes(channelObj.name)) : filterChannels.includes(channelValue);
+             if (!cardChannelMatches) return false;
+         }
          if (filterBatches.length > 0 && !filterBatches.includes(String(card.batchId))) return false;
          
          return true;
@@ -7757,7 +7782,15 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
     });
 
-    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId);
+    // 🌟 排序，讓新抓到的卡片排在最前面
+    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId).sort((a, b) => Number(b.id) - Number(a.id));
+
+    // 🌟 分頁邏輯
+    const totalPocaPages = Math.ceil(unmatchedPoca.length / POCA_PER_PAGE);
+    const displayedPocaCards = useMemo(() => {
+        const startIndex = (pocaPage - 1) * POCA_PER_PAGE;
+        return unmatchedPoca.slice(startIndex, startIndex + POCA_PER_PAGE);
+    }, [unmatchedPoca, pocaPage]);
 
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
@@ -7862,6 +7895,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         // ==========================================
 
         // 1. 更新右側：讓本地卡片掛上 POCA ID，並根據選項決定是否覆蓋圖片
+        let newImage = null;
         setCards(prev => prev.map(c => {
             if (String(c.id) === String(selectedLocalId)) {
                 const updatedCard = { ...c, pocaCard: selectedPocaId };
@@ -7869,12 +7903,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     const poca = pocaCards.find(p => String(p.id) === String(selectedPocaId));
                     if (poca && poca.image) {
                         updatedCard.image = poca.image;
+                        newImage = poca.image;
                     }
                 }
                 return updatedCard;
             }
             return c;
         }));
+
+        // 🌟 核心修正：同步將更新的圖片與對照 ID 寫入 D1 資料庫，確保重新整理不還原
+        const dbPayload: any = { poca_card: selectedPocaId };
+        if (newImage) {
+            dbPayload.image = newImage;
+        }
+        supabase.from('ui_cards').update(dbPayload).eq('id', selectedLocalId).then();
 
         // 2. 更新左側：把已經綁定好的 POCA 卡片標記上本地卡片 ID
         setPocaCards(prev => prev.map(poca => 
@@ -7884,6 +7926,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         // 3. 清空選取狀態，準備對照下一張
         setSelectedPocaId(null);
         setSelectedLocalId(null);
+        
+        // 🌟 如果當前頁面只剩一張卡，對照後自動跳回上一頁
+        if (displayedPocaCards.length === 1 && pocaPage > 1) {
+            setPocaPage(pocaPage - 1);
+        }
 
     } catch (error) {
         console.error('對照失敗:', error);
@@ -7908,8 +7955,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> 同步
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 content-start">
-                            {unmatchedPoca.map(p => (
+                        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 content-start">
+                            {displayedPocaCards.map(p => (
                                 <div key={p.id} onClick={() => setSelectedPocaId(p.id === selectedPocaId ? null : p.id)} className={`cursor-pointer group relative select-none ${selectedPocaId === p.id ? 'scale-95' : ''}`}>
                                     <div className={`aspect-[2/3] rounded-lg bg-gray-100 overflow-hidden relative shadow-sm border transition-all ${selectedPocaId === p.id ? 'border-indigo-600 ring-2 ring-indigo-600' : 'border-gray-200 hover:border-indigo-300'}`}>
                                         <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
@@ -7922,6 +7969,25 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 </div>
                             ))}
                         </div>
+                        {totalPocaPages > 1 && (
+                            <div className="p-2 border-t border-gray-100 flex justify-center items-center gap-4 flex-shrink-0">
+                                <button 
+                                    onClick={() => setPocaPage(p => Math.max(1, p - 1))} 
+                                    disabled={pocaPage === 1}
+                                    className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <span className="text-xs font-bold text-gray-600">第 {pocaPage} / {totalPocaPages} 頁</span>
+                                <button 
+                                    onClick={() => setPocaPage(p => Math.min(totalPocaPages, p + 1))} 
+                                    disabled={pocaPage === totalPocaPages}
+                                    className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="md:hidden flex flex-col items-center gap-3 justify-center flex-shrink-0">
