@@ -7837,13 +7837,45 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     };
 
     const handleMatch = async () => {
-        if (!selectedPocaId || !selectedLocalId) return;
-        await supabase.from('ui_cards').update({ poca_card: selectedPocaId }).eq('id', selectedLocalId);
-        setCards(prev => prev.map(c => String(c.id) === String(selectedLocalId) ? { ...c, pocaCard: selectedPocaId } : c));
+    if (!selectedPocaId || !selectedLocalId) return;
+
+    try {
+        // 改為呼叫專案內部的 Next.js 後端 API 端點
+        const response = await fetch('/api/sync/poca-bind', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                local_card_id: selectedLocalId, // 傳送本地小卡 ID
+                poca_id: selectedPocaId         // 傳送 POCA 小卡 ID
+            }),
+        });
+
+        const data = await response.json();
+
+        // 檢查後端是否成功執行
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || '伺服器更新失敗');
+        }
+
+        // 確定 D1 資料庫寫入成功後，才更新前端 UI 狀態
+        setCards(prev => prev.map(c => 
+            String(c.id) === String(selectedLocalId) 
+                ? { ...c, poco_id: selectedPocaId } 
+                : c
+        ));
+
+        // 清空選取狀態並提示
         setSelectedPocaId(null);
         setSelectedLocalId(null);
         alert('對照成功！');
-    };
+
+    } catch (error) {
+        console.error('對照失敗:', error);
+        alert('對照失敗: ' + error.message);
+    }
+};
 
     return (
         <div className="space-y-4 pb-24">
