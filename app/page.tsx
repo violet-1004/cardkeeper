@@ -7422,6 +7422,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     const [isCrawling, setIsCrawling] = useState(false);
     const [selectedPocaId, setSelectedPocaId] = useState(null);
     const [selectedLocalId, setSelectedLocalId] = useState(null);
+    const [overwriteImage, setOverwriteImage] = useState(true);
 
     // --- Filters ---
     const [filterSubunits, setFilterSubunits] = useState([]);
@@ -7845,7 +7846,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 local_card_id: selectedLocalId,
-                poca_id: selectedPocaId
+                poca_id: selectedPocaId,
+                overwrite_image: overwriteImage
             }),
         });
 
@@ -7859,15 +7861,22 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         // 🌟 核心修正：資料庫成功後，同步更新前端畫面
         // ==========================================
 
-        // 1. 更新右側：讓本地卡片掛上 POCA ID (您原本就有的)
-        setCards(prev => prev.map(c => 
-            String(c.id) === String(selectedLocalId) 
-                ? { ...c, poco_id: selectedPocaId } 
-                : c
-        ));
+        // 1. 更新右側：讓本地卡片掛上 POCA ID，並根據選項決定是否覆蓋圖片
+        setCards(prev => prev.map(c => {
+            if (String(c.id) === String(selectedLocalId)) {
+                const updatedCard = { ...c, pocaCard: selectedPocaId };
+                if (overwriteImage) {
+                    const poca = pocaCards.find(p => String(p.id) === String(selectedPocaId));
+                    if (poca && poca.image) {
+                        updatedCard.image = poca.image;
+                    }
+                }
+                return updatedCard;
+            }
+            return c;
+        }));
 
-        // 2. 更新左側：把已經綁定好的 POCA 卡片從畫面上「刪掉」 (新增這段！)
-        // ⚠️ 請把 setPocaCards 換成您實際用來存左邊 POCA 列表的 set 函式
+        // 2. 更新左側：把已經綁定好的 POCA 卡片從畫面上「刪掉」
         setPocaCards(prev => prev.filter(poca => 
             String(poca.id) !== String(selectedPocaId)
         ));
@@ -7875,16 +7884,12 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         // 3. 清空選取狀態，準備對照下一張
         setSelectedPocaId(null);
         setSelectedLocalId(null);
-        
-        // 可選：改成更輕量的提示，不會一直被 alert 打斷操作
-        // alert('對照成功！');
 
     } catch (error) {
         console.error('對照失敗:', error);
         alert('對照失敗: ' + error.message);
     }
 };
-
     return (
         <div className="space-y-4 pb-24">
             <div className="px-4 pt-4">
@@ -7919,7 +7924,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         </div>
                     </div>
 
-                    <div className="md:hidden flex justify-center flex-shrink-0">
+                    <div className="md:hidden flex flex-col items-center gap-3 justify-center flex-shrink-0">
+                        <div className="flex items-center gap-2 bg-white p-2 rounded-full shadow-lg">
+                            <input type="checkbox" id="overwriteImageMobile" checked={overwriteImage} onChange={(e) => setOverwriteImage(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded cursor-pointer" />
+                            <label htmlFor="overwriteImageMobile" className="text-xs font-bold text-gray-700 cursor-pointer select-none">覆蓋圖片</label>
+                        </div>
                         <button onClick={handleMatch} disabled={!selectedPocaId || !selectedLocalId} className="bg-black text-white px-8 py-3 rounded-full font-bold shadow-lg disabled:opacity-50">確認對照</button>
                     </div>
 
@@ -7974,7 +7983,13 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         </div>
                         
                         <div className="hidden md:flex absolute bottom-4 inset-x-0 justify-center pointer-events-none">
-                            <button onClick={handleMatch} disabled={!selectedPocaId || !selectedLocalId} className="bg-black text-white px-8 py-3 rounded-full font-bold shadow-[0_8px_30px_rgb(0,0,0,0.2)] disabled:opacity-50 pointer-events-auto flex items-center gap-2 hover:bg-gray-800 transition-colors"><ArrowLeft className="w-4 h-4" /> 確認對照</button>
+                            <div className="flex items-center gap-4">
+                                <button onClick={handleMatch} disabled={!selectedPocaId || !selectedLocalId} className="bg-black text-white px-8 py-3 rounded-full font-bold shadow-[0_8px_30px_rgb(0,0,0,0.2)] disabled:opacity-50 pointer-events-auto flex items-center gap-2 hover:bg-gray-800 transition-colors"><ArrowLeft className="w-4 h-4" /> 確認對照</button>
+                                <div className="flex items-center gap-2 bg-white p-2 rounded-full shadow-lg pointer-events-auto">
+                                    <input type="checkbox" id="overwriteImage" checked={overwriteImage} onChange={(e) => setOverwriteImage(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded cursor-pointer" />
+                                    <label htmlFor="overwriteImage" className="text-xs font-bold text-gray-700 cursor-pointer select-none">覆蓋圖片</label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
