@@ -7,5 +7,4 @@ CREATE TABLE `poca` (
 	`group_name_en` text
 );
 --> statement-breakpoint
-ALTER TABLE `ui_cards` ADD `member_id2` text;--> statement-breakpoint
 ALTER TABLE `ui_cards` ADD `poco_id` integer;
