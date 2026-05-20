@@ -7840,36 +7840,44 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     if (!selectedPocaId || !selectedLocalId) return;
 
     try {
-        // 改為呼叫專案內部的 Next.js 後端 API 端點
         const response = await fetch('/api/sync/poca-bind', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                local_card_id: selectedLocalId, // 傳送本地小卡 ID
-                poca_id: selectedPocaId         // 傳送 POCA 小卡 ID
+                local_card_id: selectedLocalId,
+                poca_id: selectedPocaId
             }),
         });
 
         const data = await response.json();
 
-        // 檢查後端是否成功執行
         if (!response.ok || !data.success) {
             throw new Error(data.error || '伺服器更新失敗');
         }
 
-        // 確定 D1 資料庫寫入成功後，才更新前端 UI 狀態
+        // ==========================================
+        // 🌟 核心修正：資料庫成功後，同步更新前端畫面
+        // ==========================================
+
+        // 1. 更新右側：讓本地卡片掛上 POCA ID (您原本就有的)
         setCards(prev => prev.map(c => 
             String(c.id) === String(selectedLocalId) 
                 ? { ...c, poco_id: selectedPocaId } 
                 : c
         ));
 
-        // 清空選取狀態並提示
+        // 2. 更新左側：把已經綁定好的 POCA 卡片從畫面上「刪掉」 (新增這段！)
+        // ⚠️ 請把 setPocaCards 換成您實際用來存左邊 POCA 列表的 set 函式
+        setPocaCards(prev => prev.filter(poca => 
+            String(poca.id) !== String(selectedPocaId)
+        ));
+
+        // 3. 清空選取狀態，準備對照下一張
         setSelectedPocaId(null);
         setSelectedLocalId(null);
-        alert('對照成功！');
+        
+        // 可選：改成更輕量的提示，不會一直被 alert 打斷操作
+        // alert('對照成功！');
 
     } catch (error) {
         console.error('對照失敗:', error);
