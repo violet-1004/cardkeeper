@@ -133,5 +133,6 @@ export const poca = sqliteTable("poca", {
   stocked_count: integer("stocked_count").notNull(),
   price: text("price").notNull(),
   member_name_en: text("member_name_en"),
-  group_name_en: text("group_name_en")
+  group_name_en: text("group_name_en"),
+  card_id: integer('card_id')
 });

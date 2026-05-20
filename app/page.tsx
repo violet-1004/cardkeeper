@@ -7757,7 +7757,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
     });
 
-    const unmatchedPoca = (pocaCards || []).filter(p => !cards.some(c => String(c.pocaCard) === String(p.id)));
+    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId);
 
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
@@ -7876,9 +7876,9 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             return c;
         }));
 
-        // 2. 更新左側：把已經綁定好的 POCA 卡片從畫面上「刪掉」
-        setPocaCards(prev => prev.filter(poca => 
-            String(poca.id) !== String(selectedPocaId)
+        // 2. 更新左側：把已經綁定好的 POCA 卡片標記上本地卡片 ID
+        setPocaCards(prev => prev.map(poca => 
+            String(poca.id) === String(selectedPocaId) ? { ...poca, cardId: selectedLocalId } : poca
         ));
 
         // 3. 清空選取狀態，準備對照下一張
@@ -8644,6 +8644,7 @@ export default function App() {
           setInventory(prev => prev.filter(i => i.cardId !== id));
           setCustomLists(prev => prev.map(l => ({ ...l, items: l.items.filter(i => i.cardId !== id) })));
           setBulkRecords(prev => prev.map(r => ({ ...r, items: (r.items || []).filter(i => i.cardId !== id) })));
+          setPocaCards(prev => prev.map(p => String(p.cardId) === String(id) ? { ...p, cardId: null } : p));
       } else if (type === 'series') {
           setSeries(prev => prev.filter(s => s.id !== id));
           setCards(prev => prev.map(c => c.seriesId === id ? { ...c, seriesId: null } : c));
