@@ -1112,6 +1112,8 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     // 4. 總金額 / 總張數 = 真實均價
     const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
 
+    const pocaData = (pocaCards || []).find(p => String(p.id) === String(card.pocaCard));
+
     // 🌟 篩選專輯：若成員有分隊，只顯示該分隊的專輯
     const cardMember = members.find(m => m.id === card.memberId);
     const albums = useMemo(() => (series || []).filter(s => {
@@ -1369,7 +1371,16 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                 <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600">
                                     <TrendingUp className="w-4 h-4" />
                                 </div>
-                                <div className="font-bold text-gray-800 text-sm">販售</div>
+                                <div className="flex items-center gap-2">
+                                    <div className="font-bold text-gray-800 text-sm">販售</div>
+                                    {pocaData && (
+                                        <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
+                                            <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
+                                            <span className="text-green-600 font-bold">${pocaData.price}</span>
+                                            <span className="text-green-500 font-medium">({pocaData.stockedCount}張)</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex gap-1.5">
                                 {SALE_COLORS.map(c => (
