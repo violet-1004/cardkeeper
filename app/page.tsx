@@ -1112,7 +1112,8 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     // 4. 總金額 / 總張數 = 真實均價
     const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
 
-    const pocaData = (pocaCards || []).find(p => String(p.id) === String(card.pocaCard));
+    // 🌟 核心修復：反向由 pocaCards 中尋找綁定此卡片 ID 的資料
+    const pocaData = (pocaCards || []).find(p => String(p.cardId) === String(card.id) || (card.pocaCard && String(p.id) === String(card.pocaCard)));
 
     // 🌟 篩選專輯：若成員有分隊，只顯示該分隊的專輯
     const cardMember = members.find(m => m.id === card.memberId);
