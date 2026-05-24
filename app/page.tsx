@@ -1337,7 +1337,13 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                 <div className="bg-white/60 p-6 mb-2 text-center border-b border-gray-200/50 shadow-sm backdrop-blur-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
                         {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
-                        <Image src={card.image} alt="卡片詳情" fill priority unoptimized className="object-cover" unoptimized={true}/>
+                        {card.image ? (
+                            <Image src={card.image} alt="卡片詳情" fill priority className="object-cover" unoptimized={true} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                <ImageIcon className="w-12 h-12" />
+                            </div>
+                        )}
                     </div>
                     <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
@@ -3990,7 +3996,13 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
             <div className="flex-1 overflow-y-auto no-scrollbar bg-gray-50">
                 <div className="bg-white p-6 mb-2 text-center border-b shadow-sm">
                     <div className="w-40 aspect-square mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
-                        <Image src={album.image} alt={album.name} fill priority unoptimized className="object-cover" />
+                        {album.image ? (
+                            <Image src={album.image} alt={album.name} fill priority className="object-cover" unoptimized={true} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                <Disc className="w-12 h-12" />
+                            </div>
+                        )}
                     </div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{album.name}</h2>
                     <div className="flex justify-center gap-3 mt-4">
