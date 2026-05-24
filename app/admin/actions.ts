@@ -12,8 +12,8 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
         const env = getRequestContext().env as any;
         if (!env.BUCKET) throw new Error("R2 尚未綁定");
 
-        // 🌟 補上 https:// 確保回傳正確的絕對網址
-        const R2_PUBLIC_URL = "https://pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev"; 
+        // 🌟 優先讀取環境變數中的 R2 公開網址，若無則使用預設值
+        const R2_PUBLIC_URL = env.R2_PUBLIC_URL || "https://pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev"; 
 
         let arrayBuffer: ArrayBuffer;
         let contentType: string;

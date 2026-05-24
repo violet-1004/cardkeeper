@@ -19,7 +19,8 @@ export async function POST(request: Request) {
     // 2. 產生唯一檔名，避免重複
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `card_${Date.now()}.${fileExt}`;
-    const r2PublicUrl = "https://pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev";
+    // 🌟 優先讀取環境變數中的 R2 公開網址，若無則使用預設值
+    const r2PublicUrl = env.R2_PUBLIC_URL || "https://pub-f5a70c4f84d841ada9cbda4eafbb30ee.r2.dev";
 
     // 3. 轉換檔案並寫入 R2
     const arrayBuffer = await file.arrayBuffer();

@@ -1112,8 +1112,9 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     // 4. 總金額 / 總張數 = 真實均價
     const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
 
-    // 🌟 核心修復：反向由 pocaCards 中尋找綁定此卡片 ID 的資料
-    const pocaData = (pocaCards || []).find(p => String(p.cardId) === String(card.id) || (card.pocaCard && String(p.id) === String(card.pocaCard)));
+    // 🌟 核心修復：反向由 pocaCards 中尋找綁定此卡片 ID 的資料 (相容 PocaCard 大寫等多種命名寫法)
+    const matchedPocaId = card.PocaCard || card.pocaCard || card.poca_id || card.pocaId;
+    const pocaData = (pocaCards || []).find(p => String(p.cardId) === String(card.id) || String(p.card_id) === String(card.id) || (matchedPocaId && String(p.id) === String(matchedPocaId)));
 
     // 🌟 篩選專輯：若成員有分隊，只顯示該分隊的專輯
     const cardMember = members.find(m => m.id === card.memberId);
@@ -7448,6 +7449,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     const [selectedLocalId, setSelectedLocalId] = useState(null);
     const [overwriteImage, setOverwriteImage] = useState(true);
     const [pocaPage, setPocaPage] = useState(1);
+    const [showNoImageOnly, setShowNoImageOnly] = useState(false);
+    const [hideMatched, setHideMatched] = useState(false);
     const POCA_PER_PAGE = 100;
 
     // --- Filters ---
@@ -7922,7 +7925,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         let newImage = null;
         setCards(prev => prev.map(c => {
             if (String(c.id) === String(selectedLocalId)) {
-                const updatedCard = { ...c, pocaCard: selectedPocaId };
+                const updatedCard = { ...c, pocaCard: selectedPocaId, PocaCard: selectedPocaId };
                 if (overwriteImage) {
                     const poca = pocaCards.find(p => String(p.id) === String(selectedPocaId));
                     if (poca && poca.image) {
@@ -8024,7 +8027,23 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
                     <div className="flex-[1.5] min-w-0 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden relative">
                         <div className="p-3 border-b border-gray-100 space-y-3 bg-gray-50 flex-shrink-0">
-                            <h3 className="font-bold text-gray-800 text-sm">資料庫小卡 ({filteredLocalCards.length})</h3>
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-bold text-gray-800 text-sm">資料庫小卡 ({filteredLocalCards.length})</h3>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => setShowNoImageOnly(!showNoImageOnly)}
+                                        className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${showNoImageOnly ? 'bg-indigo-100 text-indigo-700' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}
+                                    >
+                                        只看無圖
+                                    </button>
+                                    <button 
+                                        onClick={() => setHideMatched(!hideMatched)}
+                                        className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${hideMatched ? 'bg-green-100 text-green-700' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}
+                                    >
+                                        隱藏已對照
+                                    </button>
+                                </div>
+                            </div>
                             <div className="space-y-2">
                                 {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunits} onChange={(val) => toggleFilter(setFilterSubunits, val)} mapName={s => s.name} />}
                                 {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMembers} onChange={(val) => toggleFilter(setFilterMembers, val)} mapName={m => m.name} />}
@@ -8535,7 +8554,7 @@ export default function App() {
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
-          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocaCard'],
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocaCard', 'PocaCard', 'poca_id'],
           subunit: ['id', 'groupId', 'name', 'sortOrder', 'user_id']
       };
 
@@ -8990,7 +9009,8 @@ export default function App() {
               channel: c.channel || null,
               image: c.image || null,
               is_wishlist: c.isWishlist || false,
-              member_id2: c.memberId2 || []
+              member_id2: c.memberId2 || [],
+              poca_card: c.PocaCard || c.pocaCard || c.poca_id || null // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
           };
           await supabase.from('ui_cards').upsert(payload);
       }
