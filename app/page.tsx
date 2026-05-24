@@ -1383,7 +1383,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                         <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                             <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
                                             <span className="text-green-600 font-bold">${pocaData.price}</span>
-                                            <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? 0}張)</span>
+                                            <span className="text-green-500 font-medium">({pocaData.stockedCount}張)</span>
                                         </div>
                                     )}
                                 </div>
@@ -8989,8 +8989,7 @@ export default function App() {
               channel: c.channel || null,
               image: c.image || null,
               is_wishlist: c.isWishlist || false,
-              member_id2: c.memberId2 || [],
-              poca_card: c.pocaCard || null // 🌟 補上 POCA ID，避免批量歸類時遺失對照紀錄
+              member_id2: c.memberId2 || []
           };
           await supabase.from('ui_cards').upsert(payload);
       }
