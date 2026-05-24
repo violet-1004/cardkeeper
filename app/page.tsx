@@ -8989,7 +8989,8 @@ export default function App() {
               channel: c.channel || null,
               image: c.image || null,
               is_wishlist: c.isWishlist || false,
-              member_id2: c.memberId2 || []
+              member_id2: c.memberId2 || [],
+              poca_card: c.pocaCard || null // 🌟 補上 POCA ID，避免批量歸類時遺失對照紀錄
           };
           await supabase.from('ui_cards').upsert(payload);
       }
