@@ -1112,9 +1112,28 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     // 4. 總金額 / 總張數 = 真實均價
     const avgPrice = totalValidQty > 0 ? Math.round(totalAmount / totalValidQty) : 0;
 
-    // 🌟 核心修復：反向由 pocaCards 中尋找綁定此卡片 ID 的資料 (相容 PocaCard 大寫等多種命名寫法)
+    // 🌟 終極修復：加入動態查詢狀態，對付後端過濾掉已對照卡片的問題
+    const [dynamicPocaData, setDynamicPocaData] = useState(null);
     const matchedPocaId = card.PocaCard || card.pocaCard || card.poca_id || card.pocaId;
-    const pocaData = (pocaCards || []).find(p => String(p.cardId) === String(card.id) || String(p.card_id) === String(card.id) || (matchedPocaId && String(p.id) === String(matchedPocaId)));
+    const basePocaData = (pocaCards || []).find(p => String(p.cardId) === String(card.id) || String(p.card_id) === String(card.id) || (matchedPocaId && String(p.id) === String(matchedPocaId)));
+    
+    const pocaData = basePocaData || dynamicPocaData;
+
+    useEffect(() => {
+        // 如果 pocaCards 因為後端過濾 (只撈取未對照) 而排除了這張卡，前端主動發起 D1 單筆精確反查
+        if (!basePocaData) {
+            if (matchedPocaId) {
+                new D1QueryBuilder('poca', 'select').eq('id', matchedPocaId).then(res => {
+                    if (res?.data?.[0]) setDynamicPocaData(toCamelCase(res.data[0]));
+                }).catch(() => {});
+            } else if (card.id) {
+                // 若 ui_cards 身上沒有紀錄，直接利用 poca 表內的 card_id 進行反查
+                new D1QueryBuilder('poca', 'select').eq('card_id', card.id).then(res => {
+                    if (res?.data?.[0]) setDynamicPocaData(toCamelCase(res.data[0]));
+                }).catch(() => {});
+            }
+        }
+    }, [basePocaData, matchedPocaId, card.id]);
 
     // 🌟 篩選專輯：若成員有分隊，只顯示該分隊的專輯
     const cardMember = members.find(m => m.id === card.memberId);
@@ -1384,8 +1403,8 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     {pocaData && (
                                         <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                             <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
-                                            <span className="text-green-600 font-bold">${pocaData.price}</span>
-                                            <span className="text-green-500 font-medium">({pocaData.stockedCount}張)</span>
+                                            <span className="text-green-600 font-bold">${pocaData.price ?? pocaData.Price ?? 0}</span>
+                                            <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
                                         </div>
                                     )}
                                 </div>
@@ -7707,6 +7726,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
      };
 
     const filteredLocalCards = baseCards.filter(card => {
+         const hasImage = card.image && String(card.image).trim() !== '' && card.image !== 'null' && card.image !== 'undefined';
+         if (hideMatched && card.pocaCard) return false;
+         if (showNoImageOnly && hasImage) return false;
+
          if (filterSubunits.length > 0 && filterMembers.length === 0) {
              const mem = memberMap[String(card.memberId)];
              const ser = seriesMap[String(card.seriesId)];
@@ -8077,10 +8100,12 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
                                 
+                                const hasImage = c.image && String(c.image).trim() !== '' && c.image !== 'null' && c.image !== 'undefined';
+                                
                                 return (
                                 <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer group relative select-none ${selectedLocalId === c.id ? 'scale-95' : ''}`}>
                                     <div className={`aspect-[2/3] rounded-lg bg-gray-100 overflow-hidden relative shadow-sm border transition-all ${selectedLocalId === c.id ? 'border-pink-500 ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
-                                        {c.image ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
+                                        {hasImage ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
                                         {c.pocaCard && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow z-10">已對照</div>}
                                         {selectedLocalId === c.id && <div className="absolute top-1 right-1 bg-pink-500 rounded-full w-4 h-4 flex items-center justify-center shadow z-10"><Check className="w-3 h-3 text-white" /></div>}
                                     </div>
