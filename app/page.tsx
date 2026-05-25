@@ -7479,8 +7479,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         
         const originalPrice = missingPriceCard.originalPrice;
         
-        // 🌟 將手動輸入的對照價格儲存於 price 資料表中
-        await supabase.from('price').upsert({ id: originalPrice, id_c: val });
+        // 🌟 將手動輸入的對照價格儲存於 price 資料表中 (使用 realSupabase 確保避開 D1 攔截)
+        await realSupabase.from('price').upsert({ id: originalPrice, id_c: val });
         
         priceMappingRef.current[originalPrice] = val;
         
@@ -7860,17 +7860,27 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         setSyncProgress('準備中...');
         try {
             // 🌟 每次同步前，從 price 資料表抓取最新的價格對照表
-            const priceRes = await fetch('/api/data?table=price&_t=' + Date.now()).then(r => r.json());
-            const priceMap = {};
-            if (priceRes && priceRes.data) {
-                priceRes.data.forEach(p => {
-                    const orig = Number(p.id);
-                    const conv = p.id_c !== undefined ? Number(p.id_c) : (p.idC !== undefined ? Number(p.idC) : undefined);
-                    if (!isNaN(orig) && conv !== undefined && !isNaN(conv)) {
-                        priceMap[orig] = conv;
-                    }
-                });
+            // 優先使用 Supabase 直連讀取，避免後端 API GET 阻擋未知資料表而回傳 404
+            let priceData = [];
+            try {
+                const { data } = await supabase.from('price').select();
+                if (data) priceData = data;
+                else {
+                    const priceRes = await fetch('/api/data?table=price&_t=' + Date.now()).then(r => r.json());
+                    if (priceRes && priceRes.data) priceData = priceRes.data;
+                }
+            } catch (e) {
+                console.warn("Failed to fetch price mapping", e);
             }
+
+            const priceMap = {};
+            priceData.forEach(p => {
+                const orig = Number(p.id);
+                const conv = p.id_c !== undefined ? Number(p.id_c) : (p.idC !== undefined ? Number(p.idC) : undefined);
+                if (!isNaN(orig) && conv !== undefined && !isNaN(conv)) {
+                    priceMap[orig] = conv;
+                }
+            });
             priceMappingRef.current = priceMap;
 
             let page = 1;
