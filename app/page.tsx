@@ -7461,7 +7461,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
-function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData, appSettings, onUpdateSetting }) {
+function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData, appSettings, onUpdateSetting, prices }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
     const [syncProgress, setSyncProgress] = useState('');
@@ -7496,6 +7496,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             localStorage.setItem('poca_price_mapping_backup', JSON.stringify(priceMappingRef.current));
         } catch(e) {}
         
+        // 🌟 也嘗試儲存到 price 資料表 (相容舊版資料結構)
+        try {
+            supabase.from('price').upsert({ id: originalPrice, id_c: val, idC: val }).then();
+        } catch (e) {}
+
         if (missingPriceResolver.current) missingPriceResolver.current(val);
         setMissingPriceCard(null);
         setManualPriceInput('');
@@ -7892,6 +7897,15 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 } catch (e) {}
             }
             
+            // 從 price 資料表讀取 (優先套用)
+            if (prices && prices.length > 0) {
+                prices.forEach(p => {
+                    const orig = Number(p.id);
+                    const conv = p.id_c !== undefined ? Number(p.id_c) : Number(p.idC);
+                    if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                });
+            }
+
             // 從 localStorage 備援讀取
             try {
                 const localBackup = localStorage.getItem('poca_price_mapping_backup');
@@ -8346,6 +8360,7 @@ export default function App() {
   const [bulkRecords, setBulkRecords] = useState([]);
   const [subunits, setSubunits] = useState([]); // 🌟 新增 subunits 狀態
   const [appSettings, setAppSettings] = useState([]); // 🌟 新增全域設定狀態
+  const [prices, setPrices] = useState([]); // 🌟 新增 price 資料表狀態
   const [pocaCards, setPocaCards] = useState([]); // 🌟 新增 POCA API 卡片資料狀態
   
   const [editingBulkRecord, setEditingBulkRecord] = useState(null); 
@@ -8545,6 +8560,7 @@ export default function App() {
         setCustomLists(await fetchTable('custom_lists', false, { paginate: true }));
         setSales(await fetchTable('ui_sales', false, { paginate: true }));
         setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
+        setPrices(await fetchTable('price', true)); // 🌟 讀取 price 資料表
         setPocaCards(await fetchTable('poca', false, { paginate: true })); // 🌟 讀取 poca 爬蟲資料
     }
     fetchAllData();
@@ -9574,6 +9590,7 @@ export default function App() {
           onSyncData={fetchCardData} 
           appSettings={appSettings}
           onUpdateSetting={handleUpdateAppSetting}
+          prices={prices} // 🌟 傳入 prices
         />;
       default: return null;
     }

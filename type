@@ -1,5 +1,5 @@
 git add .
-git commit -m "0525 POCA-8"
+git commit -m "0525 POCA-10"
 git push
 
 npx vercel --prod
