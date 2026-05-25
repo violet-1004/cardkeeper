@@ -8019,19 +8019,28 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas.forEach(p => {
                 if (existingPocaMap.has(p.id)) {
                     const existing = existingPocaMap.get(p.id);
-                    itemsToUpdate.push({
-                        id: p.id,
-                        price: String(p.price),
-                        id_c: Number(p.id_c),
-                        stocked_count: p.stocked_count,
-                        image: existing.image || p.image || '', // 🌟 補回 image 避免 SQLite not null 報錯
-                        card_id: existing.cardId || existing.card_id || null, // 🌟 補回舊有關聯，寫入時覆蓋回原值
-                        member_name_en: existing.memberNameEn || existing.member_name_en || null,
-                        group_name_en: existing.groupNameEn || existing.group_name_en || null
-                    });
+                    
+                    // 🌟 效能與防鎖死優化：只挑出真正有異動的資料進行更新，避免對 D1 發出數千個無用的 Update 請求
+                    const isPriceChanged = String(existing.price) !== String(p.price);
+                    const isIdcChanged = Number(existing.idC ?? existing.id_c) !== Number(p.id_c);
+                    const isStockChanged = Number(existing.stockedCount ?? existing.stocked_count) !== Number(p.stocked_count);
+                    const isImageChanged = p.image && existing.image !== p.image;
+
+                    if (isPriceChanged || isIdcChanged || isStockChanged || isImageChanged) {
+                        itemsToUpdate.push({
+                            id: Number(p.id),
+                            price: String(p.price),
+                            id_c: Number(p.id_c),
+                            stocked_count: p.stocked_count,
+                            image: existing.image || p.image || '', // 🌟 補回 image 避免 SQLite not null 報錯
+                            card_id: existing.cardId || existing.card_id || null, // 🌟 補回舊有關聯，寫入時覆蓋回原值
+                            member_name_en: existing.memberNameEn || existing.member_name_en || null,
+                            group_name_en: existing.groupNameEn || existing.group_name_en || null
+                        });
+                    }
                 } else {
                     itemsToInsert.push({
-                        id: p.id,
+                        id: Number(p.id),
                         price: String(p.price),
                         id_c: Number(p.id_c),
                         stocked_count: p.stocked_count,
@@ -8046,21 +8055,17 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             let dbError = null;
             let successCount = 0;
             
-            // 🌟 核心修復：全面棄用 upsert，避開 D1/SQLite 的 ON CONFLICT 語法報錯 bug
-            // 將更新改為批次平行單筆 update
-            for (let i = 0; i < itemsToUpdate.length; i += 10) {
-                const chunk = itemsToUpdate.slice(i, i + 10);
-                await Promise.all(chunk.map(async item => {
-                    const { id, ...rest } = item;
-                    const res = await supabase.from('poca').update(rest).eq('id', id);
-                    if (res?.error) {
-                        if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                        console.error("POCA Update Error:", res.error);
-                    } else {
-                        successCount++;
-                    }
-                }));
-                setSyncProgress(`寫入中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+            // 🌟 循序執行單筆 Update，徹底杜絕 SQLITE_BUSY 鎖死
+            for (const item of itemsToUpdate) {
+                const { id, ...rest } = item;
+                const res = await supabase.from('poca').update(rest).eq('id', id);
+                if (res?.error) {
+                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
+                    console.error("POCA Update Error:", res.error);
+                } else {
+                    successCount++;
+                }
+                setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
             }
 
             // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
