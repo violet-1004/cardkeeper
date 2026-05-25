@@ -1114,7 +1114,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
 
     // 🌟 終極修復：加入動態查詢狀態，對付後端過濾掉已對照卡片的問題
     const [dynamicPocaData, setDynamicPocaData] = useState(null);
-    const matchedPocaId = card.PocaCard || card.pocaCard || card.poca_id || card.pocaId;
+    const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocoJd || card.PocaCard || card.pocaCard || card.poca_id || card.pocaId;
     const basePocaData = (pocaCards || []).find(p => String(p.cardId) === String(card.id) || String(p.card_id) === String(card.id) || (matchedPocaId && String(p.id) === String(matchedPocaId)));
     
     const pocaData = basePocaData || dynamicPocaData;
@@ -7518,20 +7518,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         return map;
     }, [channels]);
 
-    // 🌟 核心修正：從 POCA 卡片資料中，反向找出哪些本地卡片已經被對照，並補上 pocaCard 屬性
-    // 這樣即使重新整理，「已對照」的標籤也能正確顯示
-    const matchedCardMap = useMemo(() => {
-        const map = new Map();
-        (pocaCards || []).forEach(p => {
-            if (p.cardId) map.set(String(p.cardId), p.id);
-        });
-        return map;
-    }, [pocaCards]);
-
-    const baseCards = useMemo(() => {
-        // The `cards` prop is already the filtered `currentCards`
-        return (cards || []).map(c => matchedCardMap.has(String(c.id)) ? { ...c, pocaCard: matchedCardMap.get(String(c.id)) } : c);
-    }, [cards, matchedCardMap]);
+    // 🌟 判斷資料庫小卡是否已對照，直接以卡片資料庫中的 poco_id 欄位為主
+    const baseCards = cards || [];
 
     const availableSubunits = useMemo(() => {
         const usedNames = new Set();
@@ -7727,7 +7715,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
     const filteredLocalCards = baseCards.filter(card => {
          const hasImage = card.image && String(card.image).trim() !== '' && card.image !== 'null' && card.image !== 'undefined';
-         if (hideMatched && card.pocaCard) return false;
+         if (hideMatched && (card.poco_id || card.pocoId || card.poco_jd || card.pocoJd || card.pocaCard || card.PocaCard || card.poca_id)) return false;
          if (showNoImageOnly && hasImage) return false;
 
          if (filterSubunits.length > 0 && filterMembers.length === 0) {
@@ -7948,7 +7936,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         let newImage = null;
         setCards(prev => prev.map(c => {
             if (String(c.id) === String(selectedLocalId)) {
-                const updatedCard = { ...c, pocaCard: selectedPocaId, PocaCard: selectedPocaId };
+                const updatedCard = { ...c, pocaCard: selectedPocaId, PocaCard: selectedPocaId, poco_id: selectedPocaId, pocoId: selectedPocaId, pocoJd: selectedPocaId, poco_jd: selectedPocaId };
                 if (overwriteImage) {
                     const poca = pocaCards.find(p => String(p.id) === String(selectedPocaId));
                     if (poca && poca.image) {
@@ -7962,7 +7950,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         }));
 
         // 🌟 核心修正：同步將更新的圖片與對照 ID 寫入 D1 資料庫，確保重新整理不還原
-        const dbPayload: any = { poca_card: selectedPocaId };
+        const dbPayload: any = { poca_card: selectedPocaId, poco_id: selectedPocaId };
         if (newImage) {
             dbPayload.image = newImage;
         }
@@ -8106,7 +8094,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 <div key={c.id} onClick={() => setSelectedLocalId(c.id === selectedLocalId ? null : c.id)} className={`cursor-pointer group relative select-none ${selectedLocalId === c.id ? 'scale-95' : ''}`}>
                                     <div className={`aspect-[2/3] rounded-lg bg-gray-100 overflow-hidden relative shadow-sm border transition-all ${selectedLocalId === c.id ? 'border-pink-500 ring-2 ring-pink-500' : 'border-gray-200 hover:border-pink-300'}`}>
                                         {hasImage ? <img src={c.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
-                                        {c.pocaCard && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow z-10">已對照</div>}
+                                        {(c.pocoId || c.poco_id || c.pocoJd || c.poco_jd || c.pocaCard || c.PocaCard || c.poca_id) && <div className="absolute top-1 left-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold shadow z-10">已對照</div>}
                                         {selectedLocalId === c.id && <div className="absolute top-1 right-1 bg-pink-500 rounded-full w-4 h-4 flex items-center justify-center shadow z-10"><Check className="w-3 h-3 text-white" /></div>}
                                     </div>
                                     <div className="px-1 pt-1">
@@ -8579,7 +8567,7 @@ export default function App() {
           batch: ['id', 'groupId', 'seriesId', 'name', 'type', 'channel', 'batchNumber', 'image', 'date'],
           channel: ['id', 'groupId', 'name', 'shortName'],
           type: ['id', 'groupId', 'name', 'shortName', 'sortOrder'],
-          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocaCard', 'PocaCard', 'poca_id'],
+          card: ['id', 'groupId', 'memberId', 'seriesId', 'batchId', 'name', 'type', 'channel', 'image', 'isWishlist', 'memberId2', 'pocaCard', 'PocaCard', 'poca_id', 'poco_id', 'poco_jd'],
           subunit: ['id', 'groupId', 'name', 'sortOrder', 'user_id']
       };
 
@@ -9035,7 +9023,9 @@ export default function App() {
               image: c.image || null,
               is_wishlist: c.isWishlist || false,
               member_id2: c.memberId2 || [],
-              poca_card: c.PocaCard || c.pocaCard || c.poca_id || null // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
+              poca_card: c.PocaCard || c.pocaCard || c.poca_id || null, // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
+              poco_id: c.poco_id || c.pocoId || null,
+              poco_jd: c.poco_jd || c.pocoJd || null
           };
           await supabase.from('ui_cards').upsert(payload);
       }
