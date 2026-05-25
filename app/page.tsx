@@ -7471,31 +7471,18 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     const [manualPriceInput, setManualPriceInput] = useState('');
     const missingPriceResolver = useRef(null);
 
-    const initialMapping = {
-        500: 2.5, 1000: 3.5, 1500: 4.2, 2000: 4.9, 2500: 5.6,
-        3000: 6.3, 3500: 7.0, 4000: 8.4, 4500: 9.1, 5000: 9.8,
-        6000: 11.9, 7000: 13.3, 8000: 14.7, 8500: 15.4, 9000: 16.1,
-        9500: 16.8, 10000: 17.5, 15000: 24.5, 18000: 28.7, 20000: 31.5,
-        21000: 32.9, 25000: 38.5, 35000: 52.5, 40000: 59.5, 80000: 115.5
-    };
+    const priceMappingRef = useRef({});
 
-    const [priceMapping, setPriceMapping] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('poca_price_mapping');
-            if (saved) return { ...initialMapping, ...JSON.parse(saved) };
-        }
-        return initialMapping;
-    });
-
-    const priceMappingRef = useRef(priceMapping);
-    useEffect(() => { priceMappingRef.current = priceMapping; }, [priceMapping]);
-
-    const handleMissingPriceSubmit = () => {
+    const handleMissingPriceSubmit = async () => {
         const val = Number(manualPriceInput);
         if (isNaN(val) || val <= 0) return alert("請輸入有效的轉換價格");
-        const newMapping = { ...priceMappingRef.current, [missingPriceCard.originalPrice]: val };
-        setPriceMapping(newMapping);
-        localStorage.setItem('poca_price_mapping', JSON.stringify(newMapping));
+        
+        const originalPrice = missingPriceCard.originalPrice;
+        
+        // 🌟 將手動輸入的對照價格儲存於 price 資料表中
+        await supabase.from('price').upsert({ id: originalPrice, id_c: val });
+        
+        priceMappingRef.current[originalPrice] = val;
         
         if (missingPriceResolver.current) missingPriceResolver.current(val);
         setMissingPriceCard(null);
@@ -7872,6 +7859,16 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         setIsCrawling(true);
         setSyncProgress('準備中...');
         try {
+            // 🌟 每次同步前，從 price 資料表抓取最新的價格對照表
+            const priceRes = await fetch('/api/data?table=price&_t=' + Date.now()).then(r => r.json());
+            const priceMap = {};
+            if (priceRes && priceRes.data) {
+                priceRes.data.forEach(p => {
+                    priceMap[Number(p.id)] = Number(p.id_c || p.idC);
+                });
+            }
+            priceMappingRef.current = priceMap;
+
             let page = 1;
             let hasNext = true;
             let allFetchedPocas = [];
