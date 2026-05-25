@@ -7496,10 +7496,12 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             localStorage.setItem('poca_price_mapping_backup', JSON.stringify(priceMappingRef.current));
         } catch(e) {}
         
-        // 🌟 也嘗試儲存到 price 資料表 (相容舊版資料結構)
+        // 🌟 確保將手動輸入的對照價格儲存於 Cloudflare D1 的 price 資料表 (id 與 id_c 欄位)
         try {
-            supabase.from('price').upsert({ id: originalPrice, id_c: val, idC: val }).then();
-        } catch (e) {}
+            await supabase.from('price').upsert({ id: originalPrice, id_c: val });
+        } catch (e) {
+            console.error("儲存至 price 表失敗", e);
+        }
 
         if (missingPriceResolver.current) missingPriceResolver.current(val);
         setMissingPriceCard(null);
@@ -7897,13 +7899,30 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 } catch (e) {}
             }
             
-            // 從 price 資料表讀取 (優先套用)
-            if (prices && prices.length > 0) {
-                prices.forEach(p => {
-                    const orig = Number(p.id);
-                    const conv = p.id_c !== undefined ? Number(p.id_c) : Number(p.idC);
-                    if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
-                });
+            // 🌟 每次同步前，即時從 Cloudflare D1 的 price 資料表讀取最新對照 (優先套用)
+            try {
+                const priceRes = await fetch(`/api/data?table=price&_t=${Date.now()}`);
+                if (priceRes.ok) {
+                    const priceJson = await priceRes.json();
+                    if (priceJson && priceJson.data) {
+                        priceJson.data.forEach(p => {
+                            const orig = Number(p.id);
+                            const conv = p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : (p.idC !== undefined && p.idC !== null ? Number(p.idC) : NaN);
+                            if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                        });
+                    }
+                } else {
+                    throw new Error("Fetch failed");
+                }
+            } catch(e) {
+                console.warn("即時讀取 price 表失敗，改用預設與快取", e);
+                if (prices && prices.length > 0) {
+                    prices.forEach(p => {
+                        const orig = Number(p.id);
+                        const conv = p.id_c !== undefined ? Number(p.id_c) : Number(p.idC);
+                        if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                    });
+                }
             }
 
             // 從 localStorage 備援讀取
@@ -8489,6 +8508,7 @@ export default function App() {
                 
                 const response = await fetch(`/api/data?${params.toString()}`, { cache: 'no-store' });
                 if (!response.ok) {
+                    if (silent) return []; // 🌟 靜默模式下直接忽略 404 等錯誤，不印出紅字
                     const errText = await response.text();
                     let errData: any = {};
                     try { errData = JSON.parse(errText); } catch (e) {}
@@ -8496,7 +8516,7 @@ export default function App() {
                 }
                 
                 const result = await response.json();
-                console.log(`✅ [${t}] 成功讀取 ${result.data?.length || 0} 筆資料`);
+                if (!silent) console.log(`✅ [${t}] 成功讀取 ${result.data?.length || 0} 筆資料`);
                 
                 return (result.data || []).map(toCamelCase).map(item => {
                     // 🌟 核心防爆：處理 Cloudflare D1 (SQLite) 將 JSON 陣列轉為純字串的問題
@@ -8747,7 +8767,8 @@ export default function App() {
           if (exists) return prev.map(s => s.key === key ? { ...s, value } : s);
           return [...prev, { key, value }];
       });
-      const { error } = await supabase.from('ui_settings').upsert({ key, value });
+      // 🌟 確保傳入 id，避免 D1 的 upsert 因缺少 Primary Key 而失敗寫入
+      const { error } = await supabase.from('ui_settings').upsert({ id: key, key, value });
       if (error) console.error('Error saving setting:', error);
   };
 
