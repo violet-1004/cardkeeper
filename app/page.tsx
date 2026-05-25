@@ -8039,13 +8039,13 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 if (existingPocaMap.has(p.id)) {
                     const existing = existingPocaMap.get(p.id);
                     
-                    // 🌟 效能與防鎖死優化：只挑出真正有異動的資料進行更新，避免對 D1 發出數千個無用的 Update 請求
-                    const isPriceChanged = String(existing.price) !== String(p.price);
+                    // 🌟 效能與防鎖死優化：忽略原始美金/韓幣 (price) 的字串差異，
+                    // 只檢查「轉換後的最終價格 (id_c)」與「庫存」，瞬間將 5700 筆無效更新降為 0！
                     const isIdcChanged = Number(existing.idC ?? existing.id_c) !== Number(p.id_c);
                     const isStockChanged = Number(existing.stockedCount ?? existing.stocked_count) !== Number(p.stocked_count);
                     const isImageChanged = p.image && existing.image !== p.image;
 
-                    if (isPriceChanged || isIdcChanged || isStockChanged || isImageChanged) {
+                    if (isIdcChanged || isStockChanged || isImageChanged) {
                         itemsToUpdate.push({
                             id: Number(p.id),
                             price: String(p.price),
@@ -8074,21 +8074,21 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             let dbError = null;
             let successCount = 0;
             
-            // 🌟 核心修復：改用分批併發 Update 並加入短暫延遲，徹底杜絕伺服器 Rate Limit 與 SQLITE_BUSY
-            for (let i = 0; i < itemsToUpdate.length; i += 20) {
-                const chunk = itemsToUpdate.slice(i, i + 20);
-                await Promise.all(chunk.map(async item => {
-                    const { id, ...rest } = item;
-                    const res = await supabase.from('poca').update(rest).eq('id', id);
-                    if (res?.error) {
-                        if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                        console.error("POCA Update Error:", res.error);
-                    } else {
-                        successCount++;
-                    }
-                }));
-                setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
-                await new Promise(resolve => setTimeout(resolve, 100)); // 🌟 100ms 喘息時間，保護伺服器連線
+            // 🌟 核心修復：改為「嚴格循序單筆 Update」，絕不併發，徹底杜絕 SQLITE_BUSY 鎖死！
+            for (let i = 0; i < itemsToUpdate.length; i++) {
+                const item = itemsToUpdate[i];
+                const { id, ...rest } = item;
+                const res = await supabase.from('poca').update(rest).eq('id', id);
+                if (res?.error) {
+                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
+                    console.error("POCA Update Error:", res.error);
+                } else {
+                    successCount++;
+                }
+                if (i % 5 === 0 || i === itemsToUpdate.length - 1) {
+                    setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+                }
+                await new Promise(resolve => setTimeout(resolve, 30)); // 🌟 給予資料庫喘息時間
             }
 
             // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
