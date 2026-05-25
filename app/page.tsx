@@ -7479,10 +7479,23 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         
         const originalPrice = missingPriceCard.originalPrice;
         
-        // 🌟 將手動輸入的對照價格儲存於 price 資料表中 (使用 realSupabase 確保避開 D1 攔截)
-        await realSupabase.from('price').upsert({ id: originalPrice, id_c: val });
+        // 🌟 將手動輸入的對照價格儲存於 price 資料表中 (全面改用 D1 API 確保避開失效的 Supabase)
+        try {
+            await new D1QueryBuilder('price', 'upsert', { id: originalPrice, id_c: val });
+        } catch (e) {
+            console.warn("Failed to save price to D1", e);
+        }
         
         priceMappingRef.current[originalPrice] = val;
+
+        // 🌟 更新本地備份，避免 D1 寫入失敗或 API 未開放權限導致重整後資料遺失
+        try {
+            const currentBackup = JSON.parse(localStorage.getItem('poca_price_mapping_backup') || '[]');
+            const existingIdx = currentBackup.findIndex(p => Number(p.id) === originalPrice);
+            if (existingIdx !== -1) currentBackup[existingIdx].id_c = val;
+            else currentBackup.push({ id: originalPrice, id_c: val });
+            localStorage.setItem('poca_price_mapping_backup', JSON.stringify(currentBackup));
+        } catch(e) {}
         
         if (missingPriceResolver.current) missingPriceResolver.current(val);
         setMissingPriceCard(null);
@@ -7860,17 +7873,26 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         setSyncProgress('準備中...');
         try {
             // 🌟 每次同步前，從 price 資料表抓取最新的價格對照表
-            // 優先使用 Supabase 直連讀取，避免後端 API GET 阻擋未知資料表而回傳 404
+            // 🌟 專案使用 Cloudflare D1，全面採用標準 GET API 讀取，避免 POST select 不支援的問題
             let priceData = [];
             try {
-                const { data } = await supabase.from('price').select();
-                if (data) priceData = data;
-                else {
-                    const priceRes = await fetch('/api/data?table=price&_t=' + Date.now()).then(r => r.json());
-                    if (priceRes && priceRes.data) priceData = priceRes.data;
+                const params = new URLSearchParams({ table: 'price', _t: String(Date.now()) });
+                const res = await fetch(`/api/data?${params.toString()}`, { cache: 'no-store' });
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json && json.data) {
+                        priceData = json.data;
+                        localStorage.setItem('poca_price_mapping_backup', JSON.stringify(json.data));
+                    }
+                } else {
+                    throw new Error("API responded with status: " + res.status);
                 }
             } catch (e) {
-                console.warn("Failed to fetch price mapping", e);
+                console.warn("Failed to fetch price mapping from D1, using local backup", e);
+                try {
+                    const localBackup = localStorage.getItem('poca_price_mapping_backup');
+                    if (localBackup) priceData = JSON.parse(localBackup);
+                } catch(err) {}
             }
 
             const priceMap = {};
