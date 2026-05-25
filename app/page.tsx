@@ -7900,19 +7900,17 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             }
             
             // 🌟 每次同步前，即時從 Cloudflare D1 的 price 資料表讀取最新對照 (優先套用)
+            // 🌟 修正：改用 D1QueryBuilder (POST) 讀取，避開後端 GET 白名單限制
             try {
-                const priceRes = await fetch(`/api/data?table=price&_t=${Date.now()}`);
-                if (priceRes.ok) {
-                    const priceJson = await priceRes.json();
-                    if (priceJson && priceJson.data) {
-                        priceJson.data.forEach(p => {
-                            const orig = Number(p.id);
-                            const conv = p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : (p.idC !== undefined && p.idC !== null ? Number(p.idC) : NaN);
-                            if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
-                        });
-                    }
+                const res = await new D1QueryBuilder('price', 'select');
+                if (res && res.data) {
+                    res.data.forEach(p => {
+                        const orig = Number(p.id);
+                        const conv = p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : (p.idC !== undefined && p.idC !== null ? Number(p.idC) : NaN);
+                        if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                    });
                 } else {
-                    throw new Error("Fetch failed");
+                    throw new Error("price data is null");
                 }
             } catch(e) {
                 console.warn("即時讀取 price 表失敗，改用預設與快取", e);
@@ -8584,7 +8582,21 @@ export default function App() {
         setCustomLists(await fetchTable('custom_lists', false, { paginate: true }));
         setSales(await fetchTable('ui_sales', false, { paginate: true }));
         setAppSettings(await fetchTable('ui_settings', true)); // 🌟 讀取全域設定 (排序紀錄)，若無資料表則靜默失敗
-        setPrices(await fetchTable('price', true)); // 🌟 讀取 price 資料表
+        
+        // 🌟 修正：使用 D1QueryBuilder (POST) 來讀取 price 表，避開 GET 404
+        try {
+            const res = await new D1QueryBuilder('price', 'select');
+            if (res && res.data) {
+                const priceData = res.data.map(toCamelCase);
+                setPrices(priceData);
+                console.log(`✅ [price] 成功讀取 ${priceData.length || 0} 筆資料`);
+            } else {
+                setPrices([]);
+            }
+        } catch (e) {
+            console.error(`🚨 [price] 讀取失敗:`, e.message || e);
+            setPrices([]);
+        }
         setPocaCards(await fetchTable('poca', false, { paginate: true })); // 🌟 讀取 poca 爬蟲資料
     }
     fetchAllData();
