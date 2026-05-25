@@ -134,5 +134,11 @@ export const poca = sqliteTable("poca", {
   price: text("price").notNull(),
   member_name_en: text("member_name_en"),
   group_name_en: text("group_name_en"),
-  card_id: integer('card_id')
+  card_id: integer('card_id'),
+  id_c: integer('id_c')
+});
+
+export const price = sqliteTable("price", {
+  id: integer("id").primaryKey(),
+  id_c: integer("id_c")
 });

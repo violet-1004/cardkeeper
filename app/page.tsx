@@ -1403,7 +1403,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     {pocaData && (
                                         <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                             <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
-                                            <span className="text-green-600 font-bold">${pocaData.price ?? pocaData.Price ?? 0}</span>
+                                            <span className="text-green-600 font-bold">${pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0}</span>
                                             <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
                                         </div>
                                     )}
@@ -7984,7 +7984,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 id: String(item.id),
                                 image: String(item.image || item.imagePath || ''),
                                 stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
-                                price: finalPrice
+                                price: String(originalPrice),
+                                id_c: finalPrice
                             });
                         }
 
@@ -8020,6 +8021,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     itemsToUpdate.push({
                         id: p.id,
                         price: p.price,
+                        id_c: p.id_c,
                         stocked_count: p.stocked_count,
                         image: existing.image || p.image || '', // 🌟 補回 image 避免 SQLite not null 報錯
                         card_id: existing.cardId || existing.card_id || null, // 🌟 補回舊有關聯，寫入時覆蓋回原值
@@ -8070,6 +8072,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         return {
                             ...existing,
                             price: newP.price,
+                            id_c: newP.id_c,
+                            idC: newP.idC,
                             stockedCount: newP.stockedCount,
                             stocked_count: newP.stocked_count
                         };
@@ -8183,7 +8187,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                         <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
                                         <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
                                             <div className="text-[9px] text-white font-bold truncate">{p.id}</div>
-                                            <div className="text-[9px] text-green-300 font-bold">${p.price}</div>
+                                            <div className="text-[9px] text-green-300 font-bold">${p.idC ?? p.id_c ?? p.price}</div>
                                         </div>
                                     </div>
                                     {selectedPocaId === p.id && <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10"><Check className="w-3 h-3 text-white" /></div>}
