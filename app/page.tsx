@@ -4649,37 +4649,6 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                 </div>
             </div>
 
-            {missingPriceCard && (
-                <Modal 
-                    title="發現未知卡價" 
-                    onClose={() => {
-                        if (confirm("確定要中斷目前的同步進度嗎？")) {
-                            if (missingPriceResolver.current) missingPriceResolver.current(null);
-                            setMissingPriceCard(null);
-                        }
-                    }} 
-                    className="max-w-sm" 
-                    footer={<button onClick={handleMissingPriceSubmit} className="w-full py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認並繼續</button>}
-                >
-                    <div className="flex flex-col items-center gap-4 p-4 text-center">
-                        <div className="text-gray-500 text-sm">此 POCA 卡片的價格不在對照表中，請手動輸入轉換後的價格：</div>
-                        <div className="w-32 aspect-[2/3] rounded-lg overflow-hidden border shadow-sm relative bg-gray-100">
-                            {missingPriceCard.image ? <img src={missingPriceCard.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
-                        </div>
-                        <div className="font-bold text-red-500 text-lg">原始價格: {missingPriceCard.originalPrice}</div>
-                        <div className="w-full">
-                            <label className="text-xs font-bold text-gray-500 mb-1 block text-left">轉換後價格</label>
-                            <input 
-                                autoFocus type="number" step="0.1" placeholder="例如: 2.5" 
-                                value={manualPriceInput} onChange={(e) => setManualPriceInput(e.target.value)} 
-                                onKeyDown={(e) => e.key === 'Enter' && handleMissingPriceSubmit()}
-                                className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
-                            />
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
             <SeriesFilterModal 
                 visible={showSeriesModal} onClose={() => setShowSeriesModal(false)} 
                 seriesTypes={availableSeriesTypes} 
@@ -7495,6 +7464,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
+    const [syncProgress, setSyncProgress] = useState('');
     
     // 🌟 POCA 價格自動轉換機制與未知價格捕捉
     const [missingPriceCard, setMissingPriceCard] = useState(null);
@@ -7900,6 +7870,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
+        setSyncProgress('準備中...');
         try {
             let page = 1;
             let hasNext = true;
@@ -7917,6 +7888,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                             .catch(err => { console.error(err); return null; })
                     );
                 }
+                setSyncProgress(`已抓取 ${allFetchedPocas.length} 筆...`);
 
                 const results = await Promise.all(promises);
                 let gotEmptyOrSmallPage = false;
@@ -7958,6 +7930,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 }
             }
 
+            setSyncProgress('正在寫入資料庫...');
             // 去除可能因為 API 更新延遲導致的重複卡片
             const uniquePocasMap = new Map();
             allFetchedPocas.forEach(p => uniquePocasMap.set(p.id, p));
@@ -7991,6 +7964,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     console.error("POCA Update Error:", res.error);
                 } else {
                     successCount += chunk.length;
+                    setSyncProgress(`寫入中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
                 }
             }
 
@@ -8002,6 +7976,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     console.error("POCA Insert Error:", res.error);
                 } else {
                     successCount += chunk.length;
+                    setSyncProgress(`寫入中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
                 }
             }
 
@@ -8029,9 +8004,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 
                 return [...unchanged, ...merged];
             });
+            setSyncProgress('');
             alert(`POCA 資料同步完成！\n共抓取: ${allFetchedPocas.length} 筆\n成功寫入: ${successCount} 筆${dbError ? `\n⚠️ 部分錯誤: ${dbError}` : ''}`);
         } catch (e) {
             alert('爬蟲失敗: ' + e.message);
+            setSyncProgress('');
         }
         setIsCrawling(false);
     };
@@ -8118,7 +8095,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <h3 className="font-bold text-gray-800 text-sm">未對照 POCA 卡片 ({unmatchedPoca.length})</h3>
                             <button onClick={handlePocaCrawl} disabled={isCrawling} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1">
-                                <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> 同步
+                                <RefreshCw className={`w-3 h-3 ${isCrawling ? 'animate-spin' : ''}`} /> {isCrawling ? syncProgress || '同步中...' : '同步'}
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 content-start">
@@ -8253,6 +8230,37 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 </div>
             )}
             
+            {missingPriceCard && (
+                <Modal 
+                    title="發現未知卡價" 
+                    onClose={() => {
+                        if (confirm("確定要中斷目前的同步進度嗎？")) {
+                            if (missingPriceResolver.current) missingPriceResolver.current(null);
+                            setMissingPriceCard(null);
+                        }
+                    }} 
+                    className="max-w-sm" 
+                    footer={<button onClick={handleMissingPriceSubmit} className="w-full py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認並繼續</button>}
+                >
+                    <div className="flex flex-col items-center gap-4 p-4 text-center">
+                        <div className="text-gray-500 text-sm">此 POCA 卡片的價格不在對照表中，請手動輸入轉換後的價格：</div>
+                        <div className="w-32 aspect-[2/3] rounded-lg overflow-hidden border shadow-sm relative bg-gray-100">
+                            {missingPriceCard.image ? <img src={missingPriceCard.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
+                        </div>
+                        <div className="font-bold text-red-500 text-lg">原始價格: {missingPriceCard.originalPrice}</div>
+                        <div className="w-full">
+                            <label className="text-xs font-bold text-gray-500 mb-1 block text-left">轉換後價格</label>
+                            <input 
+                                autoFocus type="number" step="0.1" placeholder="例如: 2.5" 
+                                value={manualPriceInput} onChange={(e) => setManualPriceInput(e.target.value)} 
+                                onKeyDown={(e) => e.key === 'Enter' && handleMissingPriceSubmit()}
+                                className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
+                            />
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             <SeriesFilterModal 
                 visible={showSeriesModal} onClose={() => setShowSeriesModal(false)}
                 seriesTypes={availableSeriesTypes} 
@@ -8702,14 +8710,21 @@ export default function App() {
       const cleanData = (obj) => {
           const cleaned = {};
           (allowedKeys[type] || []).forEach(key => {
-              if (obj[key] !== undefined) {
-                  // 🌟 修正：統一將所有空字串轉換為 null，避免空字串寫入後被某些 API 轉為 "null" 字串，並防止 Date 欄位報錯
-                  if (obj[key] === '') {
+              let val = obj[key];
+              
+              // 🌟 強化防呆：確保所有允許的欄位都有值，避免後端 D1 組裝 SQL 時因缺少欄位導致綁定變數 (?) 數量不符
+              if (val === undefined) {
+                  if (key === 'isWishlist') val = false;
+                  else if (key === 'memberId2') val = [];
+                  else val = null;
+              }
+
+              // 🌟 修正：統一將所有空字串轉換為 null，避免空字串寫入後被某些 API 轉為 "null" 字串，並防止 Date 欄位報錯
+              if (val === '') {
                       cleaned[key] = null;
                   } else {
-                      cleaned[key] = obj[key];
+                      cleaned[key] = val;
                   }
-              }
           });
           return cleaned;
       };
