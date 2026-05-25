@@ -7880,12 +7880,14 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         try {
             // 🌟 每次同步前，從 ui_settings 資料表抓取最新的價格對照表
             // 全面捨棄容易被後端 404 阻擋的獨立 price 資料表，改用系統內建的設定表
+            // 🌟 修正：因為 PocaMarket Global API 回傳的是美金 (USD)，而使用者想儲存的是韓幣/台幣
+            // 因此我們將對照表「反轉」，讓 API 回傳的 USD 能自動對照回 KRW，不再一直彈出未知價格視窗！
             const initialMapping = {
-                500: 2.5, 1000: 3.5, 1500: 4.2, 2000: 4.9, 2500: 5.6,
-                3000: 6.3, 3500: 7.0, 4000: 8.4, 4500: 9.1, 5000: 9.8,
-                6000: 11.9, 7000: 13.3, 8000: 14.7, 8500: 15.4, 9000: 16.1,
-                9500: 16.8, 10000: 17.5, 15000: 24.5, 18000: 28.7, 20000: 31.5,
-                21000: 32.9, 25000: 38.5, 35000: 52.5, 40000: 59.5, 70000: 105, 80000: 115.5
+                2.5: 500, 3.5: 1000, 4.2: 1500, 4.9: 2000, 5.6: 2500,
+                6.3: 3000, 7.0: 3500, 8.4: 4000, 9.1: 4500, 9.8: 5000,
+                11.9: 6000, 13.3: 7000, 14.7: 8000, 15.4: 8500, 16.1: 9000,
+                16.8: 9500, 17.5: 10000, 24.5: 15000, 28.7: 18000, 31.5: 20000,
+                32.9: 21000, 38.5: 25000, 52.5: 35000, 59.5: 40000, 105: 70000, 115.5: 80000
             };
 
             let priceMap = { ...initialMapping };
@@ -7909,7 +7911,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         json.data.forEach(p => {
                             const orig = Number(p.id);
                             const conv = p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : (p.idC !== undefined && p.idC !== null ? Number(p.idC) : NaN);
-                            if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                            if (!isNaN(orig) && !isNaN(conv)) {
+                                // 🌟 自動防呆：如果資料庫裡存錯了 (例如 500 -> 2.5)，自動反轉為 USD -> KRW
+                                if (orig > conv) priceMap[conv] = orig;
+                                else priceMap[orig] = conv;
+                            }
                         });
                     }
                 } else {
@@ -7921,7 +7927,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     prices.forEach(p => {
                         const orig = Number(p.id);
                         const conv = p.id_c !== undefined ? Number(p.id_c) : Number(p.idC);
-                        if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                        if (!isNaN(orig) && !isNaN(conv)) {
+                            if (orig > conv) priceMap[conv] = orig;
+                            else priceMap[orig] = conv;
+                        }
                     });
                 }
             }
@@ -7936,10 +7945,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         parsed.forEach(p => {
                             const orig = Number(p.id);
                             const conv = p.id_c !== undefined ? Number(p.id_c) : Number(p.idC);
-                            if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                            if (!isNaN(orig) && !isNaN(conv)) {
+                                if (orig > conv) priceMap[conv] = orig;
+                                else priceMap[orig] = conv;
+                            }
                         });
                     } else {
-                        priceMap = { ...priceMap, ...parsed };
+                        Object.keys(parsed).forEach(k => {
+                            const orig = Number(k);
+                            const conv = Number(parsed[k]);
+                            if (!isNaN(orig) && !isNaN(conv)) {
+                                if (orig > conv) priceMap[conv] = orig;
+                                else priceMap[orig] = conv;
+                            }
+                        });
                     }
                 }
             } catch(e) {}
@@ -8055,17 +8074,21 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             let dbError = null;
             let successCount = 0;
             
-            // 🌟 循序執行單筆 Update，徹底杜絕 SQLITE_BUSY 鎖死
-            for (const item of itemsToUpdate) {
-                const { id, ...rest } = item;
-                const res = await supabase.from('poca').update(rest).eq('id', id);
-                if (res?.error) {
-                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                    console.error("POCA Update Error:", res.error);
-                } else {
-                    successCount++;
-                }
+            // 🌟 核心修復：改用分批併發 Update 並加入短暫延遲，徹底杜絕伺服器 Rate Limit 與 SQLITE_BUSY
+            for (let i = 0; i < itemsToUpdate.length; i += 20) {
+                const chunk = itemsToUpdate.slice(i, i + 20);
+                await Promise.all(chunk.map(async item => {
+                    const { id, ...rest } = item;
+                    const res = await supabase.from('poca').update(rest).eq('id', id);
+                    if (res?.error) {
+                        if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
+                        console.error("POCA Update Error:", res.error);
+                    } else {
+                        successCount++;
+                    }
+                }));
                 setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+                await new Promise(resolve => setTimeout(resolve, 100)); // 🌟 100ms 喘息時間，保護伺服器連線
             }
 
             // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
@@ -8352,11 +8375,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         <div className="w-32 aspect-[2/3] rounded-lg overflow-hidden border shadow-sm relative bg-gray-100">
                             {missingPriceCard.image ? <img src={missingPriceCard.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
                         </div>
-                        <div className="font-bold text-red-500 text-lg">原始價格: {missingPriceCard.originalPrice}</div>
+                        <div className="font-bold text-red-500 text-lg">原始價格 (美金): {missingPriceCard.originalPrice}</div>
                         <div className="w-full">
-                            <label className="text-xs font-bold text-gray-500 mb-1 block text-left">轉換後價格</label>
+                            <label className="text-xs font-bold text-gray-500 mb-1 block text-left">對照後價格 (韓幣)</label>
                             <input 
-                                autoFocus type="number" step="0.1" placeholder="例如: 2.5" 
+                                autoFocus type="number" step="0.1" placeholder="例如: 500" 
                                 value={manualPriceInput} onChange={(e) => setManualPriceInput(e.target.value)} 
                                 onKeyDown={(e) => e.key === 'Enter' && handleMissingPriceSubmit()}
                                 className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
