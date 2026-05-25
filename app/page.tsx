@@ -7864,7 +7864,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             const priceMap = {};
             if (priceRes && priceRes.data) {
                 priceRes.data.forEach(p => {
-                    priceMap[Number(p.id)] = Number(p.id_c || p.idC);
+                    const orig = Number(p.id);
+                    const conv = p.id_c !== undefined ? Number(p.id_c) : (p.idC !== undefined ? Number(p.idC) : undefined);
+                    if (!isNaN(orig) && conv !== undefined && !isNaN(conv)) {
+                        priceMap[orig] = conv;
+                    }
                 });
             }
             priceMappingRef.current = priceMap;
@@ -8227,8 +8231,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             {activeSubTab === 'crawler' && (
                 <div className="bg-white border rounded-xl p-6 shadow-sm text-center flex flex-col items-center mx-4">
                     <h2 className="text-xl font-bold text-gray-800 mb-2">批次抓取設定</h2>
-                    <p className="text-gray-500 mb-6">執行後端爬蟲程式以同步資料庫卡片資訊。</p>
-                    <button onClick={onSyncData} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700">執行資料同步</button>
+                    <p className="text-gray-500 mb-6">執行同步程式以抓取最新 POCA 卡片與對照最新卡價。</p>
+                    <button onClick={handlePocaCrawl} disabled={isCrawling} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50">
+                        {isCrawling ? syncProgress || '同步中...' : '執行資料同步'}
+                    </button>
                 </div>
             )}
             
@@ -8714,14 +8720,16 @@ export default function App() {
           (allowedKeys[type] || []).forEach(key => {
               let val = obj[key];
               
-              // 🌟 終極防呆：後端 D1 Query Builder 遇到 null 或 undefined 時會引發綁定變數不符的嚴重 Bug
-              // 因此我們在前端將所有空值強制轉為預設型別 (字串轉為 '', 布林轉為 false, 陣列轉為 [])
-              if (val === undefined || val === null) {
+              // 🌟 將空字串與 undefined 轉回 null，符合資料庫真實型別 (特別是 Integer 欄位)
+              // 避免傳送 '' 導致 D1 資料庫在嚴格綁定時報錯
+              if (val === undefined || val === '') {
+                  val = null;
+              }
+              if (val === null) {
                   if (key === 'isWishlist') val = false;
                   else if (key === 'memberId2') val = [];
-                  else val = '';
               }
-              
+
               cleaned[key] = val;
           });
           return cleaned;
@@ -8886,7 +8894,15 @@ export default function App() {
       }
 
       const dbPayload = toSnakeCase(cleanData(payload));
-      const { error } = await supabase.from(table).upsert(dbPayload);
+      let error;
+      // 🌟 核心修復：全面棄用 upsert 進行單筆儲存，徹底避開 SQLite 的 ON CONFLICT 語法報錯 bug
+      if (isEdit && !legacyStringId) {
+          const res = await supabase.from(table).update(dbPayload).eq('id', dbPayload.id);
+          error = res?.error;
+      } else {
+          const res = await supabase.from(table).insert([dbPayload]);
+          error = res?.error;
+      }
       
       if (error) {
           console.error("資料庫儲存失敗:", error.message, dbPayload);
@@ -9143,9 +9159,9 @@ export default function App() {
       // 3. 寫入資料庫
       for(const b of batchesToUpdateDb) {
           const payload = {
-              series_id: b.seriesId || '',
-              channel: b.channel || '',
-              type: b.type || ''
+              series_id: b.seriesId || null,
+              channel: b.channel || null,
+              type: b.type || null
           };
           await supabase.from('batches').update(payload).eq('id', b.id);
       }
@@ -9153,22 +9169,21 @@ export default function App() {
       for(const c of cardsToUpdateDb) {
           // 🌟 改用 upsert 完整覆寫，徹底解決後端 UPDATE API 可能忽略 member_id2 欄位的問題
           const payload = {
-              id: c.id,
-              group_id: c.groupId || '',
-              member_id: c.memberId || '',
-              series_id: c.seriesId || '',
-              batch_id: c.batchId || '',
-              name: c.name || '',
-              type: c.type || '',
-              channel: c.channel || '',
-              image: c.image || '',
+              group_id: c.groupId || null,
+              member_id: c.memberId || null,
+              series_id: c.seriesId || null,
+              batch_id: c.batchId || null,
+              name: c.name || null,
+              type: c.type || null,
+              channel: c.channel || null,
+              image: c.image || null,
               is_wishlist: c.isWishlist || false,
               member_id2: c.memberId2 || [],
-              poca_card: c.PocaCard || c.pocaCard || c.poca_id || '', // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
-              poco_id: c.poco_id || c.pocoId || '',
-              poco_jd: c.poco_jd || c.pocoJd || ''
+              poca_card: c.PocaCard || c.pocaCard || c.poca_id || null, // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
+              poco_id: c.poco_id || c.pocoId || null,
+              poco_jd: c.poco_jd || c.pocoJd || null
           };
-          await supabase.from('ui_cards').upsert(payload);
+          await supabase.from('ui_cards').update(payload).eq('id', c.id);
       }
 
       // 🌟 改為清空 selectedItems
