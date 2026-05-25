@@ -4649,6 +4649,37 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                 </div>
             </div>
 
+            {missingPriceCard && (
+                <Modal 
+                    title="發現未知卡價" 
+                    onClose={() => {
+                        if (confirm("確定要中斷目前的同步進度嗎？")) {
+                            if (missingPriceResolver.current) missingPriceResolver.current(null);
+                            setMissingPriceCard(null);
+                        }
+                    }} 
+                    className="max-w-sm" 
+                    footer={<button onClick={handleMissingPriceSubmit} className="w-full py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認並繼續</button>}
+                >
+                    <div className="flex flex-col items-center gap-4 p-4 text-center">
+                        <div className="text-gray-500 text-sm">此 POCA 卡片的價格不在對照表中，請手動輸入轉換後的價格：</div>
+                        <div className="w-32 aspect-[2/3] rounded-lg overflow-hidden border shadow-sm relative bg-gray-100">
+                            {missingPriceCard.image ? <img src={missingPriceCard.image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
+                        </div>
+                        <div className="font-bold text-red-500 text-lg">原始價格: {missingPriceCard.originalPrice}</div>
+                        <div className="w-full">
+                            <label className="text-xs font-bold text-gray-500 mb-1 block text-left">轉換後價格</label>
+                            <input 
+                                autoFocus type="number" step="0.1" placeholder="例如: 2.5" 
+                                value={manualPriceInput} onChange={(e) => setManualPriceInput(e.target.value)} 
+                                onKeyDown={(e) => e.key === 'Enter' && handleMissingPriceSubmit()}
+                                className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
+                            />
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             <SeriesFilterModal 
                 visible={showSeriesModal} onClose={() => setShowSeriesModal(false)} 
                 seriesTypes={availableSeriesTypes} 
@@ -7464,6 +7495,43 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
+    
+    // 🌟 POCA 價格自動轉換機制與未知價格捕捉
+    const [missingPriceCard, setMissingPriceCard] = useState(null);
+    const [manualPriceInput, setManualPriceInput] = useState('');
+    const missingPriceResolver = useRef(null);
+
+    const initialMapping = {
+        500: 2.5, 1000: 3.5, 1500: 4.2, 2000: 4.9, 2500: 5.6,
+        3000: 6.3, 3500: 7.0, 4000: 8.4, 4500: 9.1, 5000: 9.8,
+        6000: 11.9, 7000: 13.3, 8000: 14.7, 8500: 15.4, 9000: 16.1,
+        9500: 16.8, 10000: 17.5, 15000: 24.5, 18000: 28.7, 20000: 31.5,
+        21000: 32.9, 25000: 38.5, 35000: 52.5, 40000: 59.5, 80000: 115.5
+    };
+
+    const [priceMapping, setPriceMapping] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('poca_price_mapping');
+            if (saved) return { ...initialMapping, ...JSON.parse(saved) };
+        }
+        return initialMapping;
+    });
+
+    const priceMappingRef = useRef(priceMapping);
+    useEffect(() => { priceMappingRef.current = priceMapping; }, [priceMapping]);
+
+    const handleMissingPriceSubmit = () => {
+        const val = Number(manualPriceInput);
+        if (isNaN(val) || val <= 0) return alert("請輸入有效的轉換價格");
+        const newMapping = { ...priceMappingRef.current, [missingPriceCard.originalPrice]: val };
+        setPriceMapping(newMapping);
+        localStorage.setItem('poca_price_mapping', JSON.stringify(newMapping));
+        
+        if (missingPriceResolver.current) missingPriceResolver.current(val);
+        setMissingPriceCard(null);
+        setManualPriceInput('');
+    };
+
     const [selectedPocaId, setSelectedPocaId] = useState(null);
     const [selectedLocalId, setSelectedLocalId] = useState(null);
     const [overwriteImage, setOverwriteImage] = useState(true);
@@ -7855,14 +7923,25 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
                 for (const json of results) {
                     if (json && json.success && json.data?.results) {
-                        const fetchedPocas = json.data.results.map(item => ({
-                            id: String(item.id),
-                            image: String(item.image || item.imagePath || ''),
-                            // 🌟 強化容錯：兼容 API 各種可能的數量命名，並強制轉數字防 undefined 導致寫入報錯
-                            stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
-                            price: Number(item.price ?? 0)
-                        }));
-                        allFetchedPocas.push(...fetchedPocas);
+                        for (const item of json.data.results) {
+                            const originalPrice = Number(item.price ?? 0);
+                            let finalPrice = priceMappingRef.current[originalPrice];
+                            
+                            if (finalPrice === undefined) {
+                                finalPrice = await new Promise((resolve) => {
+                                    setMissingPriceCard({ originalPrice, image: String(item.image || item.imagePath || '') });
+                                    missingPriceResolver.current = resolve;
+                                });
+                                if (finalPrice === null) throw new Error("使用者中斷了同步作業");
+                            }
+
+                            allFetchedPocas.push({
+                                id: String(item.id),
+                                image: String(item.image || item.imagePath || ''),
+                                stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
+                                price: finalPrice
+                            });
+                        }
 
                         if (json.data.results.length === 0) {
                             gotEmptyOrSmallPage = true;
@@ -7884,23 +7963,72 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas.forEach(p => uniquePocasMap.set(p.id, p));
             allFetchedPocas = Array.from(uniquePocasMap.values());
 
+            // 🌟 區分新增與更新，避免覆蓋舊有資料（如卡片對照或舊圖片）
+            const existingPocaIds = new Set((pocaCards || []).map(p => String(p.id)));
+            const itemsToUpdate = [];
+            const itemsToInsert = [];
+
+            allFetchedPocas.forEach(p => {
+                if (existingPocaIds.has(p.id)) {
+                    itemsToUpdate.push({
+                        id: p.id,
+                        price: p.price,
+                        stocked_count: p.stocked_count
+                    });
+                } else {
+                    itemsToInsert.push(p);
+                }
+            });
+
             let dbError = null;
             let successCount = 0;
             // 🌟 降低 Chunk 大小到 20，避免超過 SQLite 單次寫入的綁定變數上限 (20筆 * 4欄位 = 80 variables)
-            for (let i = 0; i < allFetchedPocas.length; i += 20) {
-                const chunk = allFetchedPocas.slice(i, i + 20);
+            for (let i = 0; i < itemsToUpdate.length; i += 20) {
+                const chunk = itemsToUpdate.slice(i, i + 20);
                 const res = await supabase.from('poca').upsert(chunk);
                 if (res?.error) {
                     if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                    console.error("POCA Save Error:", res.error);
+                    console.error("POCA Update Error:", res.error);
+                } else {
+                    successCount += chunk.length;
+                }
+            }
+
+            for (let i = 0; i < itemsToInsert.length; i += 20) {
+                const chunk = itemsToInsert.slice(i, i + 20);
+                const res = await supabase.from('poca').upsert(chunk);
+                if (res?.error) {
+                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
+                    console.error("POCA Insert Error:", res.error);
                 } else {
                     successCount += chunk.length;
                 }
             }
 
             const newPocasCamel = allFetchedPocas.map(toCamelCase);
-            const newIds = new Set(newPocasCamel.map(p => p.id));
-            setPocaCards(prev => [...prev.filter(p => !newIds.has(p.id)), ...newPocasCamel]);
+            // 🌟 確保前端狀態也只更新 price 和 stocked_count，不洗掉 cardId 等關聯資訊
+            setPocaCards(prev => {
+                const prevMap = new Map();
+                prev.forEach(p => prevMap.set(String(p.id), p));
+                
+                const merged = newPocasCamel.map(newP => {
+                    const existing = prevMap.get(String(newP.id));
+                    if (existing) {
+                        return {
+                            ...existing,
+                            price: newP.price,
+                            stockedCount: newP.stockedCount,
+                            stocked_count: newP.stocked_count
+                        };
+                    }
+                    return newP;
+                });
+                
+                const fetchedIds = new Set(merged.map(p => String(p.id)));
+                const unchanged = prev.filter(p => !fetchedIds.has(String(p.id)));
+                
+                return [...unchanged, ...merged];
+            });
             alert(`POCA 資料同步完成！\n共抓取: ${allFetchedPocas.length} 筆\n成功寫入: ${successCount} 筆${dbError ? `\n⚠️ 部分錯誤: ${dbError}` : ''}`);
         } catch (e) {
             alert('爬蟲失敗: ' + e.message);
