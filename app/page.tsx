@@ -7461,7 +7461,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
-function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData }) {
+function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData, appSettings, onUpdateSetting }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
     const [syncProgress, setSyncProgress] = useState('');
@@ -7479,22 +7479,21 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         
         const originalPrice = missingPriceCard.originalPrice;
         
-        // 🌟 將手動輸入的對照價格儲存於 price 資料表中 (全面改用 D1 API 確保避開失效的 Supabase)
-        try {
-            await new D1QueryBuilder('price', 'upsert', { id: originalPrice, id_c: val });
-        } catch (e) {
-            console.warn("Failed to save price to D1", e);
-        }
-        
+        // 🌟 更新 priceMappingRef
         priceMappingRef.current[originalPrice] = val;
+
+        // 🌟 將手動輸入的對照價格儲存於 ui_settings (保證不會被 404 阻擋)
+        try {
+            if (onUpdateSetting) {
+                onUpdateSetting('poca_price_mapping', JSON.stringify(priceMappingRef.current));
+            }
+        } catch (e) {
+            console.warn("Failed to save price mapping to settings", e);
+        }
 
         // 🌟 更新本地備份，避免 D1 寫入失敗或 API 未開放權限導致重整後資料遺失
         try {
-            const currentBackup = JSON.parse(localStorage.getItem('poca_price_mapping_backup') || '[]');
-            const existingIdx = currentBackup.findIndex(p => Number(p.id) === originalPrice);
-            if (existingIdx !== -1) currentBackup[existingIdx].id_c = val;
-            else currentBackup.push({ id: originalPrice, id_c: val });
-            localStorage.setItem('poca_price_mapping_backup', JSON.stringify(currentBackup));
+            localStorage.setItem('poca_price_mapping_backup', JSON.stringify(priceMappingRef.current));
         } catch(e) {}
         
         if (missingPriceResolver.current) missingPriceResolver.current(val);
@@ -7872,37 +7871,45 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         setIsCrawling(true);
         setSyncProgress('準備中...');
         try {
-            // 🌟 每次同步前，從 price 資料表抓取最新的價格對照表
-            // 🌟 專案使用 Cloudflare D1，全面採用標準 GET API 讀取，避免 POST select 不支援的問題
-            let priceData = [];
-            try {
-                const params = new URLSearchParams({ table: 'price', _t: String(Date.now()) });
-                const res = await fetch(`/api/data?${params.toString()}`, { cache: 'no-store' });
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json && json.data) {
-                        priceData = json.data;
-                        localStorage.setItem('poca_price_mapping_backup', JSON.stringify(json.data));
-                    }
-                } else {
-                    throw new Error("API responded with status: " + res.status);
-                }
-            } catch (e) {
-                console.warn("Failed to fetch price mapping from D1, using local backup", e);
-                try {
-                    const localBackup = localStorage.getItem('poca_price_mapping_backup');
-                    if (localBackup) priceData = JSON.parse(localBackup);
-                } catch(err) {}
-            }
+            // 🌟 每次同步前，從 ui_settings 資料表抓取最新的價格對照表
+            // 全面捨棄容易被後端 404 阻擋的獨立 price 資料表，改用系統內建的設定表
+            const initialMapping = {
+                500: 2.5, 1000: 3.5, 1500: 4.2, 2000: 4.9, 2500: 5.6,
+                3000: 6.3, 3500: 7.0, 4000: 8.4, 4500: 9.1, 5000: 9.8,
+                6000: 11.9, 7000: 13.3, 8000: 14.7, 8500: 15.4, 9000: 16.1,
+                9500: 16.8, 10000: 17.5, 15000: 24.5, 18000: 28.7, 20000: 31.5,
+                21000: 32.9, 25000: 38.5, 35000: 52.5, 40000: 59.5, 70000: 105, 80000: 115.5
+            };
 
-            const priceMap = {};
-            priceData.forEach(p => {
-                const orig = Number(p.id);
-                const conv = p.id_c !== undefined ? Number(p.id_c) : (p.idC !== undefined ? Number(p.idC) : undefined);
-                if (!isNaN(orig) && conv !== undefined && !isNaN(conv)) {
-                    priceMap[orig] = conv;
+            let priceMap = { ...initialMapping };
+
+            // 從全域設定讀取
+            const savedMappingStr = (appSettings || []).find(s => s.key === 'poca_price_mapping')?.value;
+            if (savedMappingStr) {
+                try { 
+                    const savedMap = JSON.parse(savedMappingStr); 
+                    priceMap = { ...priceMap, ...savedMap };
+                } catch (e) {}
+            }
+            
+            // 從 localStorage 備援讀取
+            try {
+                const localBackup = localStorage.getItem('poca_price_mapping_backup');
+                if (localBackup) {
+                    const parsed = JSON.parse(localBackup);
+                    if (Array.isArray(parsed)) {
+                        // 🌟 相容轉換舊版陣列備份
+                        parsed.forEach(p => {
+                            const orig = Number(p.id);
+                            const conv = p.id_c !== undefined ? Number(p.id_c) : Number(p.idC);
+                            if (!isNaN(orig) && !isNaN(conv)) priceMap[orig] = conv;
+                        });
+                    } else {
+                        priceMap = { ...priceMap, ...parsed };
+                    }
                 }
-            });
+            } catch(e) {}
+
             priceMappingRef.current = priceMap;
 
             let page = 1;
@@ -9565,6 +9572,8 @@ export default function App() {
           subunits={currentSubunits}
           currentGroupId={currentGroupId} 
           onSyncData={fetchCardData} 
+          appSettings={appSettings}
+          onUpdateSetting={handleUpdateAppSetting}
         />;
       default: return null;
     }
