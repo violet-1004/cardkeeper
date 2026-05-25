@@ -8090,7 +8090,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 if (i % 10 === 0 || i === itemsToUpdate.length - 1) {
                     setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
                 }
-                await new Promise(resolve => setTimeout(resolve, 10)); // 🌟 降低延遲，加快更新速度
+                await new Promise(resolve => setTimeout(resolve, 30)); // 🌟 維持安全延遲，避免連續寫入導致 SQLITE_BUSY
             }
 
             // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
