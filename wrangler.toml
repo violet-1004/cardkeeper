@@ -13,3 +13,7 @@ pages_build_output_dir = ".vercel/output/static"
 binding = "DB"
 database_name = "my-card-db"
 database_id = "12bd1cc8-3276-4e33-80a2-4dbf528a6371"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "cardkeeper-images"

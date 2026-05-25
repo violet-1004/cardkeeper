@@ -6,8 +6,12 @@ export const runtime = 'edge';
 export async function POST(request: Request) {
   try {
     const env = getRequestContext().env as any;
-    if (!env.BUCKET) throw new Error("R2 尚未綁定");
-
+    if (!env.BUCKET) {
+    return new Response(JSON.stringify({ error: 'R2 尚未綁定' }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
     // 1. 正確解析 FormData (前端已移除 Content-Type 標頭，現在可以安全使用了！)
     const formData = await request.formData();
     const file = formData.get('file') as File | null;

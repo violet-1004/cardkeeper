@@ -7937,16 +7937,21 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas = Array.from(uniquePocasMap.values());
 
             // 🌟 區分新增與更新，避免覆蓋舊有資料（如卡片對照或舊圖片）
-            const existingPocaIds = new Set((pocaCards || []).map(p => String(p.id)));
+            const existingPocaMap = new Map((pocaCards || []).map(p => [String(p.id), p]));
             const itemsToUpdate = [];
             const itemsToInsert = [];
 
             allFetchedPocas.forEach(p => {
-                if (existingPocaIds.has(p.id)) {
+                if (existingPocaMap.has(p.id)) {
+                    const existing = existingPocaMap.get(p.id);
                     itemsToUpdate.push({
                         id: p.id,
                         price: p.price,
-                        stocked_count: p.stocked_count
+                        stocked_count: p.stocked_count,
+                        image: existing.image || p.image || '', // 🌟 補回 image 避免 SQLite not null 報錯
+                        card_id: existing.cardId || existing.card_id || null, // 🌟 補回舊有關聯，寫入時覆蓋回原值
+                        member_name_en: existing.memberNameEn || existing.member_name_en || null,
+                        group_name_en: existing.groupNameEn || existing.group_name_en || null
                     });
                 } else {
                     itemsToInsert.push(p);
@@ -8712,19 +8717,15 @@ export default function App() {
           (allowedKeys[type] || []).forEach(key => {
               let val = obj[key];
               
-              // 🌟 強化防呆：確保所有允許的欄位都有值，避免後端 D1 組裝 SQL 時因缺少欄位導致綁定變數 (?) 數量不符
-              if (val === undefined) {
+              // 🌟 終極防呆：後端 D1 Query Builder 遇到 null 或 undefined 時會引發綁定變數不符的嚴重 Bug
+              // 因此我們在前端將所有空值強制轉為預設型別 (字串轉為 '', 布林轉為 false, 陣列轉為 [])
+              if (val === undefined || val === null) {
                   if (key === 'isWishlist') val = false;
                   else if (key === 'memberId2') val = [];
-                  else val = null;
+                  else val = '';
               }
-
-              // 🌟 修正：統一將所有空字串轉換為 null，避免空字串寫入後被某些 API 轉為 "null" 字串，並防止 Date 欄位報錯
-              if (val === '') {
-                      cleaned[key] = null;
-                  } else {
-                      cleaned[key] = val;
-                  }
+              
+              cleaned[key] = val;
           });
           return cleaned;
       };
@@ -9145,9 +9146,9 @@ export default function App() {
       // 3. 寫入資料庫
       for(const b of batchesToUpdateDb) {
           const payload = {
-              series_id: b.seriesId || null,
-              channel: b.channel || null,
-              type: b.type || null
+              series_id: b.seriesId || '',
+              channel: b.channel || '',
+              type: b.type || ''
           };
           await supabase.from('batches').update(payload).eq('id', b.id);
       }
@@ -9156,19 +9157,19 @@ export default function App() {
           // 🌟 改用 upsert 完整覆寫，徹底解決後端 UPDATE API 可能忽略 member_id2 欄位的問題
           const payload = {
               id: c.id,
-              group_id: c.groupId || null,
-              member_id: c.memberId || null,
-              series_id: c.seriesId || null,
-              batch_id: c.batchId || null,
-              name: c.name || null,
-              type: c.type || null,
-              channel: c.channel || null,
-              image: c.image || null,
+              group_id: c.groupId || '',
+              member_id: c.memberId || '',
+              series_id: c.seriesId || '',
+              batch_id: c.batchId || '',
+              name: c.name || '',
+              type: c.type || '',
+              channel: c.channel || '',
+              image: c.image || '',
               is_wishlist: c.isWishlist || false,
               member_id2: c.memberId2 || [],
-              poca_card: c.PocaCard || c.pocaCard || c.poca_id || null, // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
-              poco_id: c.poco_id || c.pocoId || null,
-              poco_jd: c.poco_jd || c.pocoJd || null
+              poca_card: c.PocaCard || c.pocaCard || c.poca_id || '', // 🌟 補回 POCA 對照紀錄，避免使用批量歸類時消失
+              poco_id: c.poco_id || c.pocoId || '',
+              poco_jd: c.poco_jd || c.pocoJd || ''
           };
           await supabase.from('ui_cards').upsert(payload);
       }
