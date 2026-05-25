@@ -8039,23 +8039,22 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 if (existingPocaMap.has(p.id)) {
                     const existing = existingPocaMap.get(p.id);
                     
-                    // 🌟 效能與防鎖死優化：忽略原始美金/韓幣 (price) 的字串差異，
-                    // 只檢查「轉換後的最終價格 (id_c)」與「庫存」，瞬間將 5700 筆無效更新降為 0！
+                    // 🌟 效能與防鎖死優化：精準比對，只更新發生變動的欄位，大幅減輕資料庫負擔
+                    const isPriceChanged = String(existing.price) !== String(p.price);
                     const isIdcChanged = Number(existing.idC ?? existing.id_c) !== Number(p.id_c);
                     const isStockChanged = Number(existing.stockedCount ?? existing.stocked_count) !== Number(p.stocked_count);
                     const isImageChanged = p.image && existing.image !== p.image;
 
-                    if (isIdcChanged || isStockChanged || isImageChanged) {
-                        itemsToUpdate.push({
-                            id: Number(p.id),
-                            price: String(p.price),
-                            id_c: Number(p.id_c),
-                            stocked_count: p.stocked_count,
-                            image: existing.image || p.image || '', // 🌟 補回 image 避免 SQLite not null 報錯
-                            card_id: existing.cardId || existing.card_id || null, // 🌟 補回舊有關聯，寫入時覆蓋回原值
-                            member_name_en: existing.memberNameEn || existing.member_name_en || null,
-                            group_name_en: existing.groupNameEn || existing.group_name_en || null
-                        });
+                    if (isPriceChanged || isIdcChanged || isStockChanged || isImageChanged) {
+                        const payload: any = { id: Number(p.id) };
+                        if (isPriceChanged || isIdcChanged) {
+                            payload.price = String(p.price);
+                            payload.id_c = Number(p.id_c);
+                        }
+                        if (isStockChanged) payload.stocked_count = p.stocked_count;
+                        if (isImageChanged) payload.image = p.image;
+                        
+                        itemsToUpdate.push(payload);
                     }
                 } else {
                     itemsToInsert.push({
@@ -8078,17 +8077,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             for (let i = 0; i < itemsToUpdate.length; i++) {
                 const item = itemsToUpdate[i];
                 const { id, ...rest } = item;
-                const res = await supabase.from('poca').update(rest).eq('id', id);
-                if (res?.error) {
-                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                    console.error("POCA Update Error:", res.error);
-                } else {
-                    successCount++;
+                
+                if (Object.keys(rest).length > 0) {
+                    const res = await supabase.from('poca').update(rest).eq('id', id);
+                    if (res?.error) {
+                        if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
+                        console.error("POCA Update Error:", res.error);
+                    } else {
+                        successCount++;
+                    }
                 }
-                if (i % 5 === 0 || i === itemsToUpdate.length - 1) {
+                if (i % 10 === 0 || i === itemsToUpdate.length - 1) {
                     setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
                 }
-                await new Promise(resolve => setTimeout(resolve, 30)); // 🌟 給予資料庫喘息時間
+                await new Promise(resolve => setTimeout(resolve, 10)); // 🌟 降低延遲，加快更新速度
             }
 
             // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
