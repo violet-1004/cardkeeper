@@ -8139,7 +8139,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 return [...unchanged, ...merged];
             });
             setSyncProgress('');
-            alert(`POCA 資料同步完成！\n共抓取: ${allFetchedPocas.length} 筆\n成功寫入: ${successCount} 筆${dbError ? `\n⚠️ 部分錯誤: ${dbError}` : ''}`);
+            alert(`POCA 資料同步完成！\n共抓取: ${allFetchedPocas.length} 筆\n成功寫入/更新: ${successCount} 筆${dbError ? `\n⚠️ 部分錯誤: ${dbError}` : ''}`);
         } catch (e) {
             alert('爬蟲失敗: ' + e.message);
             setSyncProgress('');
