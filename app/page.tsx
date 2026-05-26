@@ -8073,24 +8073,30 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             let dbError = null;
             let successCount = 0;
             
-            // 🌟 核心修復：改為「嚴格循序單筆 Update」，絕不併發，徹底杜絕 SQLITE_BUSY 鎖死！
-            for (let i = 0; i < itemsToUpdate.length; i++) {
-                const item = itemsToUpdate[i];
-                const { id, ...rest } = item;
+            // 🌟 終極效能大絕招：DELETE + INSERT 批量替換
+            // 完美解決 1500 筆 Update 導致的 SQLITE_BUSY，同時避開 Drizzle ORM 的 null 欄位更新 Bug！
+            for (let i = 0; i < itemsToUpdate.length; i += 50) {
+                const chunk = itemsToUpdate.slice(i, i + 50);
+                const chunkIds = chunk.map(c => c.id);
                 
-                if (Object.keys(rest).length > 0) {
-                    const res = await supabase.from('poca').update(rest).eq('id', id);
-                    if (res?.error) {
-                        if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                        console.error("POCA Update Error:", res.error);
-                    } else {
-                        successCount++;
-                    }
+                // 先刪除舊資料
+                const delRes = await supabase.from('poca').delete().in('id', chunkIds);
+                if (delRes?.error) {
+                    if (!dbError) dbError = delRes.error.message || JSON.stringify(delRes.error);
+                    console.error("POCA Delete Error:", delRes.error);
+                    continue; // 刪除失敗則不新增，避免資料衝突
                 }
-                if (i % 10 === 0 || i === itemsToUpdate.length - 1) {
-                    setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+                
+                // 再整批新增最新資料
+                const insRes = await supabase.from('poca').insert(chunk);
+                if (insRes?.error) {
+                    if (!dbError) dbError = insRes.error.message || JSON.stringify(insRes.error);
+                    console.error("POCA Replace Insert Error:", insRes.error);
+                } else {
+                    successCount += chunk.length;
                 }
-                await new Promise(resolve => setTimeout(resolve, 30)); // 🌟 維持安全延遲，避免連續寫入導致 SQLITE_BUSY
+                setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+                await new Promise(resolve => setTimeout(resolve, 50)); // 🌟 批次間給予資料庫喘息時間
             }
 
             // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
