@@ -8050,7 +8050,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     // 已存在於未對照清單中
                     const existing = unmatchedPocaMap.get(pidStr);
                     allItemsToProcess.push({
-                        id: Number(p.id),
+                        id: pidStr, // 🌟 強制轉為字串，確保與 SQLite 內的文字欄位型別吻合
                         image: p.image || existing.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing.stockedCount ?? existing.stocked_count ?? 0),
                         price: String(p.price),
@@ -8063,19 +8063,19 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     // 已對照的卡片 (存在於 DB 但被後端 API 過濾隱藏)
                     const localCard = matchedPocaMap.get(pidStr);
                     allItemsToProcess.push({
-                        id: Number(p.id),
+                        id: pidStr, // 🌟 強制轉為字串
                         image: p.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
                         price: String(p.price),
                         member_name_en: null,
                         group_name_en: null,
-                        card_id: localCard.id, // 保留對照關聯！
+                        card_id: String(localCard.id), // 🌟 強制轉為字串
                         id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
                     });
                 } else {
                     // 完全全新的卡片
                     allItemsToProcess.push({
-                        id: Number(p.id),
+                        id: pidStr, // 🌟 強制轉為字串
                         image: p.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
                         price: String(p.price),
@@ -8094,12 +8094,18 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             // 無視後端 API 的 GET 過濾器，保證 100% 不撞 Unique Constraint，且保留 card_id，同時固定 8 個欄位避免 ORM 解析錯亂
             for (let i = 0; i < allItemsToProcess.length; i += 50) {
                 const chunk = allItemsToProcess.slice(i, i + 50);
-                const chunkIds = chunk.map(c => c.id);
+                const chunkIds = chunk.map(c => String(c.id));
+                const chunkCardIds = chunk.map(c => c.card_id ? String(c.card_id) : null).filter(Boolean);
 
                 try {
-                    // 先強制刪除舊資料
+                    // 先強制刪除舊資料 (🌟 轉為字串確保 SQLite TEXT 欄位匹配成功)
                     await supabase.from('poca').delete().in('id', chunkIds);
                     
+                    // 🌟 清除可能殘留的幽靈對照紀錄，徹底根除 UNIQUE constraint failed: poca.card_id
+                    if (chunkCardIds.length > 0) {
+                        await supabase.from('poca').delete().in('card_id', chunkCardIds);
+                    }
+
                     // 執行全新 INSERT
                     const insRes = await supabase.from('poca').insert(chunk);
                     if (insRes?.error) {
