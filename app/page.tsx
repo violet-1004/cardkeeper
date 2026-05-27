@@ -8046,22 +8046,24 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     const isImageChanged = p.image && existing.image !== p.image;
 
                     if (isPriceChanged || isIdcChanged || isStockChanged || isImageChanged) {
-                        const payload: any = { id: Number(p.id) };
-                        if (isPriceChanged || isIdcChanged) {
-                            payload.price = String(p.price);
-                            payload.id_c = Number(p.id_c);
-                        }
-                        if (isStockChanged) payload.stocked_count = p.stocked_count;
-                        if (isImageChanged) payload.image = p.image;
-                        
-                        itemsToUpdate.push(payload);
+                        // 🌟 修正 API 寫入邏輯：確保所有必填欄位都有值，非必填欄位缺失時明確給予 null
+                        itemsToUpdate.push({
+                            id: Number(p.id),
+                            image: p.image || existing.image || '',
+                            stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing.stockedCount ?? existing.stocked_count ?? 0),
+                            price: String(p.price),
+                            member_name_en: existing.memberNameEn || existing.member_name_en || null,
+                            group_name_en: existing.groupNameEn || existing.group_name_en || null,
+                            card_id: existing.cardId || existing.card_id || null,
+                            id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
+                        });
                     }
                 } else {
                     itemsToInsert.push({
                         id: Number(p.id),
                         price: String(p.price),
-                        id_c: Number(p.id_c),
-                        stocked_count: p.stocked_count,
+                        id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null,
+                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
                         image: p.image || '',
                         card_id: null,
                         member_name_en: null,
