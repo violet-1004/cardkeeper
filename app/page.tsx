@@ -8031,130 +8031,85 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas = Array.from(uniquePocasMap.values());
 
             // 🌟 區分新增與更新，避免覆蓋舊有資料（如卡片對照或舊圖片）
-            const existingPocaMap = new Map((pocaCards || []).map(p => [String(p.id), p]));
-            const itemsToUpdate = [];
-            const itemsToInsert = [];
+            // 建立完整的現有 POCA 知識庫 (包含未對照的 pocaCards 與已對照的 ui_cards)
+            const unmatchedPocaMap = new Map((pocaCards || []).map(p => [String(p.id), p]));
+            const matchedPocaMap = new Map();
+            (cards || []).forEach(c => {
+                const pocaId = c.poco_id || c.pocoId || c.poco_jd || c.pocaCard || c.PocaCard || c.poca_id;
+                if (pocaId) {
+                    matchedPocaMap.set(String(pocaId), c);
+                }
+            });
+
+            const allItemsToProcess = [];
 
             allFetchedPocas.forEach(p => {
-                if (existingPocaMap.has(p.id)) {
-                    const existing = existingPocaMap.get(p.id);
-                    
-                    // 🌟 效能與防鎖死優化：精準比對，只更新發生變動的欄位，大幅減輕資料庫負擔
-                    const isPriceChanged = String(existing.price) !== String(p.price);
-                    const isIdcChanged = Number(existing.idC ?? existing.id_c) !== Number(p.id_c);
-                    const isStockChanged = Number(existing.stockedCount ?? existing.stocked_count) !== Number(p.stocked_count);
-                    const isImageChanged = p.image && existing.image !== p.image;
-
-                    if (isPriceChanged || isIdcChanged || isStockChanged || isImageChanged) {
-                        // 🌟 修正 API 寫入邏輯：確保所有必填欄位都有值，非必填欄位缺失時明確給予 null
-                        itemsToUpdate.push({
-                            id: Number(p.id),
-                            image: p.image || existing.image || '',
-                            stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing.stockedCount ?? existing.stocked_count ?? 0),
-                            price: String(p.price),
-                            member_name_en: existing.memberNameEn || existing.member_name_en || null,
-                            group_name_en: existing.groupNameEn || existing.group_name_en || null,
-                            card_id: existing.cardId || existing.card_id || null,
-                            id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
-                        });
-                    }
-                } else {
-                    itemsToInsert.push({
+                const pidStr = String(p.id);
+                
+                if (unmatchedPocaMap.has(pidStr)) {
+                    // 已存在於未對照清單中
+                    const existing = unmatchedPocaMap.get(pidStr);
+                    allItemsToProcess.push({
                         id: Number(p.id),
+                        image: p.image || existing.image || '',
+                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing.stockedCount ?? existing.stocked_count ?? 0),
                         price: String(p.price),
-                        id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null,
+                        member_name_en: existing.memberNameEn || existing.member_name_en || null,
+                        group_name_en: existing.groupNameEn || existing.group_name_en || null,
+                        card_id: null,
+                        id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
+                    });
+                } else if (matchedPocaMap.has(pidStr)) {
+                    // 已對照的卡片 (存在於 DB 但被後端 API 過濾隱藏)
+                    const localCard = matchedPocaMap.get(pidStr);
+                    allItemsToProcess.push({
+                        id: Number(p.id),
+                        image: p.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
-                        image: p.image || ''
+                        price: String(p.price),
+                        member_name_en: null,
+                        group_name_en: null,
+                        card_id: localCard.id, // 保留對照關聯！
+                        id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
+                    });
+                } else {
+                    // 完全全新的卡片
+                    allItemsToProcess.push({
+                        id: Number(p.id),
+                        image: p.image || '',
+                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
+                        price: String(p.price),
+                        member_name_en: null,
+                        group_name_en: null,
+                        card_id: null,
+                        id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
                     });
                 }
             });
 
             let dbError = null;
             let successCount = 0;
-            
-            // 🌟 終極效能大絕招：DELETE + INSERT 批量替換
-            // 完美解決 1500 筆 Update 導致的 SQLITE_BUSY，同時避開 Drizzle ORM 的 null 欄位更新 Bug！
-            for (let i = 0; i < itemsToUpdate.length; i += 50) {
-                const chunk = itemsToUpdate.slice(i, i + 50);
-                const chunkIds = chunk.map(c => c.id);
-                
-                // 先刪除舊資料
-                const delRes = await supabase.from('poca').delete().in('id', chunkIds);
-                if (delRes?.error) {
-                    if (!dbError) dbError = delRes.error.message || JSON.stringify(delRes.error);
-                    console.error("POCA Delete Error:", delRes.error);
-                    continue; // 刪除失敗則不新增，避免資料衝突
-                }
-                
-                // 再整批新增最新資料
-                const insRes = await supabase.from('poca').insert(chunk);
-                if (insRes?.error) {
-                    if (!dbError) dbError = insRes.error.message || JSON.stringify(insRes.error);
-                    console.error("POCA Replace Insert Error:", insRes.error);
-                } else {
-                    successCount += chunk.length;
-                }
-                setSyncProgress(`更新中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
-                await new Promise(resolve => setTimeout(resolve, 50)); // 🌟 批次間給予資料庫喘息時間
-            }
 
-            // 🌟 終極防爆：因為後端 /api/data 模擬的 upsert 可能未完全支援 SQLite ON CONFLICT 語法
-            // 所以我們針對這批前端以為是「新增」的卡片，主動向後端查詢一次，存在的走 DELETE+INSERT 替換，不存在才全新 INSERT
-            for (let i = 0; i < itemsToInsert.length; i += 50) {
-                const chunk = itemsToInsert.slice(i, i + 50);
+            // 🌟 終極效能大絕招：全部統一 DELETE + INSERT 批量替換
+            // 無視後端 API 的 GET 過濾器，保證 100% 不撞 Unique Constraint，且保留 card_id，同時固定 8 個欄位避免 ORM 解析錯亂
+            for (let i = 0; i < allItemsToProcess.length; i += 50) {
+                const chunk = allItemsToProcess.slice(i, i + 50);
                 const chunkIds = chunk.map(c => c.id);
 
                 try {
-                    // 1. 查詢這批 ID 是否已在資料庫
-                    const existRes = await new D1QueryBuilder('poca', 'select').in('id', chunkIds);
-                    const existingInDbMap = new Map((existRes?.data || []).map(p => [String(p.id), p]));
-
-                    const actualToUpdate = [];
-                    const actualToInsert = [];
-
-                    chunk.forEach(item => {
-                        if (existingInDbMap.has(String(item.id))) {
-                            const dbItem = existingInDbMap.get(String(item.id));
-                            actualToUpdate.push({
-                                id: item.id,
-                                image: item.image || dbItem.image || '',
-                                stocked_count: item.stocked_count !== undefined ? item.stocked_count : Number(dbItem.stockedCount ?? dbItem.stocked_count ?? 0),
-                                price: item.price,
-                                member_name_en: dbItem.memberNameEn || dbItem.member_name_en || null,
-                                group_name_en: dbItem.groupNameEn || dbItem.group_name_en || null,
-                                card_id: dbItem.cardId || dbItem.card_id || null,
-                                id_c: item.id_c !== undefined && item.id_c !== null ? item.id_c : (dbItem.idC ?? dbItem.id_c ?? null)
-                            });
-                        } else {
-                            actualToInsert.push(item);
-                        }
-                    });
-
-                    // 2. 對於已存在的，執行 DELETE + INSERT 替換
-                    if (actualToUpdate.length > 0) {
-                        const updateIds = actualToUpdate.map(c => c.id);
-                        await supabase.from('poca').delete().in('id', updateIds);
-                        const updRes = await supabase.from('poca').insert(actualToUpdate);
-                        if (updRes?.error) {
-                            if (!dbError) dbError = updRes.error.message || JSON.stringify(updRes.error);
-                            console.error("POCA Hidden Update Error:", updRes.error);
-                        } else {
-                            successCount += actualToUpdate.length;
-                        }
+                    // 先強制刪除舊資料
+                    await supabase.from('poca').delete().in('id', chunkIds);
+                    
+                    // 執行全新 INSERT
+                    const insRes = await supabase.from('poca').insert(chunk);
+                    if (insRes?.error) {
+                        if (!dbError) dbError = insRes.error.message || JSON.stringify(insRes.error);
+                        console.error("POCA Replace Error:", insRes.error);
+                    } else {
+                        successCount += chunk.length;
                     }
-
-                    // 3. 對於全新卡片，執行純 INSERT
-                    if (actualToInsert.length > 0) {
-                        const insRes = await supabase.from('poca').insert(actualToInsert);
-                        if (insRes?.error) {
-                            if (!dbError) dbError = insRes.error.message || JSON.stringify(insRes.error);
-                            console.error("POCA Insert Error:", insRes.error);
-                        } else {
-                            successCount += actualToInsert.length;
-                        }
-                    }
-
-                    setSyncProgress(`寫入中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+                    
+                    setSyncProgress(`寫入中 ${successCount}/${allItemsToProcess.length} 筆...`);
                     await new Promise(resolve => setTimeout(resolve, 50)); // 批次間給予資料庫喘息時間
                 } catch (e) {
                     console.error("POCA Chunk Process Error:", e);
