@@ -2324,7 +2324,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   );
 }
 
-function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists }) {
+function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists, pocaCards }) {
   const [viewMode, setViewMode] = useState('all');
   const [detailLevel, setDetailLevel] = useState(2); // 2: all, 1: partial, 0: none
   const [hideSelling, setHideSelling] = useState(false);
@@ -2458,19 +2458,11 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       return map;
   }, [channels]);
 
-  const cardToListsMap = useMemo(() => {
+  const pocaMap = useMemo(() => {
       const map = {};
-      (customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).forEach(list => {
-          (list.items || []).forEach(item => {
-              const cardId = String(item.cardId);
-              if (!map[cardId]) {
-                  map[cardId] = [];
-              }
-              map[cardId].push(list.title);
-          });
-      });
+      (pocaCards || []).forEach(p => map[String(p.id)] = p);
       return map;
-  }, [customLists]);
+  }, [pocaCards]);
 
   // 🌟 修正分隊清單：從所有卡片的 Member 與 Series 推導出存在的分隊
   const availableSubunits = useMemo(() => {
@@ -3056,6 +3048,11 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const channelAndBatch = [displayChannel, batchNumber].filter(Boolean).join('');
                 const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
+                // 🌟 取得 POCA 對照價
+                const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocaCard || card.PocaCard || card.poca_id;
+                const pocaData = matchedPocaId ? pocaMap[String(matchedPocaId)] : null;
+                const pocaPrice = pocaData ? (pocaData.idC ?? pocaData.id_c ?? pocaData.price) : null;
+
                 return (
                     <div 
                         key={card.id} 
@@ -3127,9 +3124,9 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             <div className="px-0.5 sm:px-1">
                             <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 flex items-center gap-1 flex-wrap">
                                 <span>{memberName}</span>
-                                {detailLevel === 2 && cardToListsMap[String(card.id)] && (
-                                    <span className="text-indigo-500 bg-indigo-50 px-1 rounded truncate font-medium normal-case">
-                                        {cardToListsMap[String(card.id)].join(', ')}
+                                {detailLevel === 2 && pocaPrice && (
+                                    <span className="text-green-600 bg-green-50 border border-green-200/50 px-1 rounded font-bold normal-case tracking-tight whitespace-nowrap">
+                                        ${pocaPrice}
                                     </span>
                                 )}
                             </div>
