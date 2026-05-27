@@ -1,5 +1,5 @@
 git add .
-git commit -m "0526 POCA-3"
+git commit -m "0528 POCA價格標"
 git push
 
 npx vercel --prod

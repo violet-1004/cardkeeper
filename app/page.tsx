@@ -9581,6 +9581,7 @@ export default function App() {
           setCols={setCollectionCols} // 🌟 致命錯誤修正：把 setCols 換成 setCollectionCols
           subunits={currentSubunits}
           customLists={customLists}
+          pocaCards={pocaCards}
         />;
       case 'bulk':
         return <BulkTab 
