@@ -8048,8 +8048,18 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas.forEach(p => {
                 const pidStr = String(p.id);
                 const isMatched = matchedPocaIds.has(pidStr);
+                const existingPoca = knownPocaMap.get(pidStr);
                 
-                // 🌟 2. 不管是否存在，一律使用新資料無條件覆蓋，且依據是否已對照填入 1 或 0
+                // 🌟 防禦機制：保留舊有的 card_id 關聯，避免被洗掉；若是透過 ui_cards 對照的，則填入自身的 POCA ID 避免 1/0 的 UNIQUE 衝突
+                let finalCardId = null;
+                if (isMatched) {
+                    finalCardId = Number(p.id);
+                } else if (existingPoca && existingPoca.cardId && String(existingPoca.cardId) !== '0' && String(existingPoca.cardId) !== '1') {
+                    // 保留舊版的關聯 ID，不破壞舊有綁定
+                    finalCardId = Number(existingPoca.cardId);
+                }
+                
+                // 🌟 2. 不管是否存在，一律使用新資料無條件覆蓋
                 const payload = {
                     id: Number(p.id),
                     image: p.image || '',
@@ -8057,7 +8067,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     price: String(p.price),
                     member_name_en: null,
                     group_name_en: null,
-                    card_id: isMatched ? 1 : 0,
+                    card_id: finalCardId,
                     id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
                 };
 
@@ -8123,11 +8133,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             // 🌟 根據最新狀態全面覆蓋前端 POCA 卡片快取
             setPocaCards(prev => {
                 const merged = newPocasCamel.map(newP => {
-                    const isMatched = matchedPocaIds.has(String(newP.id));
+                    const pidStr = String(newP.id);
+                    const isMatched = matchedPocaIds.has(pidStr);
+                    const existingPoca = knownPocaMap.get(pidStr);
+                    
+                    let finalCardId = null;
+                    if (isMatched) {
+                        finalCardId = Number(newP.id);
+                    } else if (existingPoca && existingPoca.cardId && String(existingPoca.cardId) !== '0' && String(existingPoca.cardId) !== '1') {
+                        finalCardId = Number(existingPoca.cardId);
+                    }
                     return {
                         ...newP,
-                        cardId: isMatched ? 1 : 0,
-                        card_id: isMatched ? 1 : 0
+                        cardId: finalCardId,
+                        card_id: finalCardId
                     };
                 });
                 
@@ -8193,9 +8212,9 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         }
         supabase.from('ui_cards').update(dbPayload).eq('id', selectedLocalId).then();
 
-        // 2. 更新左側：把已經綁定好的 POCA 卡片標記為已綁定 (1)
+        // 2. 更新左側：把已經綁定好的 POCA 卡片標記為已綁定 (填入自己的 POCA ID 避免 UNIQUE 衝突)
         setPocaCards(prev => prev.map(poca => 
-            String(poca.id) === String(selectedPocaId) ? { ...poca, cardId: 1, card_id: 1 } : poca
+            String(poca.id) === String(selectedPocaId) ? { ...poca, cardId: Number(selectedPocaId), card_id: Number(selectedPocaId) } : poca
         ));
 
         // 3. 清空選取狀態，準備對照下一張
