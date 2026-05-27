@@ -8064,10 +8064,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                         price: String(p.price),
                         id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null,
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
-                        image: p.image || '',
-                        card_id: null,
-                        member_name_en: null,
-                        group_name_en: null
+                        image: p.image || ''
                     });
                 }
             });
@@ -8101,10 +8098,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 await new Promise(resolve => setTimeout(resolve, 50)); // 🌟 批次間給予資料庫喘息時間
             }
 
-            // 新增則使用純 insert 語法，不會觸發 ON CONFLICT
+            // 新增則使用 upsert 語法，避免因分頁未載入完整導致的 UNIQUE constraint 錯誤
             for (let i = 0; i < itemsToInsert.length; i += 20) {
                 const chunk = itemsToInsert.slice(i, i + 20);
-                const res = await supabase.from('poca').insert(chunk);
+                const res = await supabase.from('poca').upsert(chunk);
                 if (res?.error) {
                     if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
                     console.error("POCA Insert Error:", res.error);
