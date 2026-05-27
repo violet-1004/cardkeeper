@@ -8051,20 +8051,20 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     const localCard = matchedPocaMap.get(pidStr);
                     const existing = unmatchedPocaMap.get(pidStr);
                     allItemsToProcess.push({
-                        id: pidStr, // 🌟 強制轉為字串，確保與 SQLite 內的文字欄位型別吻合
+                        id: Number(p.id), // 🌟 嚴格轉為數字，配合 Drizzle Schema 型別，確保 IN 語法能成功配對
                         image: p.image || existing?.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing?.stockedCount ?? existing?.stocked_count ?? 0),
                         price: String(p.price),
                         member_name_en: existing?.memberNameEn || existing?.member_name_en || null,
                         group_name_en: existing?.groupNameEn || existing?.group_name_en || null,
-                        card_id: String(localCard.id), // 保留對照關聯！
+                        card_id: Number(localCard.id), // 🌟 嚴格轉為數字
                         id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
                     });
                 } else if (unmatchedPocaMap.has(pidStr)) {
                     // 存在於資料庫但未對照的卡片
                     const existing = unmatchedPocaMap.get(pidStr);
                     allItemsToProcess.push({
-                        id: pidStr, // 🌟 強制轉為字串
+                        id: Number(p.id), // 🌟 嚴格轉為數字
                         image: p.image || existing?.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing?.stockedCount ?? existing?.stocked_count ?? 0),
                         price: String(p.price),
@@ -8076,7 +8076,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 } else {
                     // 完全全新的卡片
                     allItemsToProcess.push({
-                        id: pidStr, // 🌟 強制轉為字串
+                        id: Number(p.id), // 🌟 嚴格轉為數字
                         image: p.image || '',
                         stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
                         price: String(p.price),
