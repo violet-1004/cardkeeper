@@ -7864,8 +7864,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
     });
 
-    // 🌟 排序，讓新抓到的卡片排在最前面
-    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId).sort((a, b) => Number(b.id) - Number(a.id));
+    // 🌟 排序，讓新抓到的卡片排在最前面 (過濾掉已對照的 1)
+    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId || String(p.cardId) === '0').sort((a, b) => Number(b.id) - Number(a.id));
 
     // 🌟 分頁邏輯
     const totalPocaPages = Math.ceil(unmatchedPoca.length / POCA_PER_PAGE);
@@ -8132,24 +8132,15 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             }
 
             const newPocasCamel = allFetchedPocas.map(toCamelCase);
-            // 🌟 確保前端狀態也只更新 price 和 stocked_count，不洗掉 cardId 等關聯資訊
+            // 🌟 根據最新狀態全面覆蓋前端 POCA 卡片快取
             setPocaCards(prev => {
-                const prevMap = new Map();
-                prev.forEach(p => prevMap.set(String(p.id), p));
-                
                 const merged = newPocasCamel.map(newP => {
-                    const existing = prevMap.get(String(newP.id));
-                    if (existing) {
-                        return {
-                            ...existing,
-                            price: newP.price,
-                            id_c: newP.id_c,
-                            idC: newP.idC,
-                            stockedCount: newP.stockedCount,
-                            stocked_count: newP.stocked_count
-                        };
-                    }
-                    return newP;
+                    const isMatched = matchedPocaIds.has(String(newP.id));
+                    return {
+                        ...newP,
+                        cardId: isMatched ? 1 : 0,
+                        card_id: isMatched ? 1 : 0
+                    };
                 });
                 
                 const fetchedIds = new Set(merged.map(p => String(p.id)));
@@ -8214,9 +8205,9 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
         }
         supabase.from('ui_cards').update(dbPayload).eq('id', selectedLocalId).then();
 
-        // 2. 更新左側：把已經綁定好的 POCA 卡片標記上本地卡片 ID
+        // 2. 更新左側：把已經綁定好的 POCA 卡片標記為已綁定 (1)
         setPocaCards(prev => prev.map(poca => 
-            String(poca.id) === String(selectedPocaId) ? { ...poca, cardId: selectedLocalId } : poca
+            String(poca.id) === String(selectedPocaId) ? { ...poca, cardId: 1, card_id: 1 } : poca
         ));
 
         // 3. 清空選取狀態，準備對照下一張
