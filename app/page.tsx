@@ -8098,16 +8098,66 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 await new Promise(resolve => setTimeout(resolve, 50)); // 🌟 批次間給予資料庫喘息時間
             }
 
-            // 新增則使用 upsert 語法，避免因分頁未載入完整導致的 UNIQUE constraint 錯誤
-            for (let i = 0; i < itemsToInsert.length; i += 20) {
-                const chunk = itemsToInsert.slice(i, i + 20);
-                const res = await supabase.from('poca').upsert(chunk);
-                if (res?.error) {
-                    if (!dbError) dbError = res.error.message || JSON.stringify(res.error);
-                    console.error("POCA Insert Error:", res.error);
-                } else {
-                    successCount += chunk.length;
+            // 🌟 終極防爆：因為後端 /api/data 模擬的 upsert 可能未完全支援 SQLite ON CONFLICT 語法
+            // 所以我們針對這批前端以為是「新增」的卡片，主動向後端查詢一次，存在的走 DELETE+INSERT 替換，不存在才全新 INSERT
+            for (let i = 0; i < itemsToInsert.length; i += 50) {
+                const chunk = itemsToInsert.slice(i, i + 50);
+                const chunkIds = chunk.map(c => c.id);
+
+                try {
+                    // 1. 查詢這批 ID 是否已在資料庫
+                    const existRes = await new D1QueryBuilder('poca', 'select').in('id', chunkIds);
+                    const existingInDbMap = new Map((existRes?.data || []).map(p => [String(p.id), p]));
+
+                    const actualToUpdate = [];
+                    const actualToInsert = [];
+
+                    chunk.forEach(item => {
+                        if (existingInDbMap.has(String(item.id))) {
+                            const dbItem = existingInDbMap.get(String(item.id));
+                            actualToUpdate.push({
+                                id: item.id,
+                                image: item.image || dbItem.image || '',
+                                stocked_count: item.stocked_count !== undefined ? item.stocked_count : Number(dbItem.stockedCount ?? dbItem.stocked_count ?? 0),
+                                price: item.price,
+                                member_name_en: dbItem.memberNameEn || dbItem.member_name_en || null,
+                                group_name_en: dbItem.groupNameEn || dbItem.group_name_en || null,
+                                card_id: dbItem.cardId || dbItem.card_id || null,
+                                id_c: item.id_c !== undefined && item.id_c !== null ? item.id_c : (dbItem.idC ?? dbItem.id_c ?? null)
+                            });
+                        } else {
+                            actualToInsert.push(item);
+                        }
+                    });
+
+                    // 2. 對於已存在的，執行 DELETE + INSERT 替換
+                    if (actualToUpdate.length > 0) {
+                        const updateIds = actualToUpdate.map(c => c.id);
+                        await supabase.from('poca').delete().in('id', updateIds);
+                        const updRes = await supabase.from('poca').insert(actualToUpdate);
+                        if (updRes?.error) {
+                            if (!dbError) dbError = updRes.error.message || JSON.stringify(updRes.error);
+                            console.error("POCA Hidden Update Error:", updRes.error);
+                        } else {
+                            successCount += actualToUpdate.length;
+                        }
+                    }
+
+                    // 3. 對於全新卡片，執行純 INSERT
+                    if (actualToInsert.length > 0) {
+                        const insRes = await supabase.from('poca').insert(actualToInsert);
+                        if (insRes?.error) {
+                            if (!dbError) dbError = insRes.error.message || JSON.stringify(insRes.error);
+                            console.error("POCA Insert Error:", insRes.error);
+                        } else {
+                            successCount += actualToInsert.length;
+                        }
+                    }
+
                     setSyncProgress(`寫入中 ${successCount}/${itemsToUpdate.length + itemsToInsert.length} 筆...`);
+                    await new Promise(resolve => setTimeout(resolve, 50)); // 批次間給予資料庫喘息時間
+                } catch (e) {
+                    console.error("POCA Chunk Process Error:", e);
                 }
             }
 
