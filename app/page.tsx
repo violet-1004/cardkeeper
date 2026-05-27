@@ -8046,30 +8046,31 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas.forEach(p => {
                 const pidStr = String(p.id);
                 
-                if (unmatchedPocaMap.has(pidStr)) {
-                    // 已存在於未對照清單中
+                if (matchedPocaMap.has(pidStr)) {
+                    // 已對照的卡片 (以 ui_cards 的關聯為主！)
+                    const localCard = matchedPocaMap.get(pidStr);
                     const existing = unmatchedPocaMap.get(pidStr);
                     allItemsToProcess.push({
                         id: pidStr, // 🌟 強制轉為字串，確保與 SQLite 內的文字欄位型別吻合
-                        image: p.image || existing.image || '',
-                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing.stockedCount ?? existing.stocked_count ?? 0),
+                        image: p.image || existing?.image || '',
+                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing?.stockedCount ?? existing?.stocked_count ?? 0),
                         price: String(p.price),
-                        member_name_en: existing.memberNameEn || existing.member_name_en || null,
-                        group_name_en: existing.groupNameEn || existing.group_name_en || null,
-                        card_id: null,
+                        member_name_en: existing?.memberNameEn || existing?.member_name_en || null,
+                        group_name_en: existing?.groupNameEn || existing?.group_name_en || null,
+                        card_id: String(localCard.id), // 保留對照關聯！
                         id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
                     });
-                } else if (matchedPocaMap.has(pidStr)) {
-                    // 已對照的卡片 (存在於 DB 但被後端 API 過濾隱藏)
-                    const localCard = matchedPocaMap.get(pidStr);
+                } else if (unmatchedPocaMap.has(pidStr)) {
+                    // 存在於資料庫但未對照的卡片
+                    const existing = unmatchedPocaMap.get(pidStr);
                     allItemsToProcess.push({
                         id: pidStr, // 🌟 強制轉為字串
-                        image: p.image || '',
-                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
+                        image: p.image || existing?.image || '',
+                        stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : Number(existing?.stockedCount ?? existing?.stocked_count ?? 0),
                         price: String(p.price),
-                        member_name_en: null,
-                        group_name_en: null,
-                        card_id: String(localCard.id), // 🌟 強制轉為字串
+                        member_name_en: existing?.memberNameEn || existing?.member_name_en || null,
+                        group_name_en: existing?.groupNameEn || existing?.group_name_en || null,
+                        card_id: null,
                         id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
                     });
                 } else {
@@ -8094,11 +8095,19 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             // 無視後端 API 的 GET 過濾器，保證 100% 不撞 Unique Constraint，且保留 card_id，同時固定 8 個欄位避免 ORM 解析錯亂
             for (let i = 0; i < allItemsToProcess.length; i += 50) {
                 const chunk = allItemsToProcess.slice(i, i + 50);
-                const chunkIds = chunk.map(c => String(c.id));
-                const chunkCardIds = chunk.map(c => c.card_id ? String(c.card_id) : null).filter(Boolean);
+                
+                // 🌟 轉為字串與數字雙重防護，確保 SQLite 無論欄位是 TEXT 還是 INTEGER 都能成功配對並刪除
+                const chunkIds = chunk.flatMap(c => {
+                    const num = Number(c.id);
+                    return isNaN(num) ? [String(c.id)] : [String(c.id), num];
+                });
+                const chunkCardIds = chunk.map(c => c.card_id).filter(Boolean).flatMap(id => {
+                    const num = Number(id);
+                    return isNaN(num) ? [String(id)] : [String(id), num];
+                });
 
                 try {
-                    // 先強制刪除舊資料 (🌟 轉為字串確保 SQLite TEXT 欄位匹配成功)
+                    // 先強制刪除舊資料
                     await supabase.from('poca').delete().in('id', chunkIds);
                     
                     // 🌟 清除可能殘留的幽靈對照紀錄，徹底根除 UNIQUE constraint failed: poca.card_id
