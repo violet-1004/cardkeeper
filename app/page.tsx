@@ -8001,7 +8001,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 id: String(item.id),
                                 image: String(item.image || item.imagePath || ''),
                                 stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
-                                price: String(originalPrice),
+                                price: String(finalPrice), // 🌟 直接將轉換後的價格存入 price 欄位
                                 id_c: finalPrice
                             });
                         }
