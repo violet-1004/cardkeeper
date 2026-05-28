@@ -8001,8 +8001,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 id: String(item.id),
                                 image: String(item.image || item.imagePath || ''),
                                 stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
-                                price: String(finalPrice), // 🌟 直接將轉換後的價格存入 price 欄位
-                                id_c: finalPrice
+                                price: Number(finalPrice), // 🌟 轉為數字並直接將轉換後的價格存入 price 欄位，避免 Drizzle 型別報錯
+                                id_c: null // 🌟 強制填 null，避免不小心觸發 poca.id_c 欄位的 UNIQUE 唯一值衝突！
                             });
                         }
 
@@ -8061,11 +8061,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     id: Number(p.id),
                     image: p.image || '',
                     stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
-                    price: String(p.price),
+                    price: Number(p.price), // 🌟 確保儲存為數值型態
                     member_name_en: null,
                     group_name_en: null,
                     card_id: finalCardId,
-                    id_c: p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : null
+                    id_c: null // 🌟 寫入資料庫時強制給 null，確保完全避開 UNIQUE 衝突
                 };
 
                 if (knownPocaMap.has(pidStr)) {
@@ -8142,8 +8142,11 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     }
                     return {
                         ...newP,
+                        price: Number(newP.price), // 🌟 快取也一併轉為數值
                         cardId: finalCardId,
-                        card_id: finalCardId
+                        card_id: finalCardId,
+                        idC: null, // 同步清空
+                        id_c: null
                     };
                 });
                 
