@@ -7977,11 +7977,15 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                             .then(async res => {
                                 if (!res.ok) {
                                     const errText = await res.text();
+                                    // 🌟 若上游回傳 404，代表已經翻到盡頭 (沒有下一頁了)，當作空資料處理
+                                    if (errText.includes('404') || res.status === 404) {
+                                        return { success: true, data: { results: [] } };
+                                    }
                                     throw new Error(`Proxy 錯誤 ${res.status}: ${errText}`);
                                 }
                                 return res.json();
                             })
-                            .catch(err => { console.error("抓取失敗:", err); return null; })
+                            .catch(err => { console.warn("頁面抓取中斷 (翻頁結束):", err.message); return null; })
                     );
                 }
                 setSyncProgress(`已抓取 ${allFetchedPocas.length} 筆...`);
@@ -8057,11 +8061,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     id: Number(p.id),
                     image: p.image || '',
                     stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
-                    price: Number(p.price), // 🌟 確保儲存為數值型態
-                    member_name_en: null,
-                    group_name_en: null,
-                    card_id: null, // 🌟 寫入資料庫時強制給 null，徹底避開 card_id UNIQUE 衝突
-                    id_c: null // 🌟 寫入資料庫時強制給 null，確保完全避開 UNIQUE 衝突
+                    price: Number(p.price) // 🌟 確保儲存為數值型態
                 };
 
                 if (knownPocaMap.has(pidStr)) {

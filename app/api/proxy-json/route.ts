@@ -21,6 +21,9 @@ export async function GET(request: Request) {
         });
 
         if (!response.ok) {
+            if (response.status === 404) {
+                return NextResponse.json({ error: '上游 API 請求失敗，狀態碼: 404' }, { status: 404 });
+            }
             throw new Error(`上游 API 請求失敗，狀態碼: ${response.status}`);
         }
 
