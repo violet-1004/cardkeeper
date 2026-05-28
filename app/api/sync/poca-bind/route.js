@@ -31,9 +31,9 @@ export async function POST(request) {
         .set(uiCardUpdate)
         .where(eq(uiCards.id, Number(local_card_id))),
         
-      // 動作二：將 poca 表的 card_id 填入自己的 POCA ID (已對照) 避免 UNIQUE 衝突
+      // 動作二：強制將 poca 表的 card_id 設為 null，徹底避開 UNIQUE 衝突，對照關係全權交由 ui_cards 負責
       db.update(poca)
-        .set({ card_id: Number(poca_id) })
+        .set({ card_id: null })
         .where(eq(poca.id, Number(poca_id)))
     ]);
 

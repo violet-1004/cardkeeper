@@ -8045,16 +8045,6 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             allFetchedPocas.forEach(p => {
                 const pidStr = String(p.id);
                 const isMatched = matchedPocaIds.has(pidStr);
-                const existingPoca = knownPocaMap.get(pidStr);
-                
-                // 🌟 防禦機制：保留舊有的 card_id 關聯，避免被洗掉；若是透過 ui_cards 對照的，則填入自身的 POCA ID 避免 1/0 的 UNIQUE 衝突
-                let finalCardId = null;
-                if (isMatched) {
-                    finalCardId = Number(p.id);
-                } else if (existingPoca && existingPoca.cardId && String(existingPoca.cardId) !== '0' && String(existingPoca.cardId) !== '1') {
-                    // 保留舊版的關聯 ID，不破壞舊有綁定
-                    finalCardId = Number(existingPoca.cardId);
-                }
                 
                 // 🌟 2. 不管是否存在，一律使用新資料無條件覆蓋
                 const payload = {
@@ -8064,7 +8054,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     price: Number(p.price), // 🌟 確保儲存為數值型態
                     member_name_en: null,
                     group_name_en: null,
-                    card_id: finalCardId,
+                    card_id: null, // 🌟 寫入資料庫時強制給 null，徹底避開 card_id UNIQUE 衝突
                     id_c: null // 🌟 寫入資料庫時強制給 null，確保完全避開 UNIQUE 衝突
                 };
 
@@ -8088,7 +8078,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 const chunk = itemsToUpdate.slice(i, i + 20);
                 try {
                     await Promise.all(chunk.map(async (item) => {
-                        const res = await supabase.from('poca').update(item).eq('id', item.id);
+                        const { id, ...updateData } = item; // 🌟 移除 id 避免更新 Primary Key 導致 SQLite 報錯
+                        const res = await supabase.from('poca').update(updateData).eq('id', item.id);
                         if (res?.error && !dbError) dbError = res.error.message;
                         successCount++;
                     }));
@@ -8110,7 +8101,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                             const singleIns = await supabase.from('poca').insert([item]);
                             if (singleIns?.error) {
                                 // 發生主鍵衝突，證明這張卡片其實已經存在，改用 Update 覆寫
-                                const updRes = await supabase.from('poca').update(item).eq('id', item.id);
+                                const { id, ...updateData } = item; // 🌟 同樣移除 id 避免更新 Primary Key
+                                const updRes = await supabase.from('poca').update(updateData).eq('id', item.id);
                                 if (updRes?.error && !dbError) dbError = updRes.error.message;
                             }
                             successCount++;
@@ -8132,14 +8124,10 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 const merged = newPocasCamel.map(newP => {
                     const pidStr = String(newP.id);
                     const isMatched = matchedPocaIds.has(pidStr);
-                    const existingPoca = knownPocaMap.get(pidStr);
                     
-                    let finalCardId = null;
-                    if (isMatched) {
-                        finalCardId = Number(newP.id);
-                    } else if (existingPoca && existingPoca.cardId && String(existingPoca.cardId) !== '0' && String(existingPoca.cardId) !== '1') {
-                        finalCardId = Number(existingPoca.cardId);
-                    }
+                    // 🌟 前端維持 isMatched 的標記，確保已對照的卡片不會跑到未對照清單
+                    let finalCardId = isMatched ? Number(newP.id) : null;
+                    
                     return {
                         ...newP,
                         price: Number(newP.price), // 🌟 快取也一併轉為數值
