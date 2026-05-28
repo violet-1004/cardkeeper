@@ -24,6 +24,10 @@ export async function GET(request: Request) {
             headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }
         });
 
+        if (!response.ok) {
+            throw new Error(`KOCA API 請求失敗，狀態碼: ${response.status}`);
+        }
+
         const data = await response.json();
         return NextResponse.json(data);
     } catch (error: any) {

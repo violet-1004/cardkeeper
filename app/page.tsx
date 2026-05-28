@@ -7974,8 +7974,14 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new&page=${page + i}`;
                     promises.push(
                         fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`)
-                            .then(res => res.json())
-                            .catch(err => { console.error(err); return null; })
+                            .then(async res => {
+                                if (!res.ok) {
+                                    const errText = await res.text();
+                                    throw new Error(`Proxy 錯誤 ${res.status}: ${errText}`);
+                                }
+                                return res.json();
+                            })
+                            .catch(err => { console.error("抓取失敗:", err); return null; })
                     );
                 }
                 setSyncProgress(`已抓取 ${allFetchedPocas.length} 筆...`);
@@ -8156,13 +8162,15 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
     if (!selectedPocaId || !selectedLocalId) return;
 
     try {
+        const poca = pocaCards.find(p => String(p.id) === String(selectedPocaId));
         const response = await fetch('/api/sync/poca-bind', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 local_card_id: selectedLocalId,
                 poca_id: selectedPocaId,
-                overwrite_image: overwriteImage
+                overwrite_image: overwriteImage,
+                poca_image: poca?.image
             }),
         });
 
@@ -8192,13 +8200,6 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
             }
             return c;
         }));
-
-        // 🌟 核心修正：同步將更新的圖片與對照 ID 寫入 D1 資料庫，確保重新整理不還原
-        const dbPayload: any = { poca_card: selectedPocaId, poco_id: selectedPocaId };
-        if (newImage) {
-            dbPayload.image = newImage;
-        }
-        supabase.from('ui_cards').update(dbPayload).eq('id', selectedLocalId).then();
 
         // 2. 更新左側：把已經綁定好的 POCA 卡片標記為已綁定 (填入自己的 POCA ID 避免 UNIQUE 衝突)
         setPocaCards(prev => prev.map(poca => 

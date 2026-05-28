@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+
 export const runtime = 'edge';
 
 export async function GET(request: Request) {
@@ -12,15 +13,17 @@ export async function GET(request: Request) {
     try {
         const response = await fetch(targetUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json'
+                // 🌟 偽裝成一般的瀏覽器，避免被當成機器人擋掉
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7',
             }
         });
-        
+
         if (!response.ok) {
-             throw new Error(`API 回應失敗: 狀態碼 ${response.status}`);
+            throw new Error(`上游 API 請求失敗，狀態碼: ${response.status}`);
         }
-        
+
         const data = await response.json();
         return NextResponse.json(data);
     } catch (error: any) {
