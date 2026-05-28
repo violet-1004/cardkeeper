@@ -3051,7 +3051,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 // 🌟 取得 POCA 對照價
                 const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocaCard || card.PocaCard || card.poca_id;
                 const pocaData = matchedPocaId ? pocaMap[String(matchedPocaId)] : null;
-                const pocaPrice = pocaData ? (pocaData.idC ?? pocaData.id_c ?? pocaData.price) : null;
+                const pocaPrice = pocaData ? ((!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)) : null;
 
                 return (
                     <div 
