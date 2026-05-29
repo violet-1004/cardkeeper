@@ -8013,8 +8013,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                 id: String(item.id),
                                 image: String(item.image || item.imagePath || ''),
                                 stocked_count: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
-                                price: Number(finalPrice), // 🌟 轉為數字並直接將轉換後的價格存入 price 欄位，避免 Drizzle 型別報錯
-                                id_c: null // 🌟 強制填 null，避免不小心觸發 poca.id_c 欄位的 UNIQUE 唯一值衝突！
+                                price: Number(finalPrice) // 🌟 轉為數字並直接將轉換後的價格存入 price 欄位，避免 Drizzle 型別報錯
                             });
                         }
 
@@ -8065,8 +8064,12 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 const chunk = allPayloads.slice(i, i + 50);
                 try {
                     const res = await supabase.from('poca').upsert(chunk);
-                    if (res?.error && !dbError) dbError = res.error.message;
-                    successCount += chunk.length;
+                    if (res?.error) {
+                        if (!dbError) dbError = res.error.message;
+                    } else {
+                        // 🌟 修正：只有在寫入成功時，才增加成功寫入的計數
+                        successCount += chunk.length;
+                    }
                     setSyncProgress(`寫入資料庫中 ${successCount}/${totalToProcess} 筆...`);
                     
                     // 🌟 增加微小延遲，讓瀏覽器與網路層喘息，避免併發過高遭伺服器切斷連線
@@ -8090,10 +8093,8 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                     return {
                         ...newP,
                         price: Number(newP.price), // 🌟 快取也一併轉為數值
-                        cardId: finalCardId,
-                        card_id: finalCardId,
-                        idC: null, // 同步清空
-                        id_c: null
+                        cardId: finalCardId, // 維持前端對照判定用的虛擬欄位
+                        card_id: finalCardId
                     };
                 });
                 
