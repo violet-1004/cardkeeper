@@ -1398,7 +1398,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     {pocaData && (
                                         <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                             <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
-                                            <span className="text-green-600 font-bold">${(!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)}</span>
+                                            <span className="text-green-600 font-bold">₩{(!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)}</span>
                                             <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
                                         </div>
                                     )}
@@ -3287,7 +3287,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                  <div className="flex justify-center items-center relative">
                      <div className="relative">
                          <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm">
-                             <option value="month">篩選年月</option><option value="year">只篩選年</option><option value="range">自訂日期範圍</option>
+                             <option value="month">MONTH</option><option value="year">YEAR</option><option value="range">自訂日期</option>
                          </select>
                          <ChevronDown className="w-3 h-3 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                      </div>
@@ -7973,7 +7973,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 const promises = [];
                 // 每次並發 5 個請求以加速 5000+ 筆資料的讀取
                 for (let i = 0; i < 5; i++) {
-                    const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=36&min_stocked_count=1&price_step=ALL&sort=new&page=${page + i}`;
+                    const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=36&price_step=ALL&sort=new&page=${page + i}`;
                     promises.push(
                         fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`)
                             .then(async res => {

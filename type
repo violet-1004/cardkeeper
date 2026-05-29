@@ -1,5 +1,5 @@
 git add .
-git commit -m "0528 POCA價格標-8"
+git commit -m "0529 POCA同步-2"
 git push
 
 npx vercel --prod
@@ -11,3 +11,4 @@ npx drizzle-kit studio
 
 npx @cloudflare/next-on-pages
 npx wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat
+min_stocked_count=1
