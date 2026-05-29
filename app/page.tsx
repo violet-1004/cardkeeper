@@ -1126,11 +1126,6 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                 new D1QueryBuilder('poca', 'select').eq('id', matchedPocaId).then(res => {
                     if (res?.data?.[0]) setDynamicPocaData(toCamelCase(res.data[0]));
                 }).catch(() => {});
-            } else if (card.id) {
-                // 若 ui_cards 身上沒有紀錄，直接利用 poca 表內的 card_id 進行反查
-                new D1QueryBuilder('poca', 'select').eq('card_id', card.id).then(res => {
-                    if (res?.data?.[0]) setDynamicPocaData(toCamelCase(res.data[0]));
-                }).catch(() => {});
             }
         }
     }, [basePocaData, matchedPocaId, card.id]);
@@ -1403,7 +1398,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     {pocaData && (
                                         <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                             <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
-                                            <span className="text-green-600 font-bold">${pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0}</span>
+                                            <span className="text-green-600 font-bold">${(!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)}</span>
                                             <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
                                         </div>
                                     )}
@@ -7861,8 +7856,15 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
     });
 
-    // 🌟 排序，讓新抓到的卡片排在最前面 (過濾掉已對照的 1)
-    const unmatchedPoca = (pocaCards || []).filter(p => !p.cardId || String(p.cardId) === '0').sort((a, b) => Number(b.id) - Number(a.id));
+    // 🌟 動態反查：從 ui_cards 蒐集已經對照的 POCA ID，確保準確過濾
+    const matchedPocaIds = new Set();
+    (cards || []).forEach(c => {
+        const pocaId = c.poco_id || c.pocoId || c.poco_jd || c.pocaCard || c.PocaCard || c.poca_id;
+        if (pocaId) matchedPocaIds.add(String(pocaId));
+    });
+
+    // 🌟 排序，讓新抓到的卡片排在最前面 (過濾掉已對照的卡片)
+    const unmatchedPoca = (pocaCards || []).filter(p => !matchedPocaIds.has(String(p.id))).sort((a, b) => Number(b.id) - Number(a.id));
 
     // 🌟 分頁邏輯
     const totalPocaPages = Math.ceil(unmatchedPoca.length / POCA_PER_PAGE);
@@ -8245,7 +8247,7 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                                         <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
                                         <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
                                             <div className="text-[9px] text-white font-bold truncate">{p.id}</div>
-                                            <div className="text-[9px] text-green-300 font-bold">${p.idC ?? p.id_c ?? p.price}</div>
+                                            <div className="text-[9px] text-green-300 font-bold">${(!isNaN(Number(p.price)) && Number(p.price) > 100) ? Number(p.price) : Number(p.idC ?? p.id_c ?? p.price ?? 0)}</div>
                                         </div>
                                     </div>
                                     {selectedPocaId === p.id && <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10"><Check className="w-3 h-3 text-white" /></div>}

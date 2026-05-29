@@ -24,17 +24,12 @@ export async function POST(request) {
       uiCardUpdate.image = poca_image;
     }
 
-    // 🌟 使用 db.batch 進行雙向同步更新
+    // 🌟 核心修正：只更新 ui_cards，不再動到 poca 表，因為對照關係已全權交由 ui_cards.poco_id 負責
     await db.batch([
       // 動作一：將 POCA ID 寫入本地 ui_cards 表
       db.update(uiCards)
         .set(uiCardUpdate)
         .where(eq(uiCards.id, Number(local_card_id))),
-        
-      // 動作二：強制將 poca 表的 card_id 設為 null，徹底避開 UNIQUE 衝突，對照關係全權交由 ui_cards 負責
-      db.update(poca)
-        .set({ card_id: null })
-        .where(eq(poca.id, Number(poca_id)))
     ]);
 
     return NextResponse.json({ success: true });
