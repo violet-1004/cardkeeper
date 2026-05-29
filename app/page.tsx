@@ -8048,80 +8048,31 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
                 }
             });
 
-            // 建立已知的 pocaCards 清單，用來區分 Insert 和 Update，減少撞衝突的機率
-            const knownPocaMap = new Map((pocaCards || []).map(p => [String(p.id), p]));
-
-            const itemsToInsert = [];
-            const itemsToUpdate = [];
-
-            allFetchedPocas.forEach(p => {
-                const pidStr = String(p.id);
-                const isMatched = matchedPocaIds.has(pidStr);
-                
-                // 🌟 2. 不管是否存在，一律使用新資料無條件覆蓋
-                const payload = {
-                    id: Number(p.id),
-                    image: p.image || '',
-                    stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
-                    price: Number(p.price) // 🌟 確保儲存為數值型態
-                };
-
-                if (knownPocaMap.has(pidStr)) {
-                    // 已存在於 POCA 資料庫，排入更新
-                    itemsToUpdate.push(payload);
-                } else {
-                    // 新卡片，排入新增
-                    itemsToInsert.push(payload);
-                }
-            });
+            // 🌟 終極智慧更新：將所有抓取到的資料整理成精簡 Payload，全面採用 Upsert 批次處理
+            const allPayloads = allFetchedPocas.map(p => ({
+                id: Number(p.id),
+                image: p.image || '',
+                stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
+                price: Number(p.price) // 🌟 確保儲存為數值型態
+            }));
 
             let dbError = null;
             let successCount = 0;
-            const totalToProcess = itemsToInsert.length + itemsToUpdate.length;
+            const totalToProcess = allPayloads.length;
 
-            // 🌟 終極智慧更新：將更新與新增分離，對於新增資料若遇 Unique Constraint 自動降級單筆處理
-            
-            // 1. 處理個別更新 (Update)
-            for (let i = 0; i < itemsToUpdate.length; i += 20) {
-                const chunk = itemsToUpdate.slice(i, i + 20);
+            // 🌟 解決網路連線中斷：全面改用 Upsert 批次處理，將原本近 6000 次的獨立 HTTP 請求縮減至 100 多次，徹底解決效能瓶頸
+            for (let i = 0; i < allPayloads.length; i += 50) {
+                const chunk = allPayloads.slice(i, i + 50);
                 try {
-                    await Promise.all(chunk.map(async (item) => {
-                        const { id, ...updateData } = item; // 🌟 移除 id 避免更新 Primary Key 導致 SQLite 報錯
-                        const res = await supabase.from('poca').update(updateData).eq('id', item.id);
-                        if (res?.error && !dbError) dbError = res.error.message;
-                        successCount++;
-                    }));
-                    setSyncProgress(`更新中 ${successCount}/${totalToProcess} 筆...`);
-                } catch (e) {
-                    console.error("POCA Update Chunk Error:", e);
-                    if (!dbError) dbError = e.message;
-                }
-            }
-
-            // 2. 處理新增 (Insert)
-            for (let i = 0; i < itemsToInsert.length; i += 50) {
-                const chunk = itemsToInsert.slice(i, i + 50);
-                try {
-                    const insRes = await supabase.from('poca').insert(chunk);
-                    if (insRes?.error) {
-                        // 如果整批 Insert 失敗 (通常是因為後端防護機制隱藏了已經存在的卡片)，自動降級為單筆 Update 覆寫
-                        for (const item of chunk) {
-                            const singleIns = await supabase.from('poca').insert([item]);
-                            if (singleIns?.error) {
-                                // 發生主鍵衝突，證明這張卡片其實已經存在，改用 Update 覆寫
-                                const { id, ...updateData } = item; // 🌟 同樣移除 id 避免更新 Primary Key
-                                const updRes = await supabase.from('poca').update(updateData).eq('id', item.id);
-                                if (updRes?.error && !dbError) dbError = updRes.error.message;
-                            }
-                            successCount++;
-                        }
-                    } else {
-                        successCount += chunk.length;
-                    }
-                    setSyncProgress(`寫入中 ${successCount}/${totalToProcess} 筆...`);
+                    const res = await supabase.from('poca').upsert(chunk);
+                    if (res?.error && !dbError) dbError = res.error.message;
+                    successCount += chunk.length;
+                    setSyncProgress(`寫入資料庫中 ${successCount}/${totalToProcess} 筆...`);
+                    
+                    // 🌟 增加微小延遲，讓瀏覽器與網路層喘息，避免併發過高遭伺服器切斷連線
                     await new Promise(resolve => setTimeout(resolve, 50));
                 } catch (e) {
-                    console.error("POCA Insert Chunk Error:", e);
+                    console.error("POCA Upsert Chunk Error:", e);
                     if (!dbError) dbError = e.message;
                 }
             }

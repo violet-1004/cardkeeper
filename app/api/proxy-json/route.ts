@@ -22,7 +22,8 @@ export async function GET(request: Request) {
 
         if (!response.ok) {
             if (response.status === 404) {
-                return NextResponse.json({ error: '上游 API 請求失敗，狀態碼: 404' }, { status: 404 });
+                // 🌟 回傳 200 狀態碼與空的結果，避免瀏覽器印出紅色 404 錯誤
+                return NextResponse.json({ success: true, data: { results: [] } }, { status: 200 });
             }
             throw new Error(`上游 API 請求失敗，狀態碼: ${response.status}`);
         }
