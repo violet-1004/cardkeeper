@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     }
 
     // 🌟 完美對應您提供的 KOCA API 格式
-    let kocaUrl = `<https://koca.shop/api/series/${apiId}/items?type=idol_card>`;
+    let kocaUrl = `https://koca.shop/api/series/${apiId}/items?type=idol_card`;
     
     // 🌟 如果前端有傳遞「下一頁」的指標，就補上 cursor 參數
     if (cursor) {

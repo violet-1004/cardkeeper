@@ -7453,7 +7453,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
-function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData, appSettings, onUpdateSetting, prices }) {
+function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, members, series, batches, channels, types, subunits, currentGroupId, onSyncData, appSettings, onUpdateSetting, prices }) {
     const [activeSubTab, setActiveSubTab] = useState('poca_match'); // 'crawler' | 'poca_match'
     const [isCrawling, setIsCrawling] = useState(false);
     const [syncProgress, setSyncProgress] = useState('');
@@ -7858,13 +7858,14 @@ function SyncTab({ cards, setCards, pocaCards, setPocaCards, groups, members, se
 
     // 🌟 動態反查：從 ui_cards 蒐集已經對照的 POCA ID，確保準確過濾
     const matchedPocaIds = new Set();
-    (cards || []).forEach(c => {
+    (allCards || cards || []).forEach(c => {
         const pocaId = c.poco_id || c.pocoId || c.poco_jd || c.pocaCard || c.PocaCard || c.poca_id;
         if (pocaId) matchedPocaIds.add(String(pocaId));
     });
 
     // 🌟 排序，讓新抓到的卡片排在最前面 (過濾掉已對照的卡片)
-    const unmatchedPoca = (pocaCards || []).filter(p => !matchedPocaIds.has(String(p.id))).sort((a, b) => Number(b.id) - Number(a.id));
+    // 雙重過濾：排除前端所有團體已對照的 ID，同時排除資料表本身已標記 cardId 的資料
+    const unmatchedPoca = (pocaCards || []).filter(p => !matchedPocaIds.has(String(p.id)) && !p.cardId && !p.card_id).sort((a, b) => Number(b.id) - Number(a.id));
 
     // 🌟 分頁邏輯
     const totalPocaPages = Math.ceil(unmatchedPoca.length / POCA_PER_PAGE);
@@ -8603,7 +8604,7 @@ export default function App() {
         if (fetchedPrices.length > 0) {
             console.log(`✅ [price] 成功讀取 ${fetchedPrices.length} 筆資料`);
         }
-        setPocaCards(await fetchTable('poca', false, { paginate: true })); // 🌟 讀取 poca 爬蟲資料
+        setPocaCards(await fetchTable('poca', false, { paginate: true, orderBy: 'id', ascending: false })); // 🌟 讀取 poca 爬蟲資料 (依 ID 降冪，確保拿到最新的未對照卡)
     }
     fetchAllData();
   }, []);
@@ -9620,6 +9621,7 @@ export default function App() {
       case 'sync':
         return <SyncTab 
           cards={currentCards} 
+          allCards={cards}
           setCards={setCards} 
           pocaCards={pocaCards} 
           setPocaCards={setPocaCards} 
