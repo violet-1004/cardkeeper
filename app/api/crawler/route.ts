@@ -24,6 +24,11 @@ export async function GET(request: Request) {
             headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }
         });
 
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Failed to read error response');
+            throw new Error(`KOCA API request failed with status ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+
         const data = await response.json();
         return NextResponse.json(data);
     } catch (error: any) {
