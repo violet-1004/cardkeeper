@@ -64,9 +64,9 @@ export async function updateSeriesApi(id: number, api: string) {
 export async function insertSeries(newSeries: any) {
     const db = getDb();
     await db.insert(schema.series).values({
-        id: newSeries.id ? Number(newSeries.id) : Date.now(),
+        id: newSeries.id ? String(newSeries.id) as any : Date.now().toString() as any,
         name: newSeries.name,
-        group_id: (newSeries.groupId || newSeries.group_id) ? Number(newSeries.groupId || newSeries.group_id) : null,
+        group_id: (newSeries.groupId || newSeries.group_id) ? String(newSeries.groupId || newSeries.group_id) as any : null,
         short_name: newSeries.shortName || newSeries.short_name || null,
         subunit: newSeries.subunit || null,
         type: newSeries.type || null,
@@ -81,10 +81,12 @@ export async function fetchChannels() {
 }
 
 export async function upsertCards(cards: any[]) {
+    try {
     if (!cards || cards.length === 0) return 0;
 
     const db = getDb();
     const CHUNK_SIZE = 10; // 🌟 限制單次資料庫寫入與併發請求數 (防堵 Cloudflare 50 個子請求限制)
+    const skipR2Upload = cards.length > 20; // 🌟 核心防爆：大量同步時跳過 R2 上傳
 
     for (let i = 0; i < cards.length; i += CHUNK_SIZE) {
         const chunk = cards.slice(i, i + CHUNK_SIZE);
@@ -92,18 +94,18 @@ export async function upsertCards(cards: any[]) {
         const processedChunk = await Promise.all(chunk.map(async (card) => {
             let image = card.image;
             const seriesId = card.seriesId || card.series_id;
-            if (image && !image.includes('r2.dev')) {
+            if (!skipR2Upload && image && !image.includes('r2.dev')) {
                 const fileName = `cards/${seriesId}/${card.id}.jpg`;
                 image = await uploadImageToR2(image, fileName);
             }
             return {
-                id: Number(card.id),
+                id: String(card.id) as any,
                 name: card.name,
-                member_id: (card.memberId || card.member_id) ? Number(card.memberId || card.member_id) : null,
+                member_id: (card.memberId || card.member_id) ? String(card.memberId || card.member_id) as any : null,
                 image: image || null,
                 type: card.type || null,
-                series_id: seriesId ? Number(seriesId) : null,
-                group_id: (card.groupId || card.group_id) ? Number(card.groupId || card.group_id) : null,
+                series_id: seriesId ? String(seriesId) as any : null,
+                group_id: (card.groupId || card.group_id) ? String(card.groupId || card.group_id) as any : null,
             };
         }));
 
@@ -123,32 +125,38 @@ export async function upsertCards(cards: any[]) {
     // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
     revalidatePath('/', 'layout');
     return cards.length;
+    } catch (error: any) {
+        console.error("🔥 upsertCards 嚴重錯誤:", error);
+        throw error;
+    }
 }
 
 export async function upsertBatches(batches: any[]) {
+    try {
     if (!batches || batches.length === 0) return 0;
 
     const db = getDb();
     const CHUNK_SIZE = 10; // 🌟 防堵 Cloudflare 50 個子請求限制
+    const skipR2Upload = batches.length > 20;
 
     for (let i = 0; i < batches.length; i += CHUNK_SIZE) {
         const chunk = batches.slice(i, i + CHUNK_SIZE);
         
         const processedChunk = await Promise.all(chunk.map(async (batch) => {
             let image = batch.image;
-            if (image && !image.includes('r2.dev')) {
+            if (!skipR2Upload && image && !image.includes('r2.dev')) {
                 const fileName = `batches/${batch.id}.jpg`;
                 image = await uploadImageToR2(image, fileName);
             }
             return {
-                id: Number(batch.id),
+                id: String(batch.id) as any,
                 name: batch.name,
                 type: batch.type || null,
                 channel: batch.channel || null,
                 batch_number: batch.batchNumber || batch.batch_number || null,
                 date: batch.date || null,
-                group_id: (batch.groupId || batch.group_id) ? Number(batch.groupId || batch.group_id) : null,
-                series_id: (batch.seriesId || batch.series_id) ? Number(batch.seriesId || batch.series_id) : null,
+                group_id: (batch.groupId || batch.group_id) ? String(batch.groupId || batch.group_id) as any : null,
+                series_id: (batch.seriesId || batch.series_id) ? String(batch.seriesId || batch.series_id) as any : null,
                 image: image || null,
             };
         }));
@@ -171,4 +179,8 @@ export async function upsertBatches(batches: any[]) {
     // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
     revalidatePath('/', 'layout');
     return batches.length;
+    } catch (error: any) {
+        console.error("🔥 upsertBatches 嚴重錯誤:", error);
+        throw error;
+    }
 }
