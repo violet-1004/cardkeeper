@@ -764,6 +764,7 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
                             <option value="未發貨">未發貨</option>
                             <option value="囤貨">囤貨</option>
                             <option value="到貨">到貨</option>
+                            <option value="未知">未知</option>
                         </select>
                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
                             <ChevronDown className="w-4 h-4" />
@@ -1479,6 +1480,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                                 inv.status === '到貨' ? 'bg-green-50 text-green-600' :
                                                 inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' :
                                                 inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' :
+                                                inv.status === '未知' ? 'bg-black text-white' :
                                                 'bg-gray-50 text-gray-600'
                                             }`}>
                                                 {inv.status}
@@ -1943,11 +1945,12 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       (inventory || []).forEach(inv => {
           if (!inv.sellPrice || inv.sellPrice <= 0) {
               const key = String(inv.cardId);
-              if (!map[key]) map[key] = { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+                  if (!map[key]) map[key] = { total: 0, arrived: 0, unshipped: 0, hoarded: 0, unknown: 0 };
               const qty = Number(inv.quantity || 1);
               map[key].total += qty;
               if (inv.status === '未發貨') map[key].unshipped += qty;
               else if (inv.status === '囤貨') map[key].hoarded += qty;
+                  else if (inv.status === '未知') map[key].unknown += qty;
               else map[key].arrived += qty; // 若無設定或到貨，皆歸類至到貨
           }
       });
@@ -2222,8 +2225,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
         >
             {filteredCards.map(card => {
                         const isSelected = selectedItems.some(i => String(i.cardId) === String(card.id));
-                        const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
-                        const { arrived, unshipped, hoarded, total } = invStats;
+                        const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0, unknown: 0 };
+                        const { arrived, unshipped, hoarded, unknown, total } = invStats;
                         const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
 
                         let memberName = (members || []).find(m => String(m.id) === String(card.memberId))?.name;
@@ -2298,6 +2301,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                                     {arrived > 0 && <div className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="到貨">{arrived}</div>}
                                                     {hoarded > 0 && <div className="bg-blue-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="囤貨">{hoarded}</div>}
                                                     {unshipped > 0 && <div className="bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未發貨">{unshipped}</div>}
+                                                    {unknown > 0 && <div className="bg-black text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未知">{unknown}</div>}
                                                 </div>
                                             )}
                                         </div>
@@ -2406,11 +2410,12 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
       (inventory || []).forEach(inv => {
           if (!inv.sellPrice || inv.sellPrice <= 0) {
               const key = String(inv.cardId);
-              if (!map[key]) map[key] = { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+                  if (!map[key]) map[key] = { total: 0, arrived: 0, unshipped: 0, hoarded: 0, unknown: 0 };
               const qty = Number(inv.quantity || 1);
               map[key].total += qty;
               if (inv.status === '未發貨') map[key].unshipped += qty;
               else if (inv.status === '囤貨') map[key].hoarded += qty;
+                  else if (inv.status === '未知') map[key].unknown += qty;
               else map[key].arrived += qty;
           }
       });
@@ -2673,10 +2678,11 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
      
      // 🌟 庫存狀態篩選
      if (filterInvStatus !== 'All') {
-         const stats = inventoryMap[card.id] || inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
+         const stats = inventoryMap[card.id] || inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0, unknown: 0 };
          if (filterInvStatus === '未發貨' && stats.unshipped <= 0) return false;
          if (filterInvStatus === '囤貨' && stats.hoarded <= 0) return false;
          if (filterInvStatus === '到貨' && stats.arrived <= 0) return false;
+         if (filterInvStatus === '未知' && stats.unknown <= 0) return false;
      }
 
      // 🌟 收藏冊篩選
@@ -2891,6 +2897,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                 filterInvStatus === '未發貨' ? 'bg-red-50 text-red-500' :
                                 filterInvStatus === '囤貨' ? 'bg-blue-50 text-blue-500' :
                                 filterInvStatus === '到貨' ? 'bg-green-50 text-green-500' :
+                            filterInvStatus === '未知' ? 'bg-gray-800 text-white' :
                                 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                             }`}
                             title="庫存狀態篩選"
@@ -2904,7 +2911,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             >
                                 <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap ml-1">狀態</span>
                                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                                    {['All', '未發貨', '囤貨', '到貨'].map(opt => (
+                                {['All', '未發貨', '囤貨', '到貨', ...((inventory || []).some(i => i.status === '未知') ? ['未知'] : [])].map(opt => (
                                         <button
                                             key={opt}
                                             onClick={() => { setFilterInvStatus(opt); setShowInvStatusPopup(false); }}
@@ -3017,8 +3024,8 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
 
         <div className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
             {filteredCards.map(card => {
-                const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0 };
-                const { arrived, unshipped, hoarded, total } = invStats;
+                const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0, unknown: 0 };
+                const { arrived, unshipped, hoarded, unknown, total } = invStats;
                 const isOwned = total > 0;
                 const isSelling = (sales || []).some(s => String(s.cardId) === String(card.id) && Number(s.quantity) > 0);
                 
@@ -3112,6 +3119,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                 {arrived > 0 && <div className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="到貨">{arrived}</div>}
                                 {hoarded > 0 && <div className="bg-blue-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="囤貨">{hoarded}</div>}
                                 {unshipped > 0 && <div className="bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未發貨">{unshipped}</div>}
+                                {unknown > 0 && <div className="bg-black text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded shadow" title="未知">{unknown}</div>}
                             </div>
                         )}
                         </div>
@@ -3543,7 +3551,14 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
         } catch (e) { console.error(e); }
     }, []);
 
-    const availableStatuses = ['未發貨', '囤貨', '到貨'];
+    const availableStatuses = useMemo(() => {
+        const statuses = ['未發貨', '囤貨', '到貨'];
+        if ((allRecords || records || []).some(r => r.status === '未知')) {
+            statuses.push('未知');
+        }
+        return statuses;
+    }, [allRecords, records]);
+
     const availableSources = useMemo(() => [...new Set((allRecords || records || []).map(r => r.source).filter(Boolean))], [allRecords, records]);
 
     const setRecords = useMemo(() => (records || []).filter(r => r.items?.some(i => i.isSet)), [records]);
@@ -3594,6 +3609,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
             case '到貨': return 'bg-green-50 text-green-600 border-green-200';
             case '囤貨': return 'bg-blue-50 text-blue-600 border-blue-200';
             case '未發貨': return 'bg-orange-50 text-orange-600 border-orange-200';
+            case '未知': return 'bg-gray-800 text-white border-gray-900';
             default: return 'bg-gray-50 text-gray-500 border-gray-200';
         }
     };
@@ -4081,7 +4097,7 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                                         }
                                     </div>
                                     <div className="flex gap-2 mt-1 flex-wrap">
-                                        {inv.status && <span className={`text-[10px] px-1.5 rounded ${inv.status === '到貨' ? 'bg-green-50 text-green-600' : inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' : inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' : 'bg-gray-50 text-gray-600'}`}>{inv.status}</span>}
+                                    {inv.status && <span className={`text-[10px] px-1.5 rounded ${inv.status === '到貨' ? 'bg-green-50 text-green-600' : inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' : inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' : inv.status === '未知' ? 'bg-black text-white' : 'bg-gray-50 text-gray-600'}`}>{inv.status}</span>}
                                         {inv.source && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded">{inv.source}</span>}
                                         <span className="text-xs text-gray-500">{inv.note || '無備註'}</span>
                                         <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 rounded border border-purple-100 flex items-center gap-1"><Disc className="w-3 h-3" /> {inv.albumStatus} x{inv.albumQuantity}</span>
@@ -5189,7 +5205,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <div className="grid grid-cols-2 gap-2 mt-2">
                              <div className="relative">
                                 <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200">
-                                    <option value="未發貨">未發貨</option><option value="囤貨">囤貨</option><option value="到貨">到貨</option>
+                                <option value="未發貨">未發貨</option><option value="囤貨">囤貨</option><option value="到貨">到貨</option><option value="未知">未知</option>
                                 </select>
                                 <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>

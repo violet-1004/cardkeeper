@@ -12,3 +12,4 @@ npx drizzle-kit studio
 npx @cloudflare/next-on-pages
 npx wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat
 min_stocked_count=1
+
