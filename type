@@ -1,5 +1,5 @@
 git add .
-git commit -m "0601 KOCA同步修正"
+git commit -m "0601 KOCA同步修正-2"
 git push
 
 npx vercel --prod

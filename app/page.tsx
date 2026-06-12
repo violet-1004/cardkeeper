@@ -6160,6 +6160,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [is4x6Mode, setIs4x6Mode] = useState(false);
     const [cardsPerPage, setCardsPerPage] = useState(8);
     const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
+    const [applyFee, setApplyFee] = useState(false); // 🌟 新增：手續費狀態
     
     // 🌟 眼睛長按邏輯 (隱藏/顯示價格)
     const pricePressTimer = useRef(null);
@@ -6422,6 +6423,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         setHiddenCardIds(new Set());
         setCustomExportTitle(null); // 🌟 切換視圖時重置標題
         setShowExportLayout(false);
+        setApplyFee(false); // 🌟 切換視圖時重置手續費狀態
     }, [activeView]);
 
     // 從資料庫清單中讀取跨裝置的自訂排序
@@ -6501,7 +6503,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         }).map(c => {
             if (activeView === 'selling') {
                 const saleRecord = salesMap[String(c.id)];
-                return { ...c, note: `$${saleRecord?.price || 0}`, noteColor: saleRecord?.color || 'bg-black/70' };
+                let displayPrice = Number(saleRecord?.price) || 0;
+                if (applyFee && displayPrice > 0) {
+                    displayPrice = Math.ceil((displayPrice * 1.02) / 5) * 5;
+                }
+                return { ...c, note: `$${displayPrice}`, noteColor: saleRecord?.color || 'bg-black/70' };
             }
             if (typeof activeView === 'object' && activeView.items) {
                 const item = activeView.items.find(i => String(i.cardId) === String(c.id));
@@ -7185,6 +7191,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
+                              {activeView === 'selling' && (
+                                  <button onClick={() => setApplyFee(!applyFee)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${applyFee ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`} title="含手續費 (x1.02並進位至0或5)">
+                                      含手續費
+                                  </button>
+                              )}
                               {!showExportLayout && (
                                   <button onClick={() => setShowExportLayout(true)} className="px-3 py-1.5 rounded-lg transition-all h-8 flex items-center justify-center bg-black text-white hover:bg-gray-800 text-xs font-bold whitespace-nowrap shadow-sm gap-1 ml-1">
                                       <Share2 className="w-3 h-3" /> 輸出
