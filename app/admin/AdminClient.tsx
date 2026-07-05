@@ -118,7 +118,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         
         // 🌟 新增：將 api 資料的 name 與 members 表的 name_2 比對
         if (!memberId && Array.isArray(membersList) && membersList.length > 0) {
-            const recordName = String(card.name || '').toUpperCase().replace(/\s+/g, '');
+            // 🌟 修正：確保 card.name 即使是 null 或 undefined 也能安全轉換，避免 .toUpperCase() 崩潰
+            const recordName = (card.name || '').toString().toUpperCase().replace(/\s+/g, '');
             const matchedMember = membersList.find(m => {
                 const mGroupId = String(m.group_id || m.groupId || '');
                 if (mGroupId !== String(targetGroupId)) return false;
