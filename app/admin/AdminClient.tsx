@@ -112,8 +112,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
     };
 
     const formatCard = (card: any, targetSeriesId: any, targetGroupId: any, membersList: any[] = []) => {
-        // 🌟 防呆：確保 artistName 絕對是字串，避免 .toUpperCase() 崩潰
-        const safeArtistName = String(card.artistName || '').toUpperCase().trim();
+        // 🌟 修正：確保 artistName 絕對是字串，避免 .toUpperCase() 崩潰
+        const safeArtistName = (card.artistName || '').toString().toUpperCase().trim();
         let memberId = safeArtistName && memberIdMap[safeArtistName] ? String(memberIdMap[safeArtistName]) : null;
         
         // 🌟 新增：將 api 資料的 name 與 members 表的 name_2 比對
