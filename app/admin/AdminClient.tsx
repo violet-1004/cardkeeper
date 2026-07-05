@@ -124,8 +124,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 const mGroupId = String(m.group_id || m.groupId || '');
                 if (mGroupId !== String(targetGroupId)) return false;
                 
-                const name2 = String(m.name_2 || m.name2 || '').toUpperCase().replace(/\s+/g, '');
-                const name1 = String(m.name || '').toUpperCase().replace(/\s+/g, '');
+                const name2 = (m.name_2 || m.name2 || '').toString().toUpperCase().replace(/\s+/g, '');
+                const name1 = (m.name || '').toString().toUpperCase().replace(/\s+/g, '');
                 
                 if (name2 && recordName.includes(name2)) return true;
                 if (name1 && recordName.includes(name1)) return true;
