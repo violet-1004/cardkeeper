@@ -166,7 +166,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
         }
 
         let imageUrl = record.thumbnailUrl;
-        if (record.media && record.media.length > 0) imageUrl = record.media[0].thumbnailUrl || record.media[0].url;
+        // 🌟 修正：確保 record.media 存在且為陣列才讀取，避免 .length 崩潰
+        if (Array.isArray(record.media) && record.media.length > 0) imageUrl = record.media[0].thumbnailUrl || record.media[0].url;
 
         return {
             id: String(record.id), name: String(name || '未命名'), type: String(type), channel: channelId ? String(channelId) : null, batchNumber: batchNum ? String(batchNum) : null,
