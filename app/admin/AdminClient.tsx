@@ -144,24 +144,24 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
     const formatBatch = (record: any, channelMap: any, targetSeriesId: any, targetGroupId: any) => {
         let channelId = null, batchNum = null, type = '簽售卡';
-        // 🌟 防呆：避免 API 傳來缺少 name 的資料導致 .match() 崩潰
         const name = String(record.name || '');
 
         let match = name.match(/DtC\s*:\s*E\s+([a-zA-Z]+)?\s*([\d.]+)?/);
         if (match) {
-            if (match[1]) channelId = channelMap[match[1].toUpperCase()] || null;
+            // 🌟 修正：確保 match[1] 存在才進行操作，避免 .toUpperCase() 崩潰
+            if (match[1]) channelId = channelMap[match[1].toString().toUpperCase()] || null;
             if (match[2]) batchNum = match[2];
         } else {
             match = name.match(/(\d{2})\s*fm\s*(.*)/i);
             if (match) {
-                const restOfString = match[2];
+                const restOfString = match[2] || ''; // 🌟 修正：確保 restOfString 絕對是字串
                 for (const key of Object.keys(channelMap)) {
                     if (new RegExp(`\\b${key}\\b`, 'i').test(restOfString)) {
                         channelId = channelMap[key];
                         break; 
                     }
                 }
-                if (restOfString.toUpperCase().includes('LUCKY DRAW')) type = '特典卡'; 
+                if (restOfString.toUpperCase().includes('LUCKY DRAW')) type = '特典卡';
             }
         }
 
