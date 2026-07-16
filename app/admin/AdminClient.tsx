@@ -255,13 +255,21 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 console.error("無法讀取現有小卡列表", e);
             }
             
-            // 🌟 移除客戶端過濾邏輯，將所有不重複的卡片交由後端 upsert 處理
+            // 🌟 將所有不重複的卡片交由後端 upsert 處理
             const uniqueCards = Array.from(uniqueCardsMap.values());
             
-            if (uniqueCards.length > 0) { // 🌟 僅檢查是否有資料需要處理
-                await upsertCards(uniqueCards);
-            } else {
+            if (uniqueCards.length === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
+            }
+
+            // 🌟 重構：恢復客戶端分塊處理，將大任務拆解成多個小任務，避免 Edge Function 單次執行超時
+            let insertedCount = 0;
+            const CHUNK_SIZE = 10; // 每次向 Server Action 發送 10 筆資料
+            for (let i = 0; i < uniqueCards.length; i += CHUNK_SIZE) {
+                const chunk = uniqueCards.slice(i, i + CHUNK_SIZE);
+                setStatus(`正在將小卡寫入資料庫 (${Math.min(i + CHUNK_SIZE, uniqueCards.length)} / ${uniqueCards.length})...`);
+                await upsertCards(chunk); // 每次呼叫都是一個獨立、輕量的 Server Action
+                insertedCount += chunk.length;
             }
 
             setStatus(`同步完成！成功寫入 ${uniqueCards.length} 筆不重複資料。下一次將從新的指標繼續抓取。\n(請點擊左上角「小卡管家」回到主畫面查看)`);
