@@ -85,7 +85,7 @@ export async function upsertCards(cards: any[]) {
     if (!cards || cards.length === 0) return 0;
 
     const db = getDb();
-    const CHUNK_SIZE = 10; // 🌟 限制單次資料庫寫入與併發請求數 (防堵 Cloudflare 50 個子請求限制)
+    const CHUNK_SIZE = 5; // 🌟 限制單次資料庫寫入與併發請求數 (防堵 Cloudflare 50 個子請求限制)，降低併發以提高穩定性
     const skipR2Upload = cards.length > 20; // 🌟 核心防爆：大量同步時跳過 R2 上傳
 
     for (let i = 0; i < cards.length; i += CHUNK_SIZE) {
@@ -136,7 +136,7 @@ export async function upsertBatches(batches: any[]) {
     if (!batches || batches.length === 0) return 0;
 
     const db = getDb();
-    const CHUNK_SIZE = 10; // 🌟 防堵 Cloudflare 50 個子請求限制
+    const CHUNK_SIZE = 5; // 🌟 防堵 Cloudflare 50 個子請求限制，降低併發以提高穩定性
     const skipR2Upload = batches.length > 20;
 
     for (let i = 0; i < batches.length; i += CHUNK_SIZE) {
