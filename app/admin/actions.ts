@@ -22,7 +22,11 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
         if (externalUrl.startsWith('http')) {
             // 抓取外部 HTTP/HTTPS 圖片
             const response = await fetch(externalUrl);
-            if (!response.ok) return externalUrl;
+            // 🌟 修正：如果圖片抓取失敗 (例如 404)，直接回傳 null，避免將無效網址存入資料庫
+            if (!response.ok) {
+                console.warn(`圖片抓取失敗 (狀態: ${response.status}): ${externalUrl}`);
+                return null;
+            }
             arrayBuffer = await response.arrayBuffer();
             contentType = response.headers.get('content-type') || 'image/jpeg';
         } else {
@@ -40,7 +44,8 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
 
     } catch (error) {
         console.error("R2 上傳失敗:", error);
-        return externalUrl;
+        // 🌟 修正：發生任何其他錯誤時，也回傳 null
+        return null;
     }
 }
 
