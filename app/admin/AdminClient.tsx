@@ -255,8 +255,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 console.error("無法讀取現有小卡列表", e);
             }
             
-            // 🌟 將所有不重複的卡片交由後端 upsert 處理
-            const uniqueCards = Array.from(uniqueCardsMap.values());
+            // 🌟 恢復過濾邏輯：只處理資料庫中不存在的新卡片
+            const uniqueCards = Array.from(uniqueCardsMap.values()).filter(card => !existingCardIds.has(String(card.id)));
             
             if (uniqueCards.length === 0) {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
@@ -326,7 +326,26 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             const uniqueBatchesMap = new Map();
             allFormattedBatches.forEach(batch => uniqueBatchesMap.set(batch.id, batch));
             
-            const uniqueBatches = Array.from(uniqueBatchesMap.values());
+            setStatus("正在比對現存批次，排除已存在的資料...");
+            let existingBatchIds = new Set();
+            try {
+                const batchesRes = await fetch(`/api/data?table=batches&paginate=true&_t=${Date.now()}`, { cache: 'no-store' });
+                if (batchesRes.ok) {
+                    const batchesData = await batchesRes.json();
+                    let list: any = batchesData;
+                    if (!Array.isArray(list)) {
+                        if (list && Array.isArray(list?.data)) list = list.data;
+                        else if (list && Array.isArray(list?.records)) list = list.records;
+                    }
+                    if (Array.isArray(list)) {
+                        list.forEach((b: any) => existingBatchIds.add(String(b.id)));
+                    }
+                }
+            } catch (e) {
+                console.error("無法讀取現有批次列表", e);
+            }
+
+            const uniqueBatches = Array.from(uniqueBatchesMap.values()).filter(batch => !existingBatchIds.has(String(batch.id)));
             let insertedCount = 0;
             const CHUNK_SIZE = 10; // 🌟 配合 Cloudflare Worker 單次請求最多 50 個子請求的嚴格限制
             
