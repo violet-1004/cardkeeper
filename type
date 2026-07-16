@@ -1,5 +1,5 @@
 git add .
-git commit -m "0705 小卡api-6"
+git commit -m "0716 小卡api-1"
 git push
 
 npx vercel --prod

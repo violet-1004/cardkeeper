@@ -255,10 +255,10 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 console.error("無法讀取現有小卡列表", e);
             }
             
-            // 🌟 過濾掉資料庫已經存在的小卡，僅保留新小卡進行寫入
-            const uniqueCards = Array.from(uniqueCardsMap.values()).filter(card => !existingCardIds.has(String(card.id)));
+            // 🌟 移除客戶端過濾邏輯，將所有不重複的卡片交由後端 upsert 處理
+            const uniqueCards = Array.from(uniqueCardsMap.values());
             
-            if (uniqueCards.length > 0) {
+            if (uniqueCards.length > 0) { // 🌟 僅檢查是否有資料需要處理
                 await upsertCards(uniqueCards);
             } else {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
