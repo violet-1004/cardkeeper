@@ -88,28 +88,30 @@ export async function upsertCards(cards: any[]) {
     const CHUNK_SIZE = 5; // 🌟 限制單次資料庫寫入與併發請求數 (防堵 Cloudflare 50 個子請求限制)，降低併發以提高穩定性
     const skipR2Upload = cards.length > 20; // 🌟 核心防爆：大量同步時跳過 R2 上傳
 
-    for (let i = 0; i < cards.length; i += CHUNK_SIZE) {
-        const chunk = cards.slice(i, i + CHUNK_SIZE);
-        
-        const processedChunk = await Promise.all(chunk.map(async (card) => {
-            let image = card.image;
-            const seriesId = card.seriesId || card.series_id;
-            if (!skipR2Upload && image && !image.includes('r2.dev')) {
-                const fileName = `cards/${seriesId}/${card.id}.jpg`;
-                image = await uploadImageToR2(image, fileName);
-            }
-            return {
-                id: String(card.id) as any,
-                name: card.name,
-                member_id: (card.memberId || card.member_id) ? String(card.memberId || card.member_id) as any : null,
-                image: image || null,
-                type: card.type || null,
-                series_id: seriesId ? String(seriesId) as any : null,
-                group_id: (card.groupId || card.group_id) ? String(card.groupId || card.group_id) as any : null,
-            };
-        }));
+    // 🌟 重構：將 Promise.all 的併發處理，改為循序處理，避免 Edge Function 超時
+    const allProcessedCards = [];
+    for (const card of cards) {
+        let image = card.image;
+        const seriesId = card.seriesId || card.series_id;
+        if (!skipR2Upload && image && !image.includes('r2.dev')) {
+            const fileName = `cards/${seriesId}/${card.id}.jpg`;
+            image = await uploadImageToR2(image, fileName);
+        }
+        allProcessedCards.push({
+            id: String(card.id) as any,
+            name: card.name,
+            member_id: (card.memberId || card.member_id) ? String(card.memberId || card.member_id) as any : null,
+            image: image || null,
+            type: card.type || null,
+            series_id: seriesId ? String(seriesId) as any : null,
+            group_id: (card.groupId || card.group_id) ? String(card.groupId || card.group_id) as any : null,
+        });
+    }
 
-        await db.insert(schema.uiCards).values(processedChunk).onConflictDoUpdate({
+    // 🌟 循序處理完圖片後，再分批寫入資料庫
+    for (let i = 0; i < allProcessedCards.length; i += CHUNK_SIZE) {
+        const chunk = allProcessedCards.slice(i, i + CHUNK_SIZE);
+        await db.insert(schema.uiCards).values(chunk).onConflictDoUpdate({
             target: schema.uiCards.id,
             set: {
                 name: sql`excluded.name`,
@@ -139,29 +141,31 @@ export async function upsertBatches(batches: any[]) {
     const CHUNK_SIZE = 5; // 🌟 防堵 Cloudflare 50 個子請求限制，降低併發以提高穩定性
     const skipR2Upload = batches.length > 20;
 
-    for (let i = 0; i < batches.length; i += CHUNK_SIZE) {
-        const chunk = batches.slice(i, i + CHUNK_SIZE);
-        
-        const processedChunk = await Promise.all(chunk.map(async (batch) => {
-            let image = batch.image;
-            if (!skipR2Upload && image && !image.includes('r2.dev')) {
-                const fileName = `batches/${batch.id}.jpg`;
-                image = await uploadImageToR2(image, fileName);
-            }
-            return {
-                id: String(batch.id) as any,
-                name: batch.name,
-                type: batch.type || null,
-                channel: batch.channel || null,
-                batch_number: batch.batchNumber || batch.batch_number || null,
-                date: batch.date || null,
-                group_id: (batch.groupId || batch.group_id) ? String(batch.groupId || batch.group_id) as any : null,
-                series_id: (batch.seriesId || batch.series_id) ? String(batch.seriesId || batch.series_id) as any : null,
-                image: image || null,
-            };
-        }));
+    // 🌟 重構：將 Promise.all 的併發處理，改為循序處理，避免 Edge Function 超時
+    const allProcessedBatches = [];
+    for (const batch of batches) {
+        let image = batch.image;
+        if (!skipR2Upload && image && !image.includes('r2.dev')) {
+            const fileName = `batches/${batch.id}.jpg`;
+            image = await uploadImageToR2(image, fileName);
+        }
+        allProcessedBatches.push({
+            id: String(batch.id) as any,
+            name: batch.name,
+            type: batch.type || null,
+            channel: batch.channel || null,
+            batch_number: batch.batchNumber || batch.batch_number || null,
+            date: batch.date || null,
+            group_id: (batch.groupId || batch.group_id) ? String(batch.groupId || batch.group_id) as any : null,
+            series_id: (batch.seriesId || batch.series_id) ? String(batch.seriesId || batch.series_id) as any : null,
+            image: image || null,
+        });
+    }
 
-        await db.insert(schema.batches).values(processedChunk).onConflictDoUpdate({
+    // 🌟 循序處理完圖片後，再分批寫入資料庫
+    for (let i = 0; i < allProcessedBatches.length; i += CHUNK_SIZE) {
+        const chunk = allProcessedBatches.slice(i, i + CHUNK_SIZE);
+        await db.insert(schema.batches).values(chunk).onConflictDoUpdate({
             target: schema.batches.id,
             set: {
                 name: sql`excluded.name`,
