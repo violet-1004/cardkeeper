@@ -113,21 +113,28 @@ export async function upsertCards(cards: any[]) {
         });
     }
 
-    // 🌟 循序處理完圖片後，再分批寫入資料庫
-    for (let i = 0; i < allProcessedCards.length; i += CHUNK_SIZE) {
-        const chunk = allProcessedCards.slice(i, i + CHUNK_SIZE);
-        await db.insert(schema.uiCards).values(chunk).onConflictDoUpdate({
-            target: schema.uiCards.id,
-            set: {
-                name: sql`excluded.name`,
-                member_id: sql`excluded.member_id`,
-                image: sql`excluded.image`,
-                type: sql`excluded.type`,
-                series_id: sql`excluded.series_id`,
-                group_id: sql`excluded.group_id`,
-            }
-        });
+    // 🌟 重構：將 Upsert 拆分為 Update 和 Insert 兩步，避免在 Insert 時引用不存在的 excluded 導致 D1 錯誤
+    // 1. 先處理圖片更新：只更新那些圖片欄位有變動的卡片
+    const cardsToUpdate = allProcessedCards.filter(c => c.image !== null);
+    if (cardsToUpdate.length > 0) {
+        for (const card of cardsToUpdate) {
+            await db.update(schema.uiCards)
+                .set({ 
+                    name: card.name,
+                    member_id: card.member_id,
+                    image: card.image,
+                    type: card.type,
+                    series_id: card.series_id,
+                    group_id: card.group_id
+                })
+                .where(eq(schema.uiCards.id, card.id));
+        }
     }
+
+    // 2. 再處理新增：使用 onConflictDoNothing，如果卡片已存在則忽略，避免覆蓋掉剛剛的圖片更新
+    await db.insert(schema.uiCards)
+        .values(allProcessedCards)
+        .onConflictDoNothing();
 
     // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
     revalidatePath('/', 'layout');
