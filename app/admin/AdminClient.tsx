@@ -257,17 +257,10 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
             
             // 🌟 過濾掉資料庫已經存在的小卡，僅保留新小卡進行寫入
             const uniqueCards = Array.from(uniqueCardsMap.values()).filter(card => !existingCardIds.has(String(card.id)));
-            let insertedCount = 0;
-            const CHUNK_SIZE = 10; // 🌟 配合 Cloudflare Worker 單次請求最多 50 個子請求 (Subrequests) 的嚴格限制
             
-            for (let i = 0; i < uniqueCards.length; i += CHUNK_SIZE) {
-                const chunk = uniqueCards.slice(i, i + CHUNK_SIZE);
-                setStatus(`正在將小卡寫入資料庫與圖床 (${Math.min(i + CHUNK_SIZE, uniqueCards.length)} / ${uniqueCards.length})...`);
-                await upsertCards(chunk);
-                insertedCount += chunk.length;
-            }
-
-            if (insertedCount === 0) {
+            if (uniqueCards.length > 0) {
+                await upsertCards(uniqueCards);
+            } else {
                 return setStatus("警告：執行成功，但沒有寫入/更新任何資料。");
             }
 
