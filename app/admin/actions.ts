@@ -113,32 +113,28 @@ export async function upsertCards(cards: any[]) {
         });
     }
 
-    // 🌟 重構：將 Upsert 拆分為 Update 和 Insert 兩步，避免在 Insert 時引用不存在的 excluded 導致 D1 錯誤
-    // 1. 先處理圖片更新：只更新那些圖片欄位有變動的卡片
-    const cardsToUpdate = allProcessedCards.filter(c => c.image !== null);
-    if (cardsToUpdate.length > 0) {
-        for (const card of cardsToUpdate) {
-            await db.update(schema.uiCards)
-                .set({ 
-                    name: card.name,
-                    member_id: card.member_id,
-                    image: card.image,
-                    type: card.type,
-                    series_id: card.series_id,
-                    group_id: card.group_id
-                })
-                .where(eq(schema.uiCards.id, card.id));
-        }
+    // 🌟 終極修正：在伺服器端進行精準比對，徹底解決重複寫入問題
+    // 1. 從本次要處理的卡片中，取出所有 ID
+    const incomingCardIds = allProcessedCards.map(c => c.id);
+    if (incomingCardIds.length === 0) {
+        return 0;
     }
 
-    // 2. 再處理新增：使用 onConflictDoNothing，如果卡片已存在則忽略，避免覆蓋掉剛剛的圖片更新
-    await db.insert(schema.uiCards)
-        .values(allProcessedCards)
-        .onConflictDoNothing();
+    // 2. 到資料庫查詢這些 ID 中，哪些是已經存在的
+    const existingCards = await db.select({ id: schema.uiCards.id }).from(schema.uiCards).where(sql`id IN ${incomingCardIds}`);
+    const existingCardIds = new Set(existingCards.map(c => c.id));
+
+    // 3. 過濾出真正需要新增的卡片
+    const cardsToInsert = allProcessedCards.filter(c => !existingCardIds.has(c.id));
+
+    // 4. 只對新卡片執行插入操作
+    if (cardsToInsert.length > 0) {
+        await db.insert(schema.uiCards).values(cardsToInsert);
+    }
 
     // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
     revalidatePath('/', 'layout');
-    return cards.length;
+    return cardsToInsert.length; // 回傳實際寫入的筆數
     } catch (error: any) {
         console.error("🔥 upsertCards 嚴重錯誤:", error);
         throw error;
