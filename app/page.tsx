@@ -8006,6 +8006,8 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                     promises.push(
                         fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`)
                             .then(async res => {
+                                // 🌟 終極防呆：如果 res 本身就是 undefined (例如 fetch 徹底失敗)，直接回傳 null
+                                if (!res) return null;
                                 if (!res.ok) {
                                     const errText = await res.text();
                                     // 🌟 若上游回傳 404，代表已經翻到盡頭 (沒有下一頁了)，當作空資料處理
