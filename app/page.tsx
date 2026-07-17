@@ -8087,28 +8087,16 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             let successCount = 0;
             const totalToProcess = allPayloads.length;
 
-            // 🌟 致命閃退與寫入失敗修正：
-            // 1. 配合 D1 資料庫單次最多 100 個綁定變數的限制，poca 表 4 個欄位，故 chunk size 設為 25 (25*4=100)
-            // 2. 使用 Promise.all 並發 4 個請求，加快寫入速度
-            const CHUNK_SIZE = 25;
-            for (let i = 0; i < allPayloads.length; i += CHUNK_SIZE * 4) {
-                const promises = [];
-                for (let j = 0; j < 4 && i + j * CHUNK_SIZE < allPayloads.length; j++) {
-                    const chunk = allPayloads.slice(i + j * CHUNK_SIZE, i + (j + 1) * CHUNK_SIZE);
-                    promises.push(
-                        supabase.from('poca').upsert(chunk).then(res => {
-                            if (res?.error) {
-                                if (!dbError) dbError = res.error.message;
-                            } else {
-                                successCount += chunk.length;
-                            }
-                        }).catch(e => {
-                            console.error("POCA Upsert Chunk Error:", e);
-                            if (!dbError) dbError = e.message;
-                        })
-                    );
+            // 🌟 核心修正：改為呼叫後端 Server Action 進行 upsert，避免前端 supabase-js 產生錯誤的 SQL
+            const CHUNK_SIZE = 100;
+            for (let i = 0; i < allPayloads.length; i += CHUNK_SIZE) {
+                const chunk = allPayloads.slice(i, i + CHUNK_SIZE);
+                const result = await upsertPocaCards(chunk);
+                if (result.success) {
+                    successCount += result.count || chunk.length;
+                } else {
+                    if (!dbError) dbError = result.error;
                 }
-                await Promise.all(promises);
                 setSyncProgress(`寫入資料庫中 ${successCount}/${totalToProcess} 筆...`);
                 
                 // 🌟 增加微小延遲，讓瀏覽器與網路層喘息，避免併發過高遭伺服器切斷連線
