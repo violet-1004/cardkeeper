@@ -8020,7 +8020,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                             .catch(err => {
                                 console.warn(`頁面 ${page + i} 抓取失敗:`, err.message);
                                 // 即使單一頁面失敗，也回傳 null 讓 Promise.all 繼續，而不是中斷整個流程
-                                return { success: false, error: err.message };
+                                return null;
                             })
                     );
                 }
