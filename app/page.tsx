@@ -8025,6 +8025,9 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                 let gotEmptyOrSmallPage = false;
 
                 for (const json of results) {
+                    // 🌟 終極防呆：如果 fetch 請求因網路等問題失敗，promise 會 resolve 為 null，這裡要擋掉
+                    if (!json) continue;
+
                     if (json && json.success && json.data?.results) {
                         for (const item of json.data.results) {
                             const originalPrice = Number(item.price ?? 0);
