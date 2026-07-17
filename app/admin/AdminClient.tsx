@@ -304,6 +304,9 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
                 // 🌟 終極防禦：遞迴解開所有 data 包裝，直到找到 records 陣列為止
                 let apiData = data;
+                // 🌟 修正：在解包前，先確認 apiData 是否存在，避免 data 本身就是 undefined
+                if (!apiData) break;
+
                 while (apiData && typeof apiData.records === 'undefined') {
                     apiData = apiData.data || apiData; // 如果沒有 .data，就跳出迴圈
                 }
