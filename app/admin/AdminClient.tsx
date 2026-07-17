@@ -214,8 +214,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
                 // 🌟 終極防禦：遞迴解開所有 data 包裝，直到找到 records 陣列為止
                 let apiData = data;
-                while (apiData && apiData.data && typeof apiData.records === 'undefined') {
-                    apiData = apiData.data;
+                while (apiData && typeof apiData.records === 'undefined') {
+                    apiData = apiData.data || apiData; // 如果沒有 .data，就跳出迴圈
                 }
 
                 if (!apiData.records || apiData.records.length === 0) {
@@ -304,8 +304,8 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
                 // 🌟 終極防禦：遞迴解開所有 data 包裝，直到找到 records 陣列為止
                 let apiData = data;
-                while (apiData && apiData.data && typeof apiData.records === 'undefined') {
-                    apiData = apiData.data;
+                while (apiData && typeof apiData.records === 'undefined') {
+                    apiData = apiData.data || apiData; // 如果沒有 .data，就跳出迴圈
                 }
 
                 if (!apiData.records || apiData.records.length === 0) {
