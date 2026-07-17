@@ -200,22 +200,20 @@ export async function upsertBatches(batches: any[]) {
 export async function upsertPocaCards(pocaCards: any[]) {
     if (!pocaCards || pocaCards.length === 0) return { success: true, count: 0 };
 
-    const db = getDb();
-    const CHUNK_SIZE = 20; // D1 a single statement can have up to 100 placeholders. Poca table has 4 columns. 100/4 = 25. Let's use 20 to be safe.
+    const db = getDb(); // D1 a single statement can have up to 100 placeholders. Poca table has 4 columns. 100/4 = 25. Let's use 20 to be safe.
+    const CHUNK_SIZE = 20;
 
     try {
         for (let i = 0; i < pocaCards.length; i += CHUNK_SIZE) {
             const chunk = pocaCards.slice(i, i + CHUNK_SIZE);
-            await db.insert(schema.poca)
-                .values(chunk)
-                .onConflictDoUpdate({
-                    target: schema.poca.id,
-                    set: {
-                        image: sql`excluded.image`,
-                        stocked_count: sql`excluded.stocked_count`,
-                        price: sql`excluded.price`,
-                    }
-                });
+            await db.insert(schema.poca).values(chunk).onConflictDoUpdate({
+                target: schema.poca.id,
+                set: {
+                    image: sql`excluded.image`,
+                    stocked_count: sql`excluded.stocked_count`,
+                    price: sql`excluded.price`
+                }
+            });
         }
         return { success: true, count: pocaCards.length };
     } catch (error: any) {
