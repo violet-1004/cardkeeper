@@ -8020,7 +8020,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                             .catch(err => {
                                 console.warn(`頁面 ${page + i} 抓取失敗:`, err.message);
                                 // 即使單一頁面失敗，也回傳 null 讓 Promise.all 繼續，而不是中斷整個流程
-                                return null;
+                                return { success: false, error: err.message };
                             })
                     );
                 }
@@ -8030,10 +8030,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                 let gotEmptyOrSmallPage = false;
 
                 for (const json of results) {
-                    // 🌟 終極防呆：如果 fetch 請求因網路等問題失敗，promise 會 resolve 為 null，這裡要擋掉
-                    if (!json) continue;
-
-                    if (json && json.success && json.data?.results) {
+                    if (json?.success && json.data?.results) {
                         for (const item of json.data.results) {
                             const originalPrice = Number(item.price ?? 0);
                             let finalPrice = priceMappingRef.current[originalPrice];
