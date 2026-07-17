@@ -8005,20 +8005,23 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                     const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=36&price_step=ALL&sort=new&page=${page + i}`;
                     promises.push(
                         fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`)
-                            .then(async res => {
-                                // 🌟 終極防呆：如果 res 本身就是 undefined (例如 fetch 徹底失敗)，直接回傳 null
-                                if (!res) return null;
-                                if (!res.ok) {
-                                    const errText = await res.text();
-                                    // 🌟 若上游回傳 404，代表已經翻到盡頭 (沒有下一頁了)，當作空資料處理
-                                    if (errText.includes('404') || res.status === 404) {
-                                        return { success: true, data: { results: [] } };
-                                    }
-                                    throw new Error(`Proxy 錯誤 ${res.status}: ${errText}`);
+                            .then(async (res) => {
+                                if (!res) return null; // 防呆：如果 fetch 徹底失敗
+                                if (res.ok) return res.json();
+
+                                // 處理錯誤情況
+                                const errText = await res.text();
+                                if (res.status === 404 || errText.includes('404')) {
+                                    // 404 代表已翻到盡頭，當作空資料處理
+                                    return { success: true, data: { results: [] } };
                                 }
-                                return res.json();
+                                throw new Error(`Proxy 錯誤 ${res.status}: ${errText}`);
                             })
-                            .catch(err => { console.warn("頁面抓取中斷 (翻頁結束):", err.message); return null; })
+                            .catch(err => {
+                                console.warn(`頁面 ${page + i} 抓取失敗:`, err.message);
+                                // 即使單一頁面失敗，也回傳 null 讓 Promise.all 繼續，而不是中斷整個流程
+                                return null;
+                            })
                     );
                 }
                 setSyncProgress(`已抓取 ${allFetchedPocas.length} 筆...`);
