@@ -1,5 +1,5 @@
 git add .
-git commit -m "0720 小卡poca"
+git commit -m "0720 小卡poca-2"
 git push
 
 npx vercel --prod
