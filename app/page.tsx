@@ -8029,7 +8029,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                 const results = await Promise.all(promises);
                 let gotEmptyOrSmallPage = false;
 
-                for (const json of results) {
+                for (const json of results.filter(Boolean)) { // 🌟 修正：在迴圈開始前，就先過濾掉所有 undefined 或 null 的無效結果
                     if (json?.success && json.data?.results) {
                         for (const item of json.data.results) {
                             const originalPrice = Number(item.price ?? 0);

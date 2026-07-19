@@ -1,5 +1,5 @@
 git add .
-git commit -m "0716 小卡api-1"
+git commit -m "0720 小卡poca"
 git push
 
 npx vercel --prod
@@ -12,4 +12,14 @@ npx drizzle-kit studio
 npx @cloudflare/next-on-pages
 npx wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat
 min_stocked_count=1
+
+AdminClient.tsx
+app/admin/...
+page.js
+app/admin/...
+page.tsx
+my-card-app/app/...
+actions.ts
+app/admin/...
+my-card-app
 
