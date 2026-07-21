@@ -1,6 +1,6 @@
 import { getRequestContext } from '@cloudflare/next-on-pages';
 import { drizzle } from 'drizzle-orm/d1';
-import { sql } from 'drizzle-orm';
+import { sql, inArray, eq } from 'drizzle-orm';
 import * as schema from '@/schema';
 import { NextResponse } from 'next/server';
 
@@ -37,17 +37,31 @@ export async function POST(req: Request) {
 
         const db = getDb();
 
-        // Drizzle ORM's onConflictDoUpdate is compatible with D1
-        await db.insert(schema.poca).values(safeItems).onConflictDoUpdate({
-            target: schema.poca.id,
-            set: {
-                image: sql`excluded.image`,
-                stocked_count: sql`excluded.stocked_count`,
-                price: sql`excluded.price`,
-                group_name_en: sql`excluded.group_name_en`
-            }
-        });
+        const ids = safeItems.map(item => item.id as number);
+        if (ids.length === 0) {
+            return NextResponse.json({ success: true, count: 0 });
+        }
 
+        const existingPocas = await db.select({ id: schema.poca.id }).from(schema.poca).where(inArray(schema.poca.id, ids));
+        const existingIds = new Set(existingPocas.map(p => p.id));
+
+        const itemsToInsert = safeItems.filter(item => !existingIds.has(item.id as number));
+        const itemsToUpdate = safeItems.filter(item => existingIds.has(item.id as number));
+
+        if (itemsToInsert.length > 0) {
+            await db.insert(schema.poca).values(itemsToInsert);
+        }
+
+        for (const item of itemsToUpdate) {
+            if (item.id === undefined) continue;
+            await db.update(schema.poca).set({
+                image: item.image,
+                stocked_count: item.stocked_count,
+                price: item.price,
+                group_name_en: item.group_name_en,
+            }).where(eq(schema.poca.id, item.id));
+        }
+        
         return NextResponse.json({ success: true, count: safeItems.length });
     } catch (error: any) {
         console.error("🔥 /api/poca/upsert Error:", error);
