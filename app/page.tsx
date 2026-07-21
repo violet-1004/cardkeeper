@@ -8020,8 +8020,8 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                                 throw new Error(`Proxy 錯誤 ${res.status}: ${errText}`);
                             })
                             .catch(err => {
-                                console.warn(`頁面 ${page + i} 抓取失敗:`, err.message);
-                                // 🌟 修正：確保 catch 回傳 null，以便後續的 .filter(Boolean) 能正確過濾掉失敗的請求
+                                console.warn(`頁面 ${page + i} 抓取失敗:`, err?.message);
+                                // 🌟 修正：確保 catch 回傳 null，以便後續的 .filter(Boolean) 能正確過濾掉失敗的請求，避免 r.success 報錯
                                 return null;
                             })
                     );
