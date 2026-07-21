@@ -18,17 +18,23 @@ function getDb() {
 export async function POST(req: Request) {
     try {
         // 🌟 修正：為 items 加上 Drizzle 的推斷類型，解決 TypeScript 報錯
-        type NewPoca = typeof schema.poca.$inferInsert;
-        const { items }: { items: NewPoca[] } = await req.json();
+        type NewPoca = typeof schema.poca.$inferInsert; 
+        const { items }: { items: NewPoca[] } = await req.json(); 
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             return NextResponse.json({ success: true, count: 0 });
         }
 
+        // 🌟 防呆：強制補齊必填欄位，避免任何一筆缺值導致整批 500
+        const safeItems = items.map((item) => ({
+            ...item,
+            group_name_en: item.group_name_en || 'cravity',
+        }));
+
         const db = getDb();
 
         // Drizzle ORM's onConflictDoUpdate is compatible with D1
-        await db.insert(schema.poca).values(items).onConflictDoUpdate({
+        await db.insert(schema.poca).values(safeItems).onConflictDoUpdate({
             target: schema.poca.id,
             set: {
                 image: sql`excluded.image`,
@@ -38,7 +44,7 @@ export async function POST(req: Request) {
             }
         });
 
-        return NextResponse.json({ success: true, count: items.length });
+        return NextResponse.json({ success: true, count: safeItems.length });
     } catch (error: any) {
         console.error("🔥 /api/poca/upsert Error:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
