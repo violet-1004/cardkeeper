@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 import Image from 'next/image';
-// 🌟 移除 Server Action import，改用標準 API Route
+import { upsertPocaCards } from './admin/actions';
 import Link from 'next/link';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { supabase as realSupabase } from '@/lib/supabaseClient'; // 🌟 保留原始連線供圖片上傳使用
@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
-
 // 🌟 終極 D1 攔截器：將前端所有 Supabase 寫入操作，無縫攔截並轉交給 D1 API
 class D1QueryBuilder {
     payload: any;
@@ -67,17 +66,6 @@ const supabase = {
     })
 };
 
-// --- 🌟 資料庫欄位名稱轉換工具 (處理 JS 駝峰命名與資料庫底線命名的差異) ---
-const toSnakeCase = (obj) => {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-    const res = {};
-    Object.keys(obj).forEach(k => {
-        const snake = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-        res[snake] = obj[k];
-    });
-    return res;
-};
-
 const generateUUID = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
@@ -86,6 +74,7 @@ const generateUUID = () => {
 };
 
 import Cropper from 'react-easy-crop';
+import { toSnakeCase, toCamelCase } from '@/lib/utils';
 // 🌟 1. 內建裁切剪刀 (放在 ImageUploader 元件外面/上方，確保絕對找得到！)
 // 🌟 終極防爆版：內建自動壓縮與邊界安全檢查
 const getCroppedImg = async (imageSrc, pixelCrop) => {
@@ -314,16 +303,6 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
     )}
     </>
   );
-};
-
-const toCamelCase = (obj) => {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-    const res = {};
-    Object.keys(obj).forEach(k => {
-        const camel = k.replace(/_([a-z])/g, g => g[1].toUpperCase());
-        res[camel] = obj[k];
-    });
-    return res;
 };
 
 // --- 2. Hooks & Utilities ---
@@ -4687,7 +4666,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
             const saved = localStorage.getItem('album_prices');
             if (saved) {
                 const prices = JSON.parse(saved);
-                return prices[`${albumId}_${status}`] || '';
+                const price = prices[`${albumId}_${status}`];
+                if (typeof price === 'string' || typeof price === 'number') {
+                    return String(price);
+                }
             }
         } catch (e) { console.error(e); }
         return '';
@@ -7933,12 +7915,12 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             try {
                 // 🌟 核心修正：明確使用 realSupabase (原始連線) 進行 select，
                 // 繞過會將請求轉為 POST 的 D1QueryBuilder 攔截器，確保這是一個純粹的 GET 請求。
-                const res = await realSupabase.from('price').select('*');
+                const { data: priceData, error: priceError } = await realSupabase.from('price').select('*');
 
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json && json.data) {
-                        json.data.forEach(p => {
+                if (priceError) {
+                    throw priceError;
+                } else if (priceData) {
+                    priceData.forEach(p => {
                             const orig = Number(p.id);
                             const conv = p.id_c !== undefined && p.id_c !== null ? Number(p.id_c) : (p.idC !== undefined && p.idC !== null ? Number(p.idC) : NaN);
                             if (!isNaN(orig) && !isNaN(conv)) {
@@ -7948,9 +7930,6 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                             }
                         });
                     }
-                } else {
-                    throw new Error(`Fetch failed: ${res.status}`);
-                }
             } catch(e) {
                 console.warn("即時讀取 price 表失敗，改用預設與快取", e);
                 if (prices && prices.length > 0) {
@@ -7980,7 +7959,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                                 else priceMap[orig] = conv;
                             }
                         });
-                    } else {
+                    } else if (typeof parsed === 'object' && parsed !== null) {
                         Object.keys(parsed).forEach(k => {
                             const orig = Number(k);
                             const conv = Number(parsed[k]);
@@ -8073,7 +8052,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             const uniquePocasMap = new Map();
             allFetchedPocas.forEach(p => uniquePocasMap.set(p.id, p));
             allFetchedPocas = Array.from(uniquePocasMap.values());
-
+            
             // 🌟 1. 蒐集 ui_cards 中已經有對照的 POCA ID
             const matchedPocaIds = new Set();
             (cards || []).forEach(c => {
@@ -8084,13 +8063,12 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             });
 
             // 🌟 終極智慧更新：將所有抓取到的資料整理成精簡 Payload，全面採用 Upsert 批次處理
-            const allPayloads = allFetchedPocas.map(p => ({
+            const allPayloads: { id: number; image: string; stocked_count: number; price: number; }[] = allFetchedPocas.map(p => ({
                 id: Number(p.id),
                 image: p.image || '',
                 stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
                 price: Number(p.price) // 🌟 確保儲存為數值型態
             }));
-
             let dbError = null;
             let successCount = 0;
             const totalToProcess = allPayloads.length;
