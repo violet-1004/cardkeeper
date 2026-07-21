@@ -44,13 +44,16 @@ export async function POST(req: Request) {
                 image: sql`excluded.image`,
                 stocked_count: sql`excluded.stocked_count`,
                 price: sql`excluded.price`,
-                group_name_en: sql`excluded.group_name_en` // 🌟 修正：在更新時也一併更新 group_name_en，避免 NOT NULL 約束失敗
+                group_name_en: sql`excluded.group_name_en`
             }
         });
 
         return NextResponse.json({ success: true, count: safeItems.length });
     } catch (error: any) {
         console.error("🔥 /api/poca/upsert Error:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        if (error.cause) {
+            console.error("🔥 /api/poca/upsert Error Cause:", error.cause);
+        }
+        return NextResponse.json({ success: false, error: error.message, cause: error.cause }, { status: 500 });
     }
 }
