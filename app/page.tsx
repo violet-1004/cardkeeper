@@ -2,6 +2,7 @@
 "use client";
 import Image from 'next/image';
 // 🌟 移除 Server Action import，改用標準 API Route
+import Link from 'next/link';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { supabase as realSupabase } from '@/lib/supabaseClient'; // 🌟 保留原始連線供圖片上傳使用
 import { 
