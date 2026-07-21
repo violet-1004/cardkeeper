@@ -7931,10 +7931,10 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             
             // 🌟 每次同步前，即時從 Cloudflare D1 的 price 資料表讀取最新對照 (優先套用)
             try {
-                // 🌟 核心修正：強制使用 GET 方法，並帶上時間戳，繞過所有快取與可能觸發 POST 的攔截器
-                const res = await fetch(`/api/data?table=price&_t=${Date.now()}`, {
-                    method: 'GET', cache: 'no-store'
-                });
+                // 🌟 核心修正：明確使用 realSupabase (原始連線) 進行 select，
+                // 繞過會將請求轉為 POST 的 D1QueryBuilder 攔截器，確保這是一個純粹的 GET 請求。
+                const res = await realSupabase.from('price').select('*');
+
                 if (res.ok) {
                     const json = await res.json();
                     if (json && json.data) {
