@@ -200,22 +200,18 @@ export async function upsertBatches(batches: any[]) {
 export async function upsertPocaCards(pocaCards: any[]) {
     if (!pocaCards || pocaCards.length === 0) return { success: true, count: 0 };
 
-    const db = getDb(); // D1 a single statement can have up to 100 placeholders. Poca table has 4 columns. 100/4 = 25. Let's use 20 to be safe.
-    const CHUNK_SIZE = 20;
-
     try {
-        for (let i = 0; i < pocaCards.length; i += CHUNK_SIZE) {
-            const chunk = pocaCards.slice(i, i + CHUNK_SIZE);
-            await db.insert(schema.poca).values(chunk).onConflictDoUpdate({
-                target: schema.poca.id,
-                set: {
-                    image: sql`excluded.image`,
-                    stocked_count: sql`excluded.stocked_count`,
-                    price: sql`excluded.price`
-                }
-            });
+        // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上的 405 錯誤
+        const res = await fetch('/api/poca/upsert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: pocaCards })
+        });
+        if (!res.ok) {
+            const errorText = await res.text();
+            return { success: false, error: `API Error: ${res.status} ${errorText}` };
         }
-        return { success: true, count: pocaCards.length };
+        return await res.json();
     } catch (error: any) {
         console.error("🔥 upsertPocaCards 嚴重錯誤:", error);
         return { success: false, error: error.message };

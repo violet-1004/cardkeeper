@@ -8096,14 +8096,22 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             const totalToProcess = allPayloads.length;
 
             // 🌟 核心修正：改為呼叫後端 Server Action 進行 upsert，避免前端 supabase-js 產生錯誤的 SQL
-            const CHUNK_SIZE = 100;
+            const CHUNK_SIZE = 20; // D1 has a limit of 100 placeholders per statement. Poca table has 4 columns. 100/4 = 25. Let's use 20 to be safe.
             for (let i = 0; i < allPayloads.length; i += CHUNK_SIZE) {
                 const chunk = allPayloads.slice(i, i + CHUNK_SIZE);
-                const result = await upsertPocaCards(chunk);
-                if (result.success) {
-                    successCount += result.count || chunk.length;
-                } else {
-                    if (!dbError) dbError = result.error;
+                // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上的 405 錯誤
+                const res = await fetch('/api/poca/upsert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: chunk })
+                });
+                const result_raw = await res.json();
+                const result = result_raw ?? { success: false, error: '無回應 (可能是 405)' };
+
+                if (result?.success) {
+                    successCount += result.count ?? chunk.length;
+                } else if (!dbError) {
+                    dbError = result.error || 'Upsert failed with no error message.';
                 }
                 setSyncProgress(`寫入資料庫中 ${successCount}/${totalToProcess} 筆...`);
                 
