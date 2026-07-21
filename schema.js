@@ -1,13 +1,13 @@
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 
 export const groups = sqliteTable("groups", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   name: text("name"),
   image: text("image")
 });
 
 export const members = sqliteTable("members", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   group_id: integer("group_id"),
   name: text("name"),
   image: text("image"),
@@ -16,7 +16,7 @@ export const members = sqliteTable("members", {
 });
 
 export const uiSubunits = sqliteTable("ui_subunits", {
-  id: text("id").primaryKey(), // 👈 這裡改成 text
+  id: integer("id").primaryKey(),
   group_id: integer("group_id"),
   name: text("name"),
   image: text("image"),
@@ -39,7 +39,7 @@ export const types = sqliteTable("types", {
 });
 
 export const series = sqliteTable("series", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   group_id: integer("group_id"),
   name: text("name"),
   type: text("type"),
@@ -51,7 +51,7 @@ export const series = sqliteTable("series", {
 });
 
 export const batches = sqliteTable("batches", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   group_id: integer("group_id"),
   series_id: integer("series_id"),
   name: text("name"),
@@ -63,7 +63,7 @@ export const batches = sqliteTable("batches", {
 });
 
 export const uiCards = sqliteTable("ui_cards", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   group_id: integer("group_id"),
   member_id: integer("member_id"),
   series_id: integer("series_id"),
@@ -96,7 +96,7 @@ export const uiInventory = sqliteTable("ui_inventory", {
 });
 
 export const bulkRecords = sqliteTable("bulk_records", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   group_id: integer("group_id"),
   name: text("name"),
   image: text("image"),
@@ -108,7 +108,7 @@ export const bulkRecords = sqliteTable("bulk_records", {
 });
 
 export const customLists = sqliteTable("custom_lists", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   title: text("title"),
   description: text("description"),
   created_at: text("created_at"),
@@ -128,14 +128,14 @@ export const uiSales = sqliteTable("ui_sales", {
 });
 
 export const poca = sqliteTable("poca", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   image: text("image").notNull(),
   stocked_count: integer("stocked_count").notNull(),
-  price: text("price").notNull(),
+  price: integer("price").notNull(),
   group_name_en: text("group_name_en")
 });
 
 export const price = sqliteTable("price", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: integer("id").primaryKey(),
   id_c: integer("id_c")
 });

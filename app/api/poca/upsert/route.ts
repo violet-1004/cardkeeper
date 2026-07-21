@@ -28,6 +28,10 @@ export async function POST(req: Request) {
         // 🌟 防呆：強制補齊必填欄位，避免任何一筆缺值導致整批 500
         const safeItems = items.map((item) => ({
             ...item,
+            id: item.id, // 確保 id 存在
+            image: item.image || '', // 防呆：避免 image 為 null
+            stocked_count: item.stocked_count || 0, // 防呆：避免 stocked_count 為 null
+            price: item.price || 0, // 防呆：避免 price 為 null
             group_name_en: item.group_name_en || 'cravity',
         }));
 
