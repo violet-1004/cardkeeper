@@ -208,6 +208,7 @@ export async function upsertPocaCards(pocaCards: any[]) {
             const chunk = pocaCards.slice(i, i + CHUNK_SIZE);
             await db.insert(schema.poca).values(chunk).onConflictDoUpdate({
                 target: schema.poca.id,
+                // 🌟 核心修正：無論如何都更新所有欄位，避免 Drizzle 產生空的 SET 子句導致 D1 報錯
                 set: {
                     image: sql`excluded.image`,
                     stocked_count: sql`excluded.stocked_count`,
