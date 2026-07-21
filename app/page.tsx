@@ -8088,7 +8088,8 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
                 id: Number(p.id),
                 image: p.image || '',
                 stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
-                price: Number(p.price) // 🌟 確保儲存為數值型態
+                price: Number(p.price), // 🌟 確保儲存為數值型態
+                group_name_en: 'cravity' // 🌟 修正：補上 schema 中 NOT NULL 的欄位
             }));
 
             let dbError = null;
