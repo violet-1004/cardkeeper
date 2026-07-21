@@ -33,7 +33,8 @@ export async function POST(req: Request) {
             set: {
                 image: sql`excluded.image`,
                 stocked_count: sql`excluded.stocked_count`,
-                price: sql`excluded.price`
+                price: sql`excluded.price`,
+                group_name_en: sql`excluded.group_name_en` // 🌟 修正：在更新時也一併更新 group_name_en，避免 NOT NULL 約束失敗
             }
         });
 
