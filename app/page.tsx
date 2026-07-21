@@ -8097,7 +8097,7 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             const totalToProcess = allPayloads.length;
 
             // 🌟 核心修正：改為呼叫後端 Server Action 進行 upsert，避免前端 supabase-js 產生錯誤的 SQL
-            const CHUNK_SIZE = 20; // D1 has a limit of 100 placeholders per statement. Poca table has 4 columns. 100/4 = 25. Let's use 20 to be safe.
+            const CHUNK_SIZE = 19; // D1 has a limit of 100 placeholders per statement. Poca table has 5 columns (id, image, stocked_count, price, group_name_en), so 100/5 = 20. Let's use 19 to be safe.
             for (let i = 0; i < allPayloads.length; i += CHUNK_SIZE) {
                 const chunk = allPayloads.slice(i, i + CHUNK_SIZE);
                 // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上的 405 錯誤
