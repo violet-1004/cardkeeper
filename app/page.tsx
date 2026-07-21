@@ -8099,11 +8099,13 @@ function SyncTab({ cards, allCards, setCards, pocaCards, setPocaCards, groups, m
             const CHUNK_SIZE = 100;
             for (let i = 0; i < allPayloads.length; i += CHUNK_SIZE) {
                 const chunk = allPayloads.slice(i, i + CHUNK_SIZE);
-                const result = await upsertPocaCards(chunk);
-                if (result.success) {
+                // 🌟 新增：捕捉 upsertPocaCards 可能發生的網路或伺服器端錯誤
+                const result = await upsertPocaCards(chunk).catch(err => ({ success: false, error: err.message }));
+                if (result?.success) {
                     successCount += result.count || chunk.length;
                 } else {
-                    if (!dbError) dbError = result.error;
+                    // 🌟 新增：記錄第一次發生的錯誤
+                    if (!dbError) dbError = result?.error || '未知錯誤';
                 }
                 setSyncProgress(`寫入資料庫中 ${successCount}/${totalToProcess} 筆...`);
                 

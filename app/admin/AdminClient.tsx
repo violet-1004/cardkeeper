@@ -259,6 +259,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 }
             } catch (e) {
                 console.error("無法讀取現有小卡列表", e);
+                setStatus("警告：無法讀取現有小卡列表，將寫入所有抓取到的新資料。");
             }
             
             // 🌟 恢復過濾邏輯：只處理資料庫中不存在的新卡片
@@ -280,7 +281,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
             setStatus(`同步完成！成功寫入 ${uniqueCards.length} 筆不重複資料。下一次將從新的指標繼續抓取。\n(請點擊左上角「小卡管家」回到主畫面查看)`);
         } catch (error: any) {
-            console.error('小卡同步失敗:', error);
+            console.error('小卡同步失敗:', error.stack || error);
             setStatus(`發生錯誤: ${error.message}`);
         }
     };
@@ -352,6 +353,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
                 }
             } catch (e) {
                 console.error("無法讀取現有批次列表", e);
+                setStatus("警告：無法讀取現有批次列表，將寫入所有抓取到的新資料。");
             }
 
             const uniqueBatches = Array.from(uniqueBatchesMap.values()).filter(batch => !existingBatchIds.has(String(batch.id)));
@@ -371,7 +373,7 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
             setStatus(`同步完成！成功寫入 ${insertedCount} 筆不重複資料。下一次將從新的指標繼續抓取。\n(請點擊左上角「小卡管家」回到主畫面查看)`);
         } catch (error: any) {
-            console.error('批次同步失敗:', error);
+            console.error('批次同步失敗:', error.stack || error);
             setStatus(`發生錯誤: ${error.message}`);
         }
     };
