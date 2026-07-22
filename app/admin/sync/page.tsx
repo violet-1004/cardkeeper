@@ -5,8 +5,14 @@ import { RefreshCw, Check, ChevronLeft, ChevronRight, ImageIcon, ArrowLeft } fro
 import { supabase } from '@/utils/supabase'; // Assuming you have this file
 import { toCamelCase, toSnakeCase } from '@/utils/case'; // Assuming you have these utils
 
-// Mock missing components for now. These will need to be created or imported.
-const Modal = ({ title, onClose, children, footer }) => (
+interface ModalProps {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
+const Modal: React.FC<ModalProps> = ({ title, onClose, children, footer }) => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl shadow-lg w-full max-w-sm">
             <div className="p-4 border-b flex justify-between items-center">
@@ -19,7 +25,21 @@ const Modal = ({ title, onClose, children, footer }) => (
     </div>
 );
 
-const SeriesFilterModal = ({ visible, onClose, seriesTypes, selectedSeriesType, setSeriesType, series, selectedSeries, setSeries, batches, selectedBatches, setBatches }) => {
+interface SeriesFilterModalProps {
+  visible: boolean;
+  onClose: () => void;
+  seriesTypes: any[];
+  selectedSeriesType: any;
+  setSeriesType: (type: any) => void;
+  series: any[];
+  selectedSeries: any[];
+  setSeries: (series: any[]) => void;
+  batches: any[];
+  selectedBatches: any[];
+  setBatches: (batches: any[]) => void;
+}
+
+const SeriesFilterModal: React.FC<SeriesFilterModalProps> = ({ visible, onClose, seriesTypes, selectedSeriesType, setSeriesType, series, selectedSeries, setSeries, batches, selectedBatches, setBatches }) => {
     if (!visible) return null;
     // A proper implementation is needed here
     return (
@@ -52,7 +72,7 @@ export default function SyncPage() {
     // --- Fetch all data on mount ---
     useEffect(() => {
         async function fetchAllData() {
-            const fetchTable = async (t, silent = false, options = {}) => { 
+            const fetchTable = async (t: string, silent = false, options: { paginate?: boolean; orderBy?: string; ascending?: boolean; limit?: number; } = {}) => { 
                 try {
                     const params = new URLSearchParams({ table: t });
                     if (options.paginate) params.append('paginate', 'true');
