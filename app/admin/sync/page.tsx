@@ -55,19 +55,19 @@ const SeriesFilterModal: React.FC<SeriesFilterModalProps> = ({ visible, onClose,
 
 export default function SyncPage() {
     // --- State copied from App component ---
-    const [groups, setGroups] = useState([]);
+    const [groups, setGroups] = useState<any[]>([]);
     const [currentGroupId, setCurrentGroupId] = useState(null);
-    const [members, setMembers] = useState([]);
-    const [series, setSeries] = useState([]);
-    const [channels, setChannels] = useState([]);
-    const [types, setTypes] = useState([]);
-    const [batches, setBatches] = useState([]);
-    const [cards, setCards] = useState([]);
-    const [allCards, setAllCards] = useState([]);
-    const [subunits, setSubunits] = useState([]); 
-    const [appSettings, setAppSettings] = useState([]);
-    const [prices, setPrices] = useState([]);
-    const [pocaCards, setPocaCards] = useState([]);
+    const [members, setMembers] = useState<any[]>([]);
+    const [series, setSeries] = useState<any[]>([]);
+    const [channels, setChannels] = useState<any[]>([]);
+    const [types, setTypes] = useState<any[]>([]);
+    const [batches, setBatches] = useState<any[]>([]);
+    const [cards, setCards] = useState<any[]>([]);
+    const [allCards, setAllCards] = useState<any[]>([]);
+    const [subunits, setSubunits] = useState<any[]>([]); 
+    const [appSettings, setAppSettings] = useState<any[]>([]);
+    const [prices, setPrices] = useState<any[]>([]);
+    const [pocaCards, setPocaCards] = useState<any[]>([]);
     
     // --- Fetch all data on mount ---
     useEffect(() => {
@@ -86,12 +86,12 @@ export default function SyncPage() {
                     const response = await fetch(`/api/data?${params.toString()}`, { cache: 'no-store' });
                     if (!response.ok) {
                         const errText = await response.text();
-                        let errData = {};
+                        let errData: { error?: string } = {};
                         try { errData = JSON.parse(errText); } catch (e) {}
                         throw new Error(`API request failed: ${response.status} - ${errData.error || errText.substring(0, 100) || 'Unknown server error'}`);
                     }
                     
-                    const result = await response.json();
+                    const result: { data: any[] } = await response.json();
                     if (!silent) console.log(`✅ [${t}] Successfully read ${result.data?.length || 0} records`);
                     
                     return (result.data || []).map(toCamelCase).map(item => {
@@ -109,7 +109,7 @@ export default function SyncPage() {
                         return item;
                     });
                     
-                } catch (error) {
+                } catch (error: any) {
                     console.error(`🚨 [${t}] Read failed:`, error.message);
                     if (!silent) alert(`Failed to read ${t}!
 Error: ${error.message}`);
@@ -199,15 +199,15 @@ Error: ${error.message}`);
     const [hideMatched, setHideMatched] = useState(false);
     const POCA_PER_PAGE = 100;
 
-    const [filterSubunits, setFilterSubunits] = useState([]);
-    const [filterMembers, setFilterMembers] = useState([]);
-    const [filterSubMembers, setFilterSubMembers] = useState([]);
-    const [filterTypes, setFilterTypes] = useState([]);
-    const [filterChannels, setFilterChannels] = useState([]);
+    const [filterSubunits, setFilterSubunits] = useState<any[]>([]);
+    const [filterMembers, setFilterMembers] = useState<any[]>([]);
+    const [filterSubMembers, setFilterSubMembers] = useState<any[]>([]);
+    const [filterTypes, setFilterTypes] = useState<any[]>([]);
+    const [filterChannels, setFilterChannels] = useState<any[]>([]);
     const [showSeriesModal, setShowSeriesModal] = useState(false);
     const [filterSeriesType, setFilterSeriesType] = useState('All');
-    const [filterSeries, setFilterSeries] = useState([]);
-    const [filterBatches, setFilterBatches] = useState([]);
+    const [filterSeries, setFilterSeries] = useState<any[]>([]);
+    const [filterBatches, setFilterBatches] = useState<any[]>([]);
 
     useEffect(() => {
         setFilterSubMembers([]);
