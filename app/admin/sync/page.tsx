@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Check, ChevronLeft, ChevronRight, ImageIcon, ArrowLeft, X, Package } from 'lucide-react';
-import { supabase } from '@/utils/supabase';
+import { supabase } from '@/lib/supabaseClient';
 import { toCamelCase, toSnakeCase } from '@/utils/case';
 
 // --- Shared Modal shell ---
