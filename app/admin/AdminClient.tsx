@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import { Image as ImageIcon, Plus, X } from 'lucide-react';
+import Link from 'next/link';
+import { Image as ImageIcon, Plus, X, RefreshCw } from 'lucide-react';
 import { updateSeriesApi, insertSeries, fetchChannels, upsertCards, upsertBatches } from './actions';
 
 export default function AdminClient({ initialSeries, initialGroups }: { initialSeries: any[], initialGroups: any[] }) {
@@ -378,8 +379,13 @@ export default function AdminClient({ initialSeries, initialGroups }: { initialS
 
     return (
         <div className="p-10 flex flex-col items-start gap-4">
-            <h1 className="text-2xl font-bold">後台資料同步管理</h1>
-            
+            <div className="flex items-center justify-between w-full max-w-3xl">
+                <h1 className="text-2xl font-bold">後台資料同步管理</h1>
+                <Link href="/admin/sync" className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors">
+                    <RefreshCw className="w-4 h-4" /> POCA 對照 / 批次抓取
+                </Link>
+            </div>
+
             <div className="flex flex-col gap-2 p-4 border rounded-lg bg-gray-50 w-full max-w-3xl">
                 <h2 className="font-bold text-gray-700">批次抓取設定 (Cursor-based)</h2>
                 <div className="flex items-center gap-2 mb-2">

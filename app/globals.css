@@ -1,8 +1,15 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap');
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* 🌟 playful accent palette (heyclicky-inspired) */
+  --accent: #3b6bf6;
+  --accent-dark: #2749d6;
+  --accent-soft: #eaf0ff;
+  --dot-color: rgba(17, 24, 39, 0.08);
 }
 
 @theme inline {
@@ -10,6 +17,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: 'Baloo 2', var(--font-geist-sans);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,3 +32,30 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 🌟 playful dotted-grid backdrop, echoing a friendly desktop workspace */
+.app-dotted-bg {
+  background-color: #f7f8fb;
+  background-image: radial-gradient(var(--dot-color) 1.4px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+
+/* 🌟 rounded, bouncy display font for wordmarks & headings — Chinese glyphs fall back gracefully */
+.font-display {
+  font-family: 'Baloo 2', var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* 🌟 macOS-style traffic-light dots, used as a small decorative "window chrome" motif */
+.window-dots {
+  display: inline-flex;
+  gap: 6px;
+}
+.window-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  display: inline-block;
+}
+.window-dots span:nth-child(1) { background: #ff5f57; }
+.window-dots span:nth-child(2) { background: #febc2e; }
+.window-dots span:nth-child(3) { background: #28c840; }

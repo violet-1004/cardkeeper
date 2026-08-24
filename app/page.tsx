@@ -11,7 +11,7 @@ import {
   X, Maximize2, Minimize2, Save, BookOpen, User, Settings, Filter, 
   ChevronRight, MoreHorizontal, Search, Edit2, Check, Users, Heart, ShoppingBag, FolderPlus,
   ArrowLeft, CheckSquare, MoreVertical, Tag, Store, ChevronDown, PenTool, Coins, Minus, AlertCircle, TrendingUp, ArrowUpDown,
-  ChevronLeft, Folder, Package, Copy, Disc, RefreshCw, Printer
+  ChevronLeft, Folder, Package, Copy, Disc, Printer
 } from 'lucide-react';
 
 import * as htmlToImage from 'html-to-image';
@@ -232,7 +232,7 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
     <>
     <div 
       onClick={() => ref.current.click()}
-      className={`relative w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-indigo-400 transition-all bg-gray-50 overflow-hidden group ${className}`}
+      className={`relative w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-blue-400 transition-all bg-gray-50 overflow-hidden group ${className}`}
     >
       {multiple && images.length > 0 ? (
           <div className="absolute inset-0 p-2 overflow-y-auto no-scrollbar grid grid-cols-3 gap-2">
@@ -291,7 +291,7 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
                 <input 
                     type="range" min={1} max={3} step={0.05} 
                     value={zoom} onChange={(e) => setZoom(e.target.value)}
-                    className="w-full max-w-sm accent-indigo-500 mb-8"
+                    className="w-full max-w-sm accent-blue-500 mb-8"
                 />
                 <div className="flex justify-between w-full max-w-sm gap-4">
                     <button 
@@ -304,7 +304,7 @@ const ImageUploader = ({ image, images = [], onChange, label = "上傳圖片", c
                     <button 
                         onClick={(e) => { e.stopPropagation(); confirmCrop(); }} 
                         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); confirmCrop(); }} 
-                        className="flex-[2] py-3 rounded-full font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg"
+                        className="flex-[2] py-3 rounded-full font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg"
                     >
                         完成
                     </button>
@@ -411,12 +411,13 @@ const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullS
   const swipeHandlers = useSwipeToClose(onClose);
   return (
   <div className={`fixed inset-0 z-[150] bg-black/30 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
-    <div 
-      className={`bg-white/90 backdrop-blur-xl border border-white/50 w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl ${className}` : `rounded-2xl max-h-[90vh] ${className}`}`} 
+    <div
+      className={`bg-white/90 backdrop-blur-xl border border-white/50 w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-3xl ${className}` : `rounded-3xl max-h-[90vh] ${className}`}`}
       onClick={e => e.stopPropagation()}
     >
       <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/50 backdrop-blur-sm flex-shrink-0 z-10">
-        <div className="font-bold text-lg text-gray-800 truncate pr-2 flex-1 flex items-center">
+        <div className="font-bold font-display text-lg text-gray-800 truncate pr-2 flex-1 flex items-center gap-3">
+            <span className="window-dots hidden sm:inline-flex flex-shrink-0"><span></span><span></span><span></span></span>
             {title}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -490,7 +491,7 @@ const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allo
     <div className="space-y-1.5">
       <div className="flex justify-between items-center">
          <label className="text-xs font-bold text-gray-600 block">{label}</label>
-         {multiple && <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 rounded">多選模式</span>}
+         {multiple && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 rounded">多選模式</span>}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar items-center">
         {(options || []).map((opt) => {
@@ -505,7 +506,7 @@ const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allo
               className={`
                 flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 select-none
                 ${isSelected 
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm ring-1 ring-indigo-200' 
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-1 ring-blue-200' 
                   : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}
               `}
             >
@@ -526,7 +527,7 @@ const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allo
                     onBlur={handleCustomSubmit}
                     onKeyDown={(e) => e.key === 'Enter' && handleCustomSubmit()}
                     placeholder={placeholder}
-                    className="w-full text-xs px-2 py-1.5 border rounded-full outline-none focus:border-indigo-500"
+                    className="w-full text-xs px-2 py-1.5 border rounded-full outline-none focus:border-blue-500"
                  />
                </div>
              ) : (
@@ -534,8 +535,8 @@ const FormCapsuleSelect = ({ label, options, value, onChange, renderOption, allo
                 onClick={() => setIsCustomMode(true)}
                 className={`
                   px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 
-                  text-gray-400 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 flex items-center gap-1
-                  ${!(options || []).some(o => (typeof o === 'object' ? o.id === value : o === value)) && value && !multiple ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : ''}
+                  text-gray-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 flex items-center gap-1
+                  ${!(options || []).some(o => (typeof o === 'object' ? o.id === value : o === value)) && value && !multiple ? 'bg-blue-50 border-blue-600 text-blue-700' : ''}
                 `}
                >
                  <Plus className="w-3 h-3" />
@@ -558,14 +559,14 @@ const MemberItem = ({ member, isSelected, onClick, onLongPress, onDoubleClick })
       onDoubleClick={onDoubleClick}
       className="flex flex-col items-center gap-1 cursor-pointer min-w-[64px] select-none active:scale-95 transition-transform"
     >
-      <div className={`w-16 h-16 rounded-full overflow-hidden border-2 flex items-center justify-center bg-gray-100 transition-all ${isSelected ? 'border-indigo-600 scale-105 shadow-md' : 'border-transparent'}`}>
+      <div className={`w-16 h-16 rounded-full overflow-hidden border-2 flex items-center justify-center bg-gray-100 transition-all ${isSelected ? 'border-blue-600 scale-105 shadow-md' : 'border-transparent'}`}>
         {member.image ? (
             <img src={member.image} className="w-full h-full object-cover pointer-events-none" alt={member.name} />
         ) : (
             <Users className="w-6 h-6 text-gray-400" />
         )}
       </div>
-      <span className={`text-xs font-medium ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`}>{member.name}</span>
+      <span className={`text-xs font-medium ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>{member.name}</span>
     </div>
   );
 };
@@ -576,7 +577,7 @@ const SeriesItem = ({ series, isSelected, onClick, onLongPress, onDoubleClick })
     <div 
       {...bind}
       onDoubleClick={onDoubleClick}
-      className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-indigo-500' : ''}`}
+      className={`relative w-28 h-28 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 group select-none ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
     >
         {/* 🌟 限制最大生成寬度為 120px，強制伺服器輸出極小 KB 數的縮圖 */}
         {series.image ? (
@@ -600,7 +601,7 @@ const BatchItem = ({ batch, isSelected, onClick, onLongPress, onDoubleClick }) =
     <div 
       {...bind}
       onDoubleClick={onDoubleClick}
-      className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}
+      className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden cursor-pointer flex-shrink-0 border select-none ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}
     >
         {/* 🌟 限制最大生成寬度為 100px */}
         {batch.image ? (
@@ -623,7 +624,7 @@ const FilterTagItem = ({ text, isSelected, onClick, onLongPress, onDoubleClick }
     <button 
         {...bind}
         onDoubleClick={onDoubleClick}
-        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
     >
         {text}
     </button>
@@ -635,7 +636,7 @@ const SubunitTagItem = ({ text, isSelected, onClick, onLongPress }) => {
   return (
     <button
         {...bind}
-        className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+        className={`px-4 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${isSelected ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
     >
         {text}
     </button>
@@ -726,11 +727,11 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-gray-500 mb-1.5 block">購買日期</label>
-                    <input type="date" disabled={isBulk} value={form.buyDate} onChange={e => handleChange('buyDate', e.target.value)} className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                    <input type="date" disabled={isBulk} value={form.buyDate} onChange={e => handleChange('buyDate', e.target.value)} className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`} />
                 </div>
                 <div>
                     <label className="text-xs font-bold text-gray-500 mb-1.5 block">數量</label>
-                    <input type="number" min="1" disabled={isBulk} value={form.quantity} onChange={e => handleChange('quantity', e.target.value)} className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                    <input type="number" min="1" disabled={isBulk} value={form.quantity} onChange={e => handleChange('quantity', e.target.value)} className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100 ${isBulk ? 'opacity-60 cursor-not-allowed' : ''}`} />
                 </div>
             </div>
             
@@ -741,7 +742,7 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
                         <select 
                             value={form.condition|| ''} 
                             onChange={e => handleChange('condition', e.target.value)} 
-                            className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 appearance-none text-sm"
+                            className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100 appearance-none text-sm"
                         >
                             <option value="無損">無損</option>
                             <option value="微損">微損</option>
@@ -760,7 +761,7 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
                             disabled={isBulk}
                             value={form.status} 
                             onChange={e => handleChange('status', e.target.value)} 
-                            className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 appearance-none text-sm ${isBulk ? 'cursor-not-allowed' : ''}`}
+                            className={`w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100 appearance-none text-sm ${isBulk ? 'cursor-not-allowed' : ''}`}
                         >
                             <option value="未發貨">未發貨</option>
                             <option value="囤貨">囤貨</option>
@@ -835,7 +836,7 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
             <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
                 <div className="flex justify-between items-center">
                      <label className="text-xs font-bold text-gray-500 flex items-center gap-1"><Disc className="w-3 h-3" /> 搭配專輯</label>
-                     {form.albumQuantity > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold">含專</span>}
+                     {form.albumQuantity > 0 && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">含專</span>}
                 </div>
                 <div className="grid grid-cols-[1fr_auto_auto] gap-2">
                      <div className="relative">
@@ -871,7 +872,7 @@ function InventoryForm({ initialData = {}, onSave, sourceOptions = ['社團', '�
 
             <div>
                 <label className="text-[11px] sm:text-xs font-bold text-gray-500 mb-1 block">備註</label>
-                <input type="text" placeholder="卡況詳細或其他備註..." value={form.note} onChange={e => handleChange('note', e.target.value)} className="w-full border p-2.5 sm:p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 text-xs sm:text-sm" />
+                <input type="text" placeholder="卡況詳細或其他備註..." value={form.note} onChange={e => handleChange('note', e.target.value)} className="w-full border p-2.5 sm:p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100 text-xs sm:text-sm" />
             </div>
         </div>
     );
@@ -905,7 +906,7 @@ function OptionManageModal({ type, data, onClose, onRename, onDelete, onSortChan
                     <button onClick={onClose} className="flex-1 py-2 rounded-lg border text-gray-500 hover:bg-gray-100">取消</button>
                     <button 
                         onClick={handleSave}
-                        className="flex-1 py-2 rounded-lg bg-indigo-600 text-white font-bold"
+                        className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold"
                     >
                         儲存
                     </button>
@@ -1002,7 +1003,7 @@ function SeriesFilterModal({
                                 onClick={() => toggleSelect(String(opt.id))}
                                 className="cursor-pointer flex flex-col gap-1 group"
                             >
-                                <div className={`relative aspect-square rounded-lg border-2 overflow-hidden flex flex-col items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-200 shadow-md' : 'border-gray-100 group-hover:border-gray-300'}`}>
+                                <div className={`relative aspect-square rounded-lg border-2 overflow-hidden flex flex-col items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'border-blue-600 ring-2 ring-blue-200 shadow-md' : 'border-gray-100 group-hover:border-gray-300'}`}>
                                     {opt.image ? (
                                         <img src={opt.image} alt={opt.name} className="absolute inset-0 w-full h-full object-cover" />
                                     ) : (
@@ -1011,12 +1012,12 @@ function SeriesFilterModal({
                                         </div>
                                     )}
                                     {isSelected && (
-                                        <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10">
+                                        <div className="absolute top-1 right-1 bg-blue-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10">
                                             <Check className="w-3 h-3 text-white" />
                                         </div>
                                     )}
                                 </div>
-                                <span className={`text-[10px] font-bold text-center leading-tight line-clamp-2 px-0.5 ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`}>
+                                <span className={`text-[10px] font-bold text-center leading-tight line-clamp-2 px-0.5 ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>
                                     {opt.name}
                                 </span>
                             </div>
@@ -1348,7 +1349,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
             <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">卡片詳情</div>
-                <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-indigo-600"><Edit2 className="w-5 h-5" /></button>
+                <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-5 h-5" /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar bg-transparent">
@@ -1363,7 +1364,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                             </div>
                         )}
                     </div>
-                    <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
+                    <div className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">{groupName} · {memberName}</div>
                     <h2 className="text-xl font-bold text-gray-900 leading-snug mb-2">{displayTitle || '未命名卡片'}</h2>
                     {cardBatch?.name && <div className="text-sm text-gray-400">{cardBatch.name}</div>}
                     
@@ -1392,7 +1393,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                     <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                         <div className="flex justify-between items-center mb-2">
                              <div className="flex items-center gap-2">
-                                <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600">
+                                <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600">
                                     <TrendingUp className="w-4 h-4" />
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1426,7 +1427,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     placeholder="0"
                                     value={currentSale?.quantity || ''}
                                     onChange={(e) => handleUpdateSale('quantity', e.target.value)}
-                                    className="w-full bg-gray-50 border-none rounded-lg py-2 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100 transition-all text-center"
+                                    className="w-full bg-gray-50 border-none rounded-lg py-2 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all text-center"
                                 />
                             </div>
                             <div className="flex-[2]">
@@ -1465,7 +1466,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                             <div 
                                 key={inv.id} 
                                 onClick={() => openEditInv(inv)}
-                                className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-indigo-300 group"
+                                className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-blue-300 group"
                             >
                                 <div>
                                     <div className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -1479,7 +1480,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                         {inv.status && (
                                             <span className={`text-[10px] px-1.5 rounded ${
                                                 inv.status === '到貨' ? 'bg-green-50 text-green-600' :
-                                                inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' :
+                                                inv.status === '囤貨' ? 'bg-blue-50 text-blue-600' :
                                                 inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' :
                                                 inv.status === '未知' ? 'bg-black text-white' :
                                                 'bg-gray-50 text-gray-600'
@@ -1563,7 +1564,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                                 e.stopPropagation();
                                                 onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
                                             }}
-                                            className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
+                                            className="text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-blue-100 transition-colors tracking-normal font-bold"
                                         >
                                             <Package className="w-3 h-3" />
                                             {isParentSet ? '編輯套收' : '編輯盤收'}
@@ -1615,7 +1616,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                 className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
                             >
                                 <span className="font-bold text-gray-700">{list.title}</span>
-                                <Plus className="w-5 h-5 text-gray-300 group-hover:text-indigo-600" />
+                                <Plus className="w-5 h-5 text-gray-300 group-hover:text-blue-600" />
                             </button>
                         ))}
                     </div>
@@ -2026,8 +2027,8 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                />
            )}
            <button onClick={() => openModal('member', { subunit: filterSubunit !== 'All' ? filterSubunit : '' })} className="flex flex-col items-center gap-1 min-w-[64px] group">
-              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 group-hover:bg-indigo-50 group-hover:border-indigo-300 transition-colors">
-                <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500" />
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 group-hover:bg-blue-50 group-hover:border-blue-300 transition-colors">
+                <Plus className="w-6 h-6 text-gray-400 group-hover:text-blue-500" />
               </div>
               <span className="text-xs text-gray-400">新增成員</span>
            </button>
@@ -2065,13 +2066,13 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
              </button>
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
-              <button onClick={() => setFilterSeriesType('All')} className={`px-2 py-1 text-[10px] rounded-full whitespace-nowrap border ${filterSeriesType === 'All' ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>全部類型</button>
+              <button onClick={() => setFilterSeriesType('All')} className={`px-2 py-1 text-[10px] rounded-full whitespace-nowrap border ${filterSeriesType === 'All' ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>全部類型</button>
               {(uniqueSeriesTypes || []).map(t => (
                   <button 
                     key={t} 
                     onClick={() => setFilterSeriesType(filterSeriesType === t ? 'All' : t)} 
                     onDoubleClick={() => handleOptionDoubleClick('seriesType', { value: t })}
-                    className={`px-2 py-1 text-[10px] rounded-full whitespace-nowrap border ${filterSeriesType === t ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}
+                    className={`px-2 py-1 text-[10px] rounded-full whitespace-nowrap border ${filterSeriesType === t ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}
                   >
                     {t}
                   </button>
@@ -2117,7 +2118,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                      setSelectedItems(prev => [...prev, ...itemsToAdd]);
                                  }
                              }}
-                             className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+                             className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                          >
                              <CheckSquare className="w-3 h-3" /> 全選顯示
                          </button>
@@ -2154,7 +2155,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                    <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('type', { groupId: currentGroupId })}>
                         <span className="text-xs font-bold text-gray-400 whitespace-nowrap">子類</span>
-                        <Plus className="w-3 h-3 text-gray-300 group-hover:text-indigo-500" />
+                        <Plus className="w-3 h-3 text-gray-300 group-hover:text-blue-500" />
                    </div>
                    {(combinedTypes || []).map(t => (
                        <FilterTagItem 
@@ -2173,7 +2174,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                    <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('channel', { groupId: currentGroupId })}>
                         <span className="text-xs font-bold text-gray-400 whitespace-nowrap">通路</span>
-                        <Plus className="w-3 h-3 text-gray-300 group-hover:text-indigo-500" />
+                        <Plus className="w-3 h-3 text-gray-300 group-hover:text-blue-500" />
                    </div>
                    {(combinedChannels || []).map(c => (
                        <FilterTagItem 
@@ -2193,7 +2194,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                        <div className="flex items-center gap-1 cursor-pointer group pr-2 border-r border-gray-200 shrink-0" onClick={() => openModal('batch', { seriesId: filterSeriesId, type: filterType !== 'All' ? filterType : '', channel: filterChannel !== 'All' ? filterChannel : '' })}>
                             <span className="text-xs font-bold text-gray-400 whitespace-nowrap">批次</span>
-                            <Plus className="w-3 h-3 text-gray-300 group-hover:text-indigo-500" />
+                            <Plus className="w-3 h-3 text-gray-300 group-hover:text-blue-500" />
                        </div>
                        <div className="flex gap-3">
                             {currentBatches.length > 0 ? currentBatches.map(b => (
@@ -2280,7 +2281,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                         return String(card[type]) === String(value);
                                     })();
                                     return (
-                                        <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border transition-all ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-600 shadow-md' : isOriginalTarget ? 'border-pink-400 ring-2 ring-pink-400 opacity-90' : 'border-gray-100'}`}>
+                                        <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border transition-all ${isSelected ? 'border-blue-600 ring-2 ring-blue-600 shadow-md' : isOriginalTarget ? 'border-pink-400 ring-2 ring-pink-400 opacity-90' : 'border-gray-100'}`}>
                                             {card.image ? (
                                                 <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
                                             ) : (
@@ -2293,7 +2294,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                                 {isSelling && <div className="bg-blue-500 text-white p-1 rounded-full shadow"><Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" /></div>}
                                             </div>
                                             {isSelectionMode && (
-                                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white/50 border-gray-400'}`}>
+                                                <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center z-20 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/50 border-gray-400'}`}>
                                                     {isSelected && <Check className="w-3 h-3" />}
                                                 </div>
                                             )}
@@ -2781,7 +2782,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                     <button 
                         key={id}
                         onClick={() => onChange(String(id))}
-                        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                        className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                     >
                         {name}
                     </button>
@@ -2809,18 +2810,18 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                      {viewMode === 'owned' && (
                          <button
                              onClick={() => setHideSelling(!hideSelling)}
-                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${hideSelling ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${hideSelling ? 'bg-blue-100 text-blue-700 shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                              title={hideSelling ? "點擊顯示販售中的卡片" : "點擊隱藏販售中的卡片"}
                          >
                              <div className="relative flex items-center justify-center">
                                  <Coins className={`w-4 h-4 ${hideSelling ? 'opacity-50' : ''}`} />
-                                 {hideSelling && <div className="absolute top-1/2 left-1/2 w-[120%] h-[1.5px] bg-indigo-700 -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full" />}
+                                 {hideSelling && <div className="absolute top-1/2 left-1/2 w-[120%] h-[1.5px] bg-blue-700 -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full" />}
                              </div>
                          </button>
                      )}
                      <button
                          onClick={() => { setIsMarkMode(!isMarkMode); }}
-                         className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${isMarkMode ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                         className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center flex-shrink-0 ${isMarkMode ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
                          title="標記模式 (點擊+1，長按或右鍵-1)"
                      >
                          <PenTool className="w-4 h-4" />
@@ -2845,7 +2846,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                  setShowInvStatusPopup(false);
                                  setShowCustomListPopup(false);
                              }}
-                             className={`p-2 rounded-lg transition-all h-8 w-8 flex items-center justify-center flex-shrink-0 ${showColsSlider ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                             className={`p-2 rounded-lg transition-all h-8 w-8 flex items-center justify-center flex-shrink-0 ${showColsSlider ? 'bg-blue-100 text-blue-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                              title="調整排數"
                          >
                              <Grid className="w-4 h-4" />
@@ -2862,7 +2863,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                      max="15" 
                                      value={cols} 
                                      onChange={(e) => setCols(Number(e.target.value))} 
-                                     className="w-24 sm:w-32 accent-indigo-600 cursor-pointer"
+                                     className="w-24 sm:w-32 accent-blue-600 cursor-pointer"
                                  />
                                  <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
                              </div>
@@ -2916,7 +2917,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                         <button
                                             key={opt}
                                             onClick={() => { setFilterInvStatus(opt); setShowInvStatusPopup(false); }}
-                                            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterInvStatus === opt ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterInvStatus === opt ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                                         >
                                             {opt === 'All' ? '無篩選' : opt}
                                         </button>
@@ -2936,7 +2937,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                 setShowInvStatusPopup(false);
                             }}
                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${
-                                filterCustomList !== 'All' ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                filterCustomList !== 'All' ? 'bg-blue-100 text-blue-600 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                             }`}
                             title="收藏冊篩選"
                         >
@@ -2951,7 +2952,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                 <div className="flex items-center gap-1.5 max-w-[250px] overflow-x-auto no-scrollbar">
                                     <button
                                         onClick={() => { setFilterCustomList('All'); setShowCustomListPopup(false); }}
-                                        className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === 'All' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                        className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === 'All' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                                     >
                                         全部
                                     </button>
@@ -2959,7 +2960,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                         <button
                                             key={list.id}
                                             onClick={() => { setFilterCustomList(list.id); setShowCustomListPopup(false); }}
-                                            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === list.id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === list.id ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                                         >
                                             {list.title}
                                         </button>
@@ -2973,7 +2974,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                     <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
                     <button onClick={() => setViewMode('wishlist')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'wishlist' ? 'bg-white text-pink-500 shadow-sm' : 'text-gray-400'}`}>想要</button>
                     <button onClick={() => setViewMode('selling')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'selling' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>販售</button>
-                    <button onClick={() => setViewMode('owned')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'owned' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}>擁有</button>
+                    <button onClick={() => setViewMode('owned')} className={`px-3 h-full flex items-center justify-center flex-1 sm:flex-none text-xs font-bold rounded-md transition-all ${viewMode === 'owned' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>擁有</button>
                 </div>
             </div>
         </div>
@@ -2994,13 +2995,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
             {availableChannels.length > 0 && (
                 <RenderFilterSection label="通路" options={availableChannels} current={filterChannels} onChange={(val) => toggleFilter(setFilterChannels, val)} mapName={c => c.name} />
             )}
-            <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group">
+            <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-all group">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
                     <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                    <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                    <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-blue-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
             </div>
         </div>
 
@@ -3059,7 +3060,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 return (
                     <div 
                         key={card.id} 
-                        className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'} ${isMarkMode ? 'ring-2 ring-transparent hover:ring-indigo-300 rounded-lg' : ''}`}
+                        className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'} ${isMarkMode ? 'ring-2 ring-transparent hover:ring-blue-300 rounded-lg' : ''}`}
                         style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                         onMouseDown={() => startPress(card.id)}
                         onMouseUp={cancelPress}
@@ -3107,7 +3108,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             
                             <div className="absolute top-1 sm:top-2 left-1 sm:left-2 z-10 flex flex-col gap-1">
                                 {cardMarks[card.id] > 0 && (
-                                    <div className="bg-indigo-600 text-white w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full shadow-md text-xs font-bold z-20">
+                                    <div className="bg-blue-600 text-white w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full shadow-md text-xs font-bold z-20">
                                         {cardMarks[card.id]}
                                     </div>
                                 )}
@@ -3295,21 +3296,21 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
              <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
                  <div className="flex justify-center items-center relative">
                      <div className="relative">
-                         <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer text-xs shadow-sm">
+                         <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-blue-50 border border-blue-100 text-blue-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer text-xs shadow-sm">
                              <option value="month">MONTH</option><option value="year">YEAR</option><option value="range">自訂日期</option>
                          </select>
-                         <ChevronDown className="w-3 h-3 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                         <ChevronDown className="w-3 h-3 text-blue-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                      </div>
                      {dateFilterMode !== 'range' && (
-                         <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth() + 1); }} className="absolute right-0 p-1.5 bg-gray-100 hover:bg-gray-200 text-indigo-600 rounded-lg transition-colors"><Calendar className="w-4 h-4" /></button>
+                         <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth() + 1); }} className="absolute right-0 p-1.5 bg-gray-100 hover:bg-gray-200 text-blue-600 rounded-lg transition-colors"><Calendar className="w-4 h-4" /></button>
                      )}
                  </div>
 
                  {dateFilterMode === 'range' ? (
                      <div className="flex items-center gap-2">
-                         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-blue-200" />
                          <span className="text-gray-400 font-bold">-</span>
-                         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 py-1.5 px-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-blue-200" />
                      </div>
                  ) : (
                      <div className="flex justify-between items-center">
@@ -3377,7 +3378,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                 if (item._isBulkHeader && item.originalRecord && onEditBulkRecord) onEditBulkRecord(item.originalRecord);
                                 else if (card) setViewingCard(card);
                             }} 
-                            className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-indigo-300 border border-transparent select-none"
+                            className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-blue-300 border border-transparent select-none"
                         >
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
@@ -3389,7 +3390,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     {item.isMisc ? (
                                         <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
                                     ) : item._isBulkHeader ? (
-                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500"><Package className="w-5 h-5" /></div>
+                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-blue-100 flex items-center justify-center text-blue-500"><Package className="w-5 h-5" /></div>
                                     ) : (card && card.image ? (
                                         <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />
                                     ) : (
@@ -3441,7 +3442,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
     );
 }
 
-function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventory, series, batches, setInventory, setSales, members, onViewCard, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource, onSyncData, subunits, types }) {
+function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventory, series, batches, setInventory, setSales, members, onViewCard, setBulkRecords, uniqueSources, onRenameSource, onDeleteSource, subunits, types }) {
     const [viewMode, setViewMode] = useState('set'); // 'bulk' | 'album' | 'set'
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
@@ -3632,7 +3633,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                             onChange(isSelected ? 'All' : id);
                         }}
                         className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${
-                            isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                            isSelected ? 'bg-blue-600 border-blue-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
                         }`}
                     >
                         {name}
@@ -3741,7 +3742,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                     <button onClick={() => setViewMode('album')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'album' ? 'bg-white shadow text-black' : 'text-gray-400'}`}>專輯</button>
                 </div>
                 <div className="flex justify-between items-center">
-                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-indigo-600" />{viewMode === 'set' ? '套收管理' : viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
+                    <h2 className="font-bold text-xl flex items-center gap-2"><Package className="w-6 h-6 text-blue-600" />{viewMode === 'set' ? '套收管理' : viewMode === 'bulk' ? '盤收管理' : '專輯管理'}</h2>
                     {(viewMode === 'bulk' || viewMode === 'set') && (
                         <div className="flex gap-2">
                             <button onClick={viewMode === 'set' ? () => setShowBatchSelector(true) : onAdd} className="bg-black text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-gray-800 transition-all flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button>
@@ -3759,7 +3760,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                     </div>
                     <div className="space-y-3">
                         {filteredRecords.map(record => (
-                            <div key={record.id} onClick={() => onEdit(record)} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-indigo-300 group active:scale-95 transition-transform">
+                            <div key={record.id} onClick={() => onEdit(record)} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-blue-300 group active:scale-95 transition-transform">
                                 <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border relative">
                                     {record.image ? <Image src={record.image} alt={record.name || 'set'} fill sizes="48px" className="object-cover" unoptimized={true} /> : <Package className="w-6 h-6 text-gray-300 m-auto mt-3" />}
                                 </div>
@@ -3771,7 +3772,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                                     {record.status && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${getStatusStyle(record.status)}`}>{record.status}</span>}
                                     {record.source && <span className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 font-bold truncate max-w-[80px]">{record.source}</span>}
                                 </div>
-                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 transition-colors" />
+                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
                             </div>
                         ))}
                         {filteredRecords.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有符合條件的套收記錄</div>}
@@ -3785,7 +3786,7 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {filteredRecords.map(record => (
-                            <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md flex flex-col h-full">
+                            <div key={record.id} onClick={() => onEdit(record)} className="cursor-pointer group active:scale-95 transition-transform bg-white rounded-2xl p-2 border border-transparent shadow-sm hover:border-blue-200 hover:shadow-md flex flex-col h-full">
                                 <div className="aspect-square bg-gray-200 rounded-xl overflow-hidden relative border border-gray-100 mb-2 flex-shrink-0">
                                     {/* 🌟 限制包裹清單的縮圖檔案大小 */}
                                     {record.image ? <Image src={record.image} alt={record.name || 'bulk'} fill sizes="150px" className="object-cover pointer-events-none" unoptimized={true} /> : <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100"><Package className="w-10 h-10 opacity-30" /></div>}
@@ -3808,18 +3809,18 @@ function BulkTab({ cards, records, allRecords, onAdd, onEdit, onAddSet, inventor
                 <>
                     <div className="space-y-3 px-2">
                         {albumList.map(album => (
-                            <div key={album.id} onClick={() => setViewingAlbum(album)} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-indigo-300 group active:scale-95 transition-transform">
+                            <div key={album.id} onClick={() => setViewingAlbum(album)} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-blue-300 group active:scale-95 transition-transform">
                                 <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border">
                                     {album.image ? <Image src={album.image} alt={album.name} width={48} height={48} className="w-full h-full object-cover" unoptimized={true} /> : <Disc className="w-6 h-6 text-gray-300 m-auto" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="font-bold text-gray-800 text-sm truncate">{album.name}</div>
                                     <div className="text-xs text-gray-500 flex gap-4 mt-1">
-                                        <span>未拆: <span className="font-bold text-indigo-600">{album.stats['未拆']?.count || 0}</span></span>
+                                        <span>未拆: <span className="font-bold text-blue-600">{album.stats['未拆']?.count || 0}</span></span>
                                         <span>空專: <span className="font-bold text-gray-600">{album.stats['空專']?.count || 0}</span></span>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 transition-colors" />
+                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
                             </div>
                         ))}
                         {albumList.length === 0 && <div className="text-center py-10 text-gray-400">目前沒有專輯庫存</div>}
@@ -4068,7 +4069,7 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                                             setAlbumPrices(newPrices);
                                             localStorage.setItem('album_prices', JSON.stringify(newPrices));
                                         }}
-                                        className="w-full bg-gray-50 border-none rounded-lg py-2 pl-6 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+                                        className="w-full bg-gray-50 border-none rounded-lg py-2 pl-6 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all"
                                     />
                                 </div>
                             </div>
@@ -4087,7 +4088,7 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                             <div 
                                 key={inv.id} 
                                 onClick={() => { setTempInvData(inv); setActiveModal('editInv'); }}
-                                className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-indigo-300 group"
+                                className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform hover:border-blue-300 group"
                             >
                                 <div>
                                     <div className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -4098,7 +4099,7 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                                         }
                                     </div>
                                     <div className="flex gap-2 mt-1 flex-wrap">
-                                    {inv.status && <span className={`text-[10px] px-1.5 rounded ${inv.status === '到貨' ? 'bg-green-50 text-green-600' : inv.status === '囤貨' ? 'bg-indigo-50 text-indigo-600' : inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' : inv.status === '未知' ? 'bg-black text-white' : 'bg-gray-50 text-gray-600'}`}>{inv.status}</span>}
+                                    {inv.status && <span className={`text-[10px] px-1.5 rounded ${inv.status === '到貨' ? 'bg-green-50 text-green-600' : inv.status === '囤貨' ? 'bg-blue-50 text-blue-600' : inv.status === '未發貨' ? 'bg-pink-50 text-pink-600' : inv.status === '未知' ? 'bg-black text-white' : 'bg-gray-50 text-gray-600'}`}>{inv.status}</span>}
                                         {inv.source && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded">{inv.source}</span>}
                                         <span className="text-xs text-gray-500">{inv.note || '無備註'}</span>
                                         <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 rounded border border-purple-100 flex items-center gap-1"><Disc className="w-3 h-3" /> {inv.albumStatus} x{inv.albumQuantity}</span>
@@ -4137,7 +4138,7 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
                                                 e.stopPropagation();
                                                 onOpenBulkRecord && onOpenBulkRecord(tempInvData.bulkRecordId);
                                             }}
-                                            className="text-[11px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-indigo-100 transition-colors tracking-normal font-bold"
+                                            className="text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-blue-100 transition-colors tracking-normal font-bold"
                                         >
                                             <Package className="w-3 h-3" />
                                             {isParentSet ? '編輯套收' : '編輯盤收'}
@@ -4495,7 +4496,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                if (disableToggleOff && isSelected) return; 
                                onChange(isSelected ? 'All' : id);
                            }}
-                           className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                           className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                        >
                            {name}
                        </button>
@@ -4567,7 +4568,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                     
                     <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center">
                         <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
-                        <button onClick={() => setViewMode('selected')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'selected' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}>已選 ({localItems.length})</button>
+                        <button onClick={() => setViewMode('selected')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'selected' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>已選 ({localItems.length})</button>
                     </div>
                 </div>
             </div>
@@ -4577,13 +4578,13 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                 {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
                 {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
                 {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
-                <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group">
+                <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-all group">
                     <div className="flex items-center gap-2 overflow-hidden">
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
                         <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                        <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                        <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-blue-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
                 </div>
             </div>
 
@@ -4616,7 +4617,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
 
                         return (
                             <div key={card.id} 
-                                className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-indigo-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
+                                className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
                                 style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                 onMouseDown={() => startPress(card.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                 onTouchStart={() => startPress(card.id)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
@@ -4634,7 +4635,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                     )}
                                 </div>
                                 {count > 0 && (
-                                    <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow z-10">
+                                    <div className="absolute top-1 right-1 bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow z-10">
                                         {count}
                                     </div>
                                 )}
@@ -5202,15 +5203,15 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                         <ImageUploader image={form.image} aspect={1} onChange={img => handleFormChange('image', img)} className="w-full h-full rounded-xl" />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <input type="text" placeholder={isSetMode ? "輸入套收名稱" : "輸入盤收名稱"} value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-indigo-500 outline-none pb-1 placeholder-gray-300" />
+                        <input type="text" placeholder={isSetMode ? "輸入套收名稱" : "輸入盤收名稱"} value={form.name} onChange={e => handleFormChange('name', e.target.value)} className="w-full text-lg font-black text-gray-800 bg-transparent border-b border-gray-200 focus:border-blue-500 outline-none pb-1 placeholder-gray-300" />
                         <div className="grid grid-cols-2 gap-2 mt-2">
                              <div className="relative">
-                                <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-indigo-200">
+                                <select value={form.status} onChange={e => handleFormChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 appearance-none focus:ring-1 focus:ring-blue-200">
                                 <option value="未發貨">未發貨</option><option value="囤貨">囤貨</option><option value="到貨">到貨</option><option value="未知">未知</option>
                                 </select>
                                 <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
-                            <input type="date" value={form.buyDate} onChange={e => handleFormChange('buyDate', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-indigo-200" />
+                            <input type="date" value={form.buyDate} onChange={e => handleFormChange('buyDate', e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-2 rounded-lg outline-none text-xs font-bold text-gray-700 focus:ring-1 focus:ring-blue-200" />
                         </div>
                         <div className="mt-3">
                             <FormCapsuleSelect label="來源" options={uniqueSources || []} value={form.source} onChange={val => handleFormChange('source', val)} allowCustom={true} placeholder="自訂來源..." onOptionEdit={onRenameSource} onDelete={onDeleteSource} onOptionDelete={onDeleteSource} />
@@ -5241,7 +5242,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                 <div>
                     <div className="flex justify-between items-end mb-3 px-1">
                         <div className="font-bold text-gray-800 text-sm">小卡清單 <span className="text-gray-400 text-xs ml-1">({cardItems.length} 張)</span></div>
-                        <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
+                        <button onClick={() => setShowCardSelector(true)} className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-full flex items-center gap-1 font-bold transition-colors"><Plus className="w-3 h-3"/> 新增卡片</button>
                     </div>
                     
                     <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar px-1 pb-4">
@@ -5261,7 +5262,7 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                             const displayTitle = [cardSeries?.shortName || cardSeries?.name, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                             return (
-                                <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
+                                <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-blue-50/30' : ''}`}>
                                     <div 
                                         className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none"
                                         style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
@@ -5320,15 +5321,15 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         </div>
                                         <div className="flex flex-col items-end">
                                             <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
-                                                {item.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                {item.isManual ? <span className="text-blue-500">自訂購入</span> : <span className="text-red-400">購入</span>}
                                             </label>
                                             <div className="flex items-baseline">
-                                                <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-blue-500' : 'text-red-500'}`}>$</span>
                                                 <input 
                                                     type="number" placeholder="0" step="50" min="0"
                                                     value={item.buyPrice} 
                                                     onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} 
-                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-blue-600 placeholder-blue-200 focus:border-blue-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
                                                 />
                                             </div>
                                         </div>
@@ -5468,15 +5469,15 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                         </div>
                                         <div className="flex flex-col items-end">
                                             <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
-                                                {misc.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                                {misc.isManual ? <span className="text-blue-500">自訂購入</span> : <span className="text-red-400">購入</span>}
                                             </label>
                                             <div className="flex items-baseline">
-                                                <span className={`text-[10px] font-bold mr-0.5 ${misc.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
+                                                <span className={`text-[10px] font-bold mr-0.5 ${misc.isManual ? 'text-blue-500' : 'text-red-500'}`}>$</span>
                                                 <input 
                                                     type="number" placeholder="0" step="50" min="0" 
                                                     value={misc.buyPrice} 
                                                     onChange={e => handleMiscChange(misc.id, 'buyPrice', e.target.value)} 
-                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${misc.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
+                                                    className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${misc.isManual ? 'text-blue-600 placeholder-blue-200 focus:border-blue-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} 
                                                 />
                                             </div>
                                         </div>
@@ -5555,10 +5556,10 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
                                 }}
                                 className="cursor-pointer group flex flex-col items-center gap-1"
                             >
-                                <div className="w-full aspect-square rounded-lg bg-gray-100 overflow-hidden border group-hover:border-indigo-500 transition-all relative">
+                                <div className="w-full aspect-square rounded-lg bg-gray-100 overflow-hidden border group-hover:border-blue-500 transition-all relative">
                                     {album.image ? <Image src={album.image} alt={album.name} fill sizes="150px" className="object-cover" unoptimized={true} /> : <Disc className="w-8 h-8 text-gray-300 m-auto" />}
                                 </div>
-                                <p className="text-xs font-bold text-center mt-1 group-hover:text-indigo-600 line-clamp-2">{album.name}</p>
+                                <p className="text-xs font-bold text-center mt-1 group-hover:text-blue-600 line-clamp-2">{album.name}</p>
                             </div>
                         ))}
                     </div>
@@ -5661,7 +5662,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
          </div>
          <div className={`flex gap-2 ${isEdit ? 'flex-1 justify-end ml-2' : 'w-full'}`}>
             <button onClick={onClose} className="flex-1 py-2 rounded-lg border text-gray-500 hover:bg-gray-100">取消</button>
-            <button onClick={handleSave} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-bold">
+            <button onClick={handleSave} className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-bold">
                 {type === 'card' && bulkImages.length > 1 ? `批量建立 (${bulkImages.length}張)` : isEdit ? '儲存修改' : '確認新增'}
             </button>
          </div>
@@ -5748,7 +5749,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                         id="enableCrop"
                         checked={enableCrop} 
                         onChange={e => setEnableCrop(e.target.checked)} 
-                        className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                        className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
                     <label htmlFor="enableCrop" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
                         上傳後進行圖片裁切與放大
@@ -5772,7 +5773,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                     label="點擊上傳 (可多選)"
                     className="h-40"
                 />
-                {bulkImages.length > 1 && <p className="text-xs text-indigo-600 font-bold text-center">已選擇 {bulkImages.length} 張圖片，將建立 {bulkImages.length} 筆資料</p>}
+                {bulkImages.length > 1 && <p className="text-xs text-blue-600 font-bold text-center">已選擇 {bulkImages.length} 張圖片，將建立 {bulkImages.length} 筆資料</p>}
             </div>
         ) : (
             type !== 'channel' && type !== 'type' && (
@@ -5785,7 +5786,7 @@ function AddDataModal({ title, type, onClose, onSave, onDelete, onDuplicate, ini
                                 id="enableCropEdit"
                                 checked={enableCrop} 
                                 onChange={e => setEnableCrop(e.target.checked)} 
-                                className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                                className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                             />
                             <label htmlFor="enableCropEdit" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
                                 上傳後進行圖片裁切與放大
@@ -6069,7 +6070,7 @@ function BulkOwnModal({ cards, selectedItems, onClose, onSave, series, batches, 
                         const displayTitle = [cardSeries?.shortName || cardSeries?.name, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                         return (
-                            <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-indigo-50/30' : ''}`}>
+                            <div key={item.uid} className={`flex items-center gap-4 bg-white p-2 border-b last:border-b-0 transition-colors ${item.isManual ? 'bg-blue-50/30' : ''}`}>
                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                     <div className="w-12 aspect-[2/3] flex-shrink-0 bg-gray-100 rounded overflow-hidden border relative">
                                         {card.image ? (
@@ -6093,11 +6094,11 @@ function BulkOwnModal({ cards, selectedItems, onClose, onSave, series, batches, 
                                     </div>
                                     <div className="flex flex-col items-end">
                                         <label className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1">
-                                            {item.isManual ? <span className="text-indigo-500">自訂購入</span> : <span className="text-red-400">購入</span>}
+                                            {item.isManual ? <span className="text-blue-500">自訂購入</span> : <span className="text-red-400">購入</span>}
                                         </label>
                                         <div className="flex items-baseline">
-                                            <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-indigo-500' : 'text-red-500'}`}>$</span>
-                                            <input type="number" placeholder="0" step="50" min="0" value={item.buyPrice} onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-indigo-600 placeholder-indigo-200 focus:border-indigo-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} />
+                                            <span className={`text-[10px] font-bold mr-0.5 ${item.isManual ? 'text-blue-500' : 'text-red-500'}`}>$</span>
+                                            <input type="number" placeholder="0" step="50" min="0" value={item.buyPrice} onChange={e => handleCardChange(item.uid, 'buyPrice', e.target.value)} className={`w-12 sm:w-14 text-right border-b border-gray-200 outline-none font-bold text-base py-0.5 bg-transparent transition-colors ${item.isManual ? 'text-blue-600 placeholder-blue-200 focus:border-blue-400' : 'text-red-600 placeholder-red-200 focus:border-red-400'}`} />
                                         </div>
                                     </div>
                                 </div>
@@ -6115,19 +6116,19 @@ function CardMarkInput({ initialValue, onSave }) {
     const isDirty = val !== (initialValue || '');
 
     return (
-        <div className="flex items-center gap-0.5 bg-white/95 border border-indigo-400 rounded shadow-sm p-0.5 pointer-events-auto max-w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-0.5 bg-white/95 border border-blue-400 rounded shadow-sm p-0.5 pointer-events-auto max-w-full" onClick={(e) => e.stopPropagation()}>
             <input
                 type="text"
                 value={val}
                 onChange={(e) => setVal(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && isDirty && onSave(val)}
                 placeholder="標記..."
-                className="w-12 sm:w-16 text-[11px] text-indigo-900 font-bold px-1 outline-none text-right bg-transparent min-w-0"
+                className="w-12 sm:w-16 text-[11px] text-blue-900 font-bold px-1 outline-none text-right bg-transparent min-w-0"
             />
             <button
                 onClick={() => isDirty && onSave(val)}
                 disabled={!isDirty}
-                className={`p-0.5 rounded-sm transition-all flex-shrink-0 ${isDirty ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer shadow-sm' : 'bg-green-500 text-white cursor-default'}`}
+                className={`p-0.5 rounded-sm transition-all flex-shrink-0 ${isDirty ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-sm' : 'bg-green-500 text-white cursor-default'}`}
                 title={isDirty ? "點擊儲存" : "已儲存"}
             >
                 <Check className="w-3 h-3" />
@@ -7023,7 +7024,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       <button 
                           key={id}
                           onClick={() => onChange(String(id))}
-                          className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                          className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border select-none transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white font-bold' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                       >
                           {name}
                       </button>
@@ -7071,13 +7072,13 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                         }} 
                         className={`flex flex-col gap-1 relative group cursor-pointer transition-all ${
                             isReorderMode 
-                                ? (reorderSelectedId === card.id ? 'scale-95 ring-4 ring-indigo-500 rounded-lg z-10' : 'hover:scale-[0.98] opacity-90') 
+                                ? (reorderSelectedId === card.id ? 'scale-95 ring-4 ring-blue-500 rounded-lg z-10' : 'hover:scale-[0.98] opacity-90') 
                                 : 'active:scale-95'
                         } ${
                             hiddenCardIds.has(card.id) ? 'card-is-hidden-for-export' : ''
                         }`}
                     >
-                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-indigo-500' : 'border-gray-200'}`}>
+                        <div className={`relative aspect-[2/3] bg-gray-100 rounded-lg border shadow-sm flex-shrink-0 overflow-hidden ${isReorderMode && reorderSelectedId === card.id ? 'border-blue-500' : 'border-gray-200'}`}>
                             {card.image ? (
                                 <img 
                                     src={card.image} 
@@ -7168,7 +7169,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                       max="15" 
                                       value={cols} 
                                       onChange={(e) => setCols(Number(e.target.value))} 
-                                      className="w-16 sm:w-20 accent-indigo-600 cursor-pointer"
+                                      className="w-16 sm:w-20 accent-blue-600 cursor-pointer"
                                   />
                                   <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
                               </div>
@@ -7179,21 +7180,21 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                   {sortDirection === 'asc' ? '舊' : '新'}
                               </button>
                               {typeof activeView === 'object' && activeView.id && !String(activeView.id).startsWith('sys_sort_') && (
-                                  <button onClick={() => setShowCardSelector(true)} className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 shadow-sm border border-indigo-100">
+                                  <button onClick={() => setShowCardSelector(true)} className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-full flex items-center justify-center gap-1 font-bold transition-colors h-8 shadow-sm border border-blue-100">
                                       <Plus className="w-3 h-3"/> 新增卡片
                                   </button>
                               )}
-                              <button onMouseDown={handleSortButtonPressStart} onMouseUp={handleSortButtonPressEnd} onMouseLeave={handleSortButtonPressEnd} onTouchStart={handleSortButtonPressStart} onTouchEnd={handleSortButtonPressEnd} onClick={handleSortButtonClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isReorderMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="排序 | 長按切換隱藏模式 | 長按5秒重置排序">
+                              <button onMouseDown={handleSortButtonPressStart} onMouseUp={handleSortButtonPressEnd} onMouseLeave={handleSortButtonPressEnd} onTouchStart={handleSortButtonPressStart} onTouchEnd={handleSortButtonPressEnd} onClick={handleSortButtonClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isReorderMode ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="排序 | 長按切換隱藏模式 | 長按5秒重置排序">
                                   <ArrowUpDown className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-indigo-200 text-indigo-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
+                              <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${isEditMode ? 'bg-blue-200 text-blue-800 shadow-inner' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`} title="在卡片上標記">
                                   <PenTool className="w-4 h-4" />
                               </button>
                               <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
                               {activeView === 'selling' && (
-                                  <button onClick={() => setApplyFee(!applyFee)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${applyFee ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`} title="含手續費 (x1.02並進位至0或5)">
+                                  <button onClick={() => setApplyFee(!applyFee)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${applyFee ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`} title="含手續費 (x1.02並進位至0或5)">
                                       含手續費
                                   </button>
                               )}
@@ -7213,22 +7214,22 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                           )}
                           <RenderFilterSection label="子類" options={availableTypes} current={filterTypes} onChange={(val) => toggleFilter(setFilterTypes, val)} mapName={t => t.name} />
                           {activeView === 'selling' && <RenderFilterSection label="顏色" options={availableColors} current={filterColors} onChange={(val) => toggleFilter(setFilterColors, val)} isColor={true} />}
-                          <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-300 transition-all group mt-2">
+                          <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-all group mt-2">
                               <div className="flex items-center gap-2 overflow-hidden">
                                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
                                   <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                                  <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-indigo-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                                  <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-blue-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
                               </div>
-                              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
                           </div>
                           
                           {showExportLayout && (
                               <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-4 border-t mt-2">
                                   <div className="flex items-center gap-2">
                                       <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">匯出範圍</span>
-                                      <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
+                                      <input type="number" min="1" max={maxRows} value={exportStartRow} onChange={e => setExportStartRow(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-blue-400" />
                                       <span className="text-xs font-bold text-gray-400">-</span>
-                                      <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-indigo-400" />
+                                      <input type="number" min="1" max={maxRows} value={exportEndRow} onChange={e => setExportEndRow(Math.min(maxRows, Number(e.target.value)))} className="w-12 text-center bg-gray-50 border rounded-md text-xs font-bold p-1 outline-none focus:border-blue-400" />
                                       <span className="text-xs text-gray-500">排 (共 {maxRows} 排)</span>
                                   </div>
                                   
@@ -7237,14 +7238,14 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                   <div className="flex items-center gap-3">
                                       <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
                                       <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
-                                          <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer" />
+                                          <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer" />
                                           <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6</label>
                                       </div>
                                       {is4x6Mode && (
-                                          <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">
-                                              <span className="text-xs text-indigo-700 font-bold">每張</span>
-                                              <input type="number" min="1" max="50" value={cardsPerPage} onChange={e => setCardsPerPage(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-white border rounded text-xs font-bold p-1 outline-none focus:border-indigo-400 text-indigo-700" />
-                                              <span className="text-xs text-indigo-700 font-bold">卡片</span>
+                                          <div className="flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
+                                              <span className="text-xs text-blue-700 font-bold">每張</span>
+                                              <input type="number" min="1" max="50" value={cardsPerPage} onChange={e => setCardsPerPage(Math.max(1, Number(e.target.value)))} className="w-12 text-center bg-white border rounded text-xs font-bold p-1 outline-none focus:border-blue-400 text-blue-700" />
+                                              <span className="text-xs text-blue-700 font-bold">卡片</span>
                                           </div>
                                       )}
                                   </div>
@@ -7253,7 +7254,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       </div>
 
                       {isHideMode && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-bold rounded-lg text-center border border-red-100">隱藏模式：點擊卡片可將其從匯出圖片中隱藏 (已隱藏 {hiddenCardIds.size} 張)</div>}
-                      {isReorderMode && <div className="mb-4 p-3 bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg text-center border border-indigo-100 animate-pulse">{reorderSelectedId ? "請點擊另一張卡片以插入其前方" : "請點擊一張卡片開始移動"}</div>}
+                      {isReorderMode && <div className="mb-4 p-3 bg-blue-50 text-blue-700 text-sm font-bold rounded-lg text-center border border-blue-100 animate-pulse">{reorderSelectedId ? "請點擊另一張卡片以插入其前方" : "請點擊一張卡片開始移動"}</div>}
                   </div>
 
                   {/* --- 匯出繪製區塊 --- */}
@@ -7269,7 +7270,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                                   suppressContentEditableWarning 
                                                   onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
                                                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                                  className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text min-w-[50px]"
+                                                  className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-blue-200 rounded px-1 -ml-1 transition-all cursor-text min-w-[50px]"
                                                   title="點擊直接修改標題"
                                               >
                                                   {displayExportTitle}
@@ -7295,7 +7296,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                           suppressContentEditableWarning 
                                           onBlur={(e) => setCustomExportTitle(e.target.textContent.trim())}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                          className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-indigo-200 rounded px-1 -ml-1 transition-all cursor-text inline-block min-w-[50px]"
+                                          className="outline-none hover:bg-gray-100 focus:bg-gray-100 focus:ring-2 focus:ring-blue-200 rounded px-1 -ml-1 transition-all cursor-text inline-block min-w-[50px]"
                                           title="點擊直接修改標題"
                                       >
                                           {displayExportTitle}
@@ -7320,7 +7321,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
 
               {showExportLayout && (
                   <div className="fixed bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
-                      <button onClick={(e) => { e.preventDefault(); handleExportPNG(displayExportTitle); }} disabled={isExporting} className="bg-indigo-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-indigo-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
+                      <button onClick={(e) => { e.preventDefault(); handleExportPNG(displayExportTitle); }} disabled={isExporting} className="bg-blue-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-blue-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
                           <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出長圖'}
                       </button>
                   </div>
@@ -7342,7 +7343,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                       // 🌟 加入短暫延遲，防止瀏覽器阻擋連續下載
                                       await new Promise(resolve => setTimeout(resolve, 300));
                                   }
-                              }} className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2">
+                              }} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-all text-center flex items-center justify-center gap-2">
                                   <Download className="w-5 h-5" /> 下載全部 ({exportedImages.length}張)
                               </button>
                           </div>
@@ -7401,7 +7402,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">系統分類</h3>
               <div className="grid grid-cols-3 gap-4">
-                  <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group">
+                  <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
                       <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform"><Folder className="w-6 h-6 fill-current" /></div>
                       <span className="font-bold text-gray-700 text-sm">擁有</span>
                   </div>
@@ -7420,9 +7421,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">我的收藏冊</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
-                      <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group relative select-none">
+                      <div key={list.id} onClick={(e) => handleListClick(e, list)} className="bg-white p-3 sm:p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group relative select-none">
                            <div className="flex items-center gap-3 min-w-0">
-                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0 pointer-events-none"><BookOpen className="w-5 h-5 sm:w-6 sm:h-6" /></div>
                               <div className="flex flex-col min-w-0 pointer-events-none">
                                   <span className="font-bold text-gray-800 text-sm sm:text-base truncate">{list.title}</span>
                                   <span className="text-[10px] sm:text-xs text-gray-400">{(list.items || []).length} 張卡片</span>
@@ -7432,9 +7433,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       </div>
                   ))}
                   
-                  <div onClick={() => { setEditingListId(null); setListTitleInput(''); setListGroupIdInput(currentGroupId); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group select-none">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:text-indigo-500 shadow-sm flex-shrink-0"><Plus className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                      <span className="font-bold text-gray-500 group-hover:text-indigo-600 text-sm sm:text-base">新增收藏冊</span>
+                  <div onClick={() => { setEditingListId(null); setListTitleInput(''); setListGroupIdInput(currentGroupId); setIsListModalOpen(true); }} className="bg-gray-50 p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group select-none">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:text-blue-500 shadow-sm flex-shrink-0"><Plus className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                      <span className="font-bold text-gray-500 group-hover:text-blue-600 text-sm sm:text-base">新增收藏冊</span>
                   </div>
               </div>
           </section>
@@ -7451,7 +7452,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                     <div>
                         <label className="text-xs font-bold text-gray-500 mb-1.5 block">所屬團體</label>
                         <div className="relative">
-                            <select value={listGroupIdInput} onChange={e => setListGroupIdInput(e.target.value)} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100 appearance-none">
+                            <select value={listGroupIdInput} onChange={e => setListGroupIdInput(e.target.value)} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100 appearance-none">
                                 {(groups || []).map(g => (
                                     <option key={g.id} value={g.id}>{g.name}</option>
                                 ))}
@@ -7461,7 +7462,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                     </div>
                     <div>
                         <label className="text-xs font-bold text-gray-500 mb-1.5 block">收藏冊名稱</label>
-                        <input autoFocus type="text" placeholder="例如：售物清單、保留區..." value={listTitleInput} onChange={e => setListTitleInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveList()} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-indigo-100" />
+                        <input autoFocus type="text" placeholder="例如：售物清單、保留區..." value={listTitleInput} onChange={e => setListTitleInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveList()} className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100" />
                     </div>
                 </div>
             </Modal>
@@ -8170,31 +8171,6 @@ export default function App() {
       await supabase.from(tableMap[type]).delete().eq('id', id);
   };
 
-  // 🌟 資料同步功能 (Crawler)
-  const fetchCardData = async () => {
-    if (!confirm('確定要執行資料同步嗎？這將會呼叫後端爬蟲 API。')) return;
-
-    try {
-        // 呼叫自己的 Vercel 伺服器，由伺服器代為抓取，徹底避開 CORS 限制
-        const response = await fetch('/api/crawler?planets=cravity');
-        
-        if (!response.ok) {
-            throw new Error('伺服器代理請求失敗');
-        }
-
-        const data = await response.json();
-        console.log("成功抓取到資料：", data);
-        alert(`同步完成！請點擊確定以重新整理網頁載入最新卡片。`);
-        
-        // 🌟 自動重新載入頁面，讓最新的資料能立刻顯示在畫面上
-        window.location.reload();
-        
-    } catch (error) {
-        console.error("抓取失敗：", error);
-        alert("抓取失敗，請檢查 Console");
-    }
-  };
-
   // 🌟 批量入庫
   const handleBulkOwn = async (items) => {
       // 確保每一筆資料都有獨立的 ID 與預設數量 1
@@ -8574,11 +8550,24 @@ export default function App() {
 
     if (groups.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-                <Users className="w-16 h-16 text-gray-300 mb-4" />
-                <h2 className="text-xl font-bold text-gray-700 mb-2">歡迎使用小卡管家！</h2>
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+                <div className="relative mb-6">
+                    <div className="absolute -left-14 -top-3 w-16 h-20 bg-white rounded-xl border border-gray-200 shadow-md -rotate-12 hidden sm:flex items-center justify-center">
+                        <Heart className="w-6 h-6 text-pink-300" />
+                    </div>
+                    <div className="absolute -right-14 -top-1 w-16 h-20 bg-white rounded-xl border border-gray-200 shadow-md rotate-12 hidden sm:flex items-center justify-center">
+                        <Layers className="w-6 h-6 text-[#3b6bf6]" />
+                    </div>
+                    <div className="w-24 h-24 rounded-3xl bg-white border border-gray-200 shadow-lg flex flex-col overflow-hidden">
+                        <div className="h-5 bg-gray-50 border-b border-gray-100 flex items-center px-2 window-dots"><span></span><span></span><span></span></div>
+                        <div className="flex-1 flex items-center justify-center">
+                            <Users className="w-9 h-9 text-[#3b6bf6]" />
+                        </div>
+                    </div>
+                </div>
+                <h2 className="font-display text-2xl font-bold text-gray-800 mb-2">歡迎使用小卡管家！</h2>
                 <p className="text-gray-500 mb-6">點擊下方按鈕，建立你的第一個團體開始管理吧。</p>
-                <button onClick={() => openModal('group')} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700">
+                <button onClick={() => openModal('group')} className="bg-[#3b6bf6] text-white px-6 py-3 rounded-full font-bold shadow-[0_8px_20px_rgba(59,107,246,0.35)] hover:bg-[#2749d6] transition-colors">
                     + 新增團體
                 </button>
             </div>
@@ -8669,11 +8658,10 @@ export default function App() {
             uniqueSources={uniqueSources}
             onRenameSource={handleRenameSource}
             onDeleteSource={handleDeleteSource}
-            onSyncData={fetchCardData}
                 subunits={currentSubunits}
                 types={currentTypes}
         />;
-        case 'inventory': 
+        case 'inventory':
         return <InventoryTab 
             cards={currentCards} 
             inventory={currentInventory} 
@@ -8726,49 +8714,28 @@ export default function App() {
           showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
           setShowPrices={setExportShowPrices}
         />;
-      case 'sync':
-        return <SyncTab 
-          cards={currentCards} 
-          allCards={cards}
-          setCards={setCards} 
-          pocaCards={pocaCards} 
-          setPocaCards={setPocaCards} 
-          groups={groups} 
-          members={currentMembers} 
-          series={currentSeries} 
-          batches={currentBatches}
-          channels={currentChannels}
-          types={currentTypes}
-          subunits={currentSubunits}
-          currentGroupId={currentGroupId} 
-          onSyncData={fetchCardData} 
-          appSettings={appSettings}
-          onUpdateSetting={handleUpdateAppSetting}
-          prices={prices} // 🌟 傳入 prices
-        />;
       default: return null;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20 md:pb-0">
-      <nav className="bg-white/70 backdrop-blur-lg border-b border-white/20 shadow-sm sticky top-0 z-40 px-4">
+    <div className="min-h-screen app-dotted-bg text-gray-800 font-sans pb-20 md:pb-0">
+      <nav className="bg-white/80 backdrop-blur-lg border-b border-gray-100 shadow-sm sticky top-0 z-40 px-4">
         <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
-          <Link href="/admin" className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-            <div className="bg-indigo-600 p-2 rounded-lg">
+          <Link href="/admin" className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity">
+            <div className="bg-[#3b6bf6] p-2 rounded-xl shadow-[0_4px_14px_rgba(59,107,246,0.35)]">
               <Grid className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-xl text-indigo-900 hidden sm:block">小卡管家</span>
+            <span className="font-display font-bold text-xl text-gray-900 hidden sm:block tracking-tight">小卡管家</span>
           </Link>
 
           {groups.length > 0 && (
-            <div className="flex space-x-1 overflow-x-auto no-scrollbar mx-4">
+            <div className="flex space-x-1 overflow-x-auto no-scrollbar mx-4 bg-gray-100/80 p-1 rounded-full">
               {[
                 { id: 'library', icon: Layers, label: '圖鑑' },
                 { id: 'collection', icon:  CheckCircle, label: '收藏' },
                 { id: 'bulk', icon: Package, label: '管理' },
                 { id: 'inventory', icon: List, label: '紀錄' },
-                { id: 'sync', icon: RefreshCw, label: '同步' },
                 { id: 'export', icon: Share2, label: '輸出' },
               ].map(tab => (
                 <button
@@ -8781,9 +8748,9 @@ export default function App() {
                       setBatchCategorizeTarget(null);
                   }}
                   className={`px-3 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
-                    activeTab === tab.id 
-                      ? 'bg-black text-white shadow-md' 
-                      : 'text-gray-500 hover:bg-gray-100'
+                    activeTab === tab.id
+                      ? 'bg-[#3b6bf6] text-white shadow-md'
+                      : 'text-gray-500 hover:bg-white'
                   }`}
                 >
                   <tab.icon className="w-4 h-4" />
@@ -8794,7 +8761,7 @@ export default function App() {
           )}
 
           <div className="relative">
-            <div 
+            <div
                 className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-gray-100 transition-colors"
                 onClick={() => setShowGroupSelector(!showGroupSelector)}
                 onDoubleClick={(e) => {
@@ -8807,7 +8774,7 @@ export default function App() {
             >
                 {currentGroup ? (
                     <>
-                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-indigo-600 shadow-md flex items-center justify-center bg-gray-100">
+                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#3b6bf6] shadow-md flex items-center justify-center bg-gray-100">
                             {currentGroup.image ? <img src={currentGroup.image} alt={currentGroup.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-gray-400"/>}
                         </div>
                         <ChevronDown className="w-4 h-4 text-gray-500" />
@@ -8822,16 +8789,16 @@ export default function App() {
             {showGroupSelector && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowGroupSelector(false)}></div>
-                    <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in">
+                    <div className="absolute right-0 top-12 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in">
                         <div className="p-2 border-b bg-gray-50 text-xs font-bold text-gray-500">切換團體</div>
                         <div className="max-h-60 overflow-y-auto no-scrollbar">
                             {(groups || []).map(g => (
-                                <Link 
+                                <Link
                                     href={`/?group=${g.id}`}
                                     key={g.id}
-                                    onDoubleClick={(e) => { e.preventDefault(); setShowGroupSelector(false); openModal('group', g); }} 
+                                    onDoubleClick={(e) => { e.preventDefault(); setShowGroupSelector(false); openModal('group', g); }}
                                     onClick={() => { setCurrentGroupId(g.id); setShowGroupSelector(false); }}
-                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'}`}
+                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-[#eaf0ff] text-[#2749d6]' : 'text-gray-700'}`}
                                 >
                                     <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-100 overflow-hidden border">
                                         {g.image ? <img src={g.image} className="w-full h-full object-cover" /> : <Users className="w-4 h-4 m-2 text-gray-400"/>}
@@ -8841,9 +8808,9 @@ export default function App() {
                                 </Link>
                             ))}
                         </div>
-                        <div 
+                        <div
                             onClick={() => { setShowGroupSelector(false); openModal('group'); }}
-                            className="p-3 border-t hover:bg-gray-50 cursor-pointer flex items-center gap-2 text-indigo-600 font-bold text-sm"
+                            className="p-3 border-t hover:bg-gray-50 cursor-pointer flex items-center gap-2 text-[#3b6bf6] font-bold text-sm"
                         >
                             <Plus className="w-4 h-4" /> 新增團體
                         </div>
@@ -8975,7 +8942,7 @@ export default function App() {
               <div className="font-bold text-gray-700 flex flex-col sm:flex-row sm:items-center gap-2">
                   {batchCategorizeTarget ? (
                       <div className="flex items-center gap-2">
-                          <span className="text-indigo-600">歸類至「{batchCategorizeTarget.name}」</span>
+                          <span className="text-blue-600">歸類至「{batchCategorizeTarget.name}」</span>
                           <span className="text-[10px] text-gray-500 font-normal bg-gray-100 px-1.5 py-0.5 rounded">
                               已選 {selectedItems.length} 卡{selectedBatches?.length > 0 ? `, ${selectedBatches.length} 批次` : ''}
                           </span>
@@ -9001,7 +8968,7 @@ export default function App() {
                   {batchCategorizeTarget ? (
                       <button 
                         onClick={handleBatchCategorize} 
-                        className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-50"
+                        className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold disabled:opacity-50"
                       >
                           確認歸類
                       </button>
@@ -9067,7 +9034,7 @@ export default function App() {
                           className="w-full text-left p-4 text-sm hover:bg-gray-50 rounded-xl border flex justify-between items-center group transition-colors"
                       >
                           <span className="font-bold text-gray-700">{list.title}</span>
-                          <Plus className="w-5 h-5 text-gray-300 group-hover:text-indigo-600" />
+                          <Plus className="w-5 h-5 text-gray-300 group-hover:text-blue-600" />
                       </button>
                   ))}
               </div>
