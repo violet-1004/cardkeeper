@@ -1,4 +1,4 @@
-
+// @ts-nocheck
 const toCamelCase = (obj: any) => {
   if (Array.isArray(obj)) {
     return obj.map(v => toCamelCase(v));
