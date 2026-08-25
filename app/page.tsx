@@ -1429,15 +1429,23 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     <div className="font-bold text-gray-800 text-sm">販售</div>
                                     {pocaData && (() => {
                                         const pocaKrwPrice = (!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0);
+                                        // 🌟 POCA₩ 為 0 代表這張卡目前未上架/未售，顯示 [未售] 而不是 ₩0
+                                        const isUnsold = pocaKrwPrice === 0;
                                         // 🌟 換算後的台幣金額：[(POCA₩ / a) + 6] * b + c，變數未設定時 twdPrice 為 null 不顯示
-                                        const twdPrice = convertPocaKrwToTwd(pocaKrwPrice, appSettings);
+                                        const twdPrice = isUnsold ? null : convertPocaKrwToTwd(pocaKrwPrice, appSettings);
                                         return (
                                             <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                                 <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
-                                                <span className="text-green-600 font-bold">₩{pocaKrwPrice}</span>
-                                                <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
-                                                {twdPrice !== null && (
-                                                    <span className="text-blue-600 font-bold border-l border-green-200 pl-1.5 ml-0.5">≈NT${Math.round(twdPrice).toLocaleString()}</span>
+                                                {isUnsold ? (
+                                                    <span className="text-gray-400 font-bold">[未售]</span>
+                                                ) : (
+                                                    <>
+                                                        <span className="text-green-600 font-bold">₩{pocaKrwPrice}</span>
+                                                        <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
+                                                        {twdPrice !== null && (
+                                                            <span className="text-blue-600 font-bold border-l border-green-200 pl-1.5 ml-0.5">≈NT${Math.round(twdPrice).toLocaleString()}</span>
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         );
@@ -3095,9 +3103,11 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocaCard || card.PocaCard || card.poca_id;
                 const pocaData = matchedPocaId ? pocaMap[String(matchedPocaId)] : null;
                 const pocaPrice = pocaData ? ((!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)) : null;
+                // 🌟 POCA₩ 為 0 代表這張卡目前未上架/未售，顯示 [未售]，不換算台幣也不顯示原始價格
+                const isPocaUnsold = pocaPrice === 0;
                 // 🌟 收藏頁小卡下方改顯示換算後的台幣金額（[(POCA₩ / a) + 6] * b + c）；
                 // 變數未設定時 twdPrice 為 null，退回顯示原本的 POCA₩ 價格
-                const pocaTwdPrice = convertPocaKrwToTwd(pocaPrice, appSettings);
+                const pocaTwdPrice = isPocaUnsold ? null : convertPocaKrwToTwd(pocaPrice, appSettings);
 
                 return (
                     <div
@@ -3173,9 +3183,9 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                             <div className="px-0.5 sm:px-1">
                             <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 flex items-center gap-1 flex-wrap">
                                 <span>{memberName}</span>
-                                {detailLevel === 2 && pocaPrice && (
-                                    <span className="text-green-600 bg-green-50 border border-green-200/50 px-1 rounded font-bold normal-case tracking-tight whitespace-nowrap">
-                                        {pocaTwdPrice !== null ? `NT$${Math.round(pocaTwdPrice).toLocaleString()}` : `$${pocaPrice}`}
+                                {detailLevel === 2 && pocaPrice !== null && (
+                                    <span className={`px-1 rounded font-bold normal-case tracking-tight whitespace-nowrap border ${isPocaUnsold ? 'text-gray-400 bg-gray-50 border-gray-200/50' : 'text-green-600 bg-green-50 border-green-200/50'}`}>
+                                        {isPocaUnsold ? '[未售]' : (pocaTwdPrice !== null ? `NT$${Math.round(pocaTwdPrice).toLocaleString()}` : `$${pocaPrice}`)}
                                     </span>
                                 )}
                             </div>

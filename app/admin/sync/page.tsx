@@ -674,7 +674,8 @@ export default function SyncPage() {
 
     const handleMissingPriceSubmit = async () => {
         const val = Number(manualPriceInput);
-        if (isNaN(val) || val <= 0) return alert("請輸入有效的轉換價格");
+        // 🌟 允許輸入 0：代表這張 POCA 卡目前未上架/未售，前台會顯示 [未售] 而不是 ₩0
+        if (manualPriceInput === '' || isNaN(val) || val < 0) return alert("請輸入有效的轉換價格（未售請輸入 0）");
         const originalPrice = missingPriceCard.originalPrice;
         priceMappingRef.current[originalPrice] = val;
         handleUpdateAppSetting('poca_price_mapping', JSON.stringify(priceMappingRef.current));
@@ -1426,7 +1427,13 @@ export default function SyncPage() {
                                                 <img src={p.image} className="absolute inset-0 w-full h-full object-cover" />
                                                 <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
                                                     <div className="text-[9px] text-white font-bold truncate">{p.id}</div>
-                                                    <div className="text-[9px] text-green-300 font-bold">${(!isNaN(Number(p.price)) && Number(p.price) > 100) ? Number(p.price) : Number(p.idC ?? p.id_c ?? p.price ?? 0)}</div>
+                                                    {(() => {
+                                                        const pPrice = (!isNaN(Number(p.price)) && Number(p.price) > 100) ? Number(p.price) : Number(p.idC ?? p.id_c ?? p.price ?? 0);
+                                                        // 🌟 POCA₩ 為 0 代表未上架/未售，顯示 [未售] 而不是 $0
+                                                        return pPrice === 0
+                                                            ? <div className="text-[9px] text-gray-400 font-bold">[未售]</div>
+                                                            : <div className="text-[9px] text-green-300 font-bold">${pPrice}</div>;
+                                                    })()}
                                                 </div>
                                             </div>
                                             {selectedPocaId === p.id && <div className="absolute top-1 right-1 bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow z-10"><Check className="w-3 h-3 text-white" /></div>}
@@ -1752,9 +1759,9 @@ export default function SyncPage() {
                                 </div>
                                 <div className="font-bold text-red-500 text-lg">原始價格 (美金): {(missingPriceCard as any).originalPrice}</div>
                                 <div className="w-full">
-                                    <label className="text-xs font-bold text-gray-500 mb-1 block text-left">對照後價格 (韓幣)</label>
+                                    <label className="text-xs font-bold text-gray-500 mb-1 block text-left">對照後價格 (韓幣，未售請輸入 0)</label>
                                     <input
-                                        autoFocus type="number" step="0.1" placeholder="例如: 500"
+                                        autoFocus type="number" step="0.1" min="0" placeholder="例如: 500，未售填 0"
                                         value={manualPriceInput} onChange={(e) => setManualPriceInput(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleMissingPriceSubmit()}
                                         className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
