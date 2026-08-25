@@ -8556,18 +8556,18 @@ export default function App() {
                         <Heart className="w-6 h-6 text-pink-300" />
                     </div>
                     <div className="absolute -right-14 -top-1 w-16 h-20 bg-white rounded-xl border border-gray-200 shadow-md rotate-12 hidden sm:flex items-center justify-center">
-                        <Layers className="w-6 h-6 text-[#3b6bf6]" />
+                        <Layers className="w-6 h-6 text-[#9B90C2]" />
                     </div>
                     <div className="w-24 h-24 rounded-3xl bg-white border border-gray-200 shadow-lg flex flex-col overflow-hidden">
                         <div className="h-5 bg-gray-50 border-b border-gray-100 flex items-center px-2 window-dots"><span></span><span></span><span></span></div>
                         <div className="flex-1 flex items-center justify-center">
-                            <Users className="w-9 h-9 text-[#3b6bf6]" />
+                            <Users className="w-9 h-9 text-[#9B90C2]" />
                         </div>
                     </div>
                 </div>
                 <h2 className="font-display text-2xl font-bold text-gray-800 mb-2">歡迎使用小卡管家！</h2>
                 <p className="text-gray-500 mb-6">點擊下方按鈕，建立你的第一個團體開始管理吧。</p>
-                <button onClick={() => openModal('group')} className="bg-[#3b6bf6] text-white px-6 py-3 rounded-full font-bold shadow-[0_8px_20px_rgba(59,107,246,0.35)] hover:bg-[#2749d6] transition-colors">
+                <button onClick={() => openModal('group')} className="bg-[#9B90C2] text-white px-6 py-3 rounded-full font-bold shadow-[0_8px_20px_rgba(155,144,194,0.35)] hover:bg-[#7C739B] transition-colors">
                     + 新增團體
                 </button>
             </div>
@@ -8723,7 +8723,7 @@ export default function App() {
       <nav className="bg-white/80 backdrop-blur-lg border-b border-gray-100 shadow-sm sticky top-0 z-40 px-4">
         <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
           <Link href="/admin" className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity">
-            <div className="bg-[#3b6bf6] p-2 rounded-xl shadow-[0_4px_14px_rgba(59,107,246,0.35)]">
+            <div className="bg-[#9B90C2] p-2 rounded-xl shadow-[0_4px_14px_rgba(155,144,194,0.35)]">
               <Grid className="w-5 h-5 text-white" />
             </div>
             <span className="font-display font-bold text-xl text-gray-900 hidden sm:block tracking-tight">小卡管家</span>
@@ -8749,7 +8749,7 @@ export default function App() {
                   }}
                   className={`px-3 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
                     activeTab === tab.id
-                      ? 'bg-[#3b6bf6] text-white shadow-md'
+                      ? 'bg-[#9B90C2] text-white shadow-md'
                       : 'text-gray-500 hover:bg-white'
                   }`}
                 >
@@ -8774,7 +8774,7 @@ export default function App() {
             >
                 {currentGroup ? (
                     <>
-                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#3b6bf6] shadow-md flex items-center justify-center bg-gray-100">
+                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#9B90C2] shadow-md flex items-center justify-center bg-gray-100">
                             {currentGroup.image ? <img src={currentGroup.image} alt={currentGroup.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-gray-400"/>}
                         </div>
                         <ChevronDown className="w-4 h-4 text-gray-500" />
@@ -8798,7 +8798,7 @@ export default function App() {
                                     key={g.id}
                                     onDoubleClick={(e) => { e.preventDefault(); setShowGroupSelector(false); openModal('group', g); }}
                                     onClick={() => { setCurrentGroupId(g.id); setShowGroupSelector(false); }}
-                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-[#eaf0ff] text-[#2749d6]' : 'text-gray-700'}`}
+                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-[#EEEBF5] text-[#7C739B]' : 'text-gray-700'}`}
                                 >
                                     <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-100 overflow-hidden border">
                                         {g.image ? <img src={g.image} className="w-full h-full object-cover" /> : <Users className="w-4 h-4 m-2 text-gray-400"/>}
@@ -8810,7 +8810,7 @@ export default function App() {
                         </div>
                         <div
                             onClick={() => { setShowGroupSelector(false); openModal('group'); }}
-                            className="p-3 border-t hover:bg-gray-50 cursor-pointer flex items-center gap-2 text-[#3b6bf6] font-bold text-sm"
+                            className="p-3 border-t hover:bg-gray-50 cursor-pointer flex items-center gap-2 text-[#9B90C2] font-bold text-sm"
                         >
                             <Plus className="w-4 h-4" /> 新增團體
                         </div>

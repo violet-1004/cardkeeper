@@ -5,10 +5,10 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* 🌟 playful accent palette (heyclicky-inspired) */
-  --accent: #3b6bf6;
-  --accent-dark: #2749d6;
-  --accent-soft: #eaf0ff;
+  /* 🌟 playful accent palette — theme color #9B90C2 */
+  --accent: #9B90C2;
+  --accent-dark: #7C739B;
+  --accent-soft: #EEEBF5;
   --dot-color: rgba(17, 24, 39, 0.08);
 }
 
@@ -18,6 +18,34 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: 'Baloo 2', var(--font-geist-sans);
+
+  /* 🌟 Theme color override: every bg-blue, text-blue, border-blue class (and the
+     indigo classes still used in app/admin/sync/page.tsx) now renders as this
+     lavender scale, anchored at #9B90C2 for the 600 shade used by primary
+     buttons and active states throughout the app. */
+  --color-blue-50: #FAF9FC;
+  --color-blue-100: #F5F4F9;
+  --color-blue-200: #E6E3F0;
+  --color-blue-300: #D7D3E7;
+  --color-blue-400: #C3BCDA;
+  --color-blue-500: #AFA6CE;
+  --color-blue-600: #9B90C2;
+  --color-blue-700: #7C739B;
+  --color-blue-800: #5D5674;
+  --color-blue-900: #3E3A4E;
+  --color-blue-950: #272431;
+
+  --color-indigo-50: #FAF9FC;
+  --color-indigo-100: #F5F4F9;
+  --color-indigo-200: #E6E3F0;
+  --color-indigo-300: #D7D3E7;
+  --color-indigo-400: #C3BCDA;
+  --color-indigo-500: #AFA6CE;
+  --color-indigo-600: #9B90C2;
+  --color-indigo-700: #7C739B;
+  --color-indigo-800: #5D5674;
+  --color-indigo-900: #3E3A4E;
+  --color-indigo-950: #272431;
 }
 
 @media (prefers-color-scheme: dark) {
