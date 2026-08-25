@@ -271,6 +271,40 @@ export default function SyncPage() {
     const missingPriceResolver = useRef(null);
     const priceMappingRef = useRef({});
 
+    // 🌟 POCA₩ → 台幣換算變數：[(POCA₩ / a) + 6] * b + c
+    // a = 中韓匯率、b = 中臺匯率、c = 價差，存在 ui_settings 表，供前台卡片詳情/收藏頁讀取
+    const [rateA, setRateA] = useState('');
+    const [rateB, setRateB] = useState('');
+    const [rateC, setRateC] = useState('');
+    const [rateSaveStatus, setRateSaveStatus] = useState(''); // '' | 'saving' | 'saved'
+    const ratesInitializedRef = useRef(false);
+    useEffect(() => {
+        if (ratesInitializedRef.current) return;
+        if (!appSettings || appSettings.length === 0) return;
+        ratesInitializedRef.current = true;
+        const find = (key) => (appSettings as any[]).find(s => s.key === key)?.value ?? '';
+        setRateA(find('poca_rate_a'));
+        setRateB(find('poca_rate_b'));
+        setRateC(find('poca_price_diff_c'));
+    }, [appSettings]);
+
+    const handleSaveRates = async () => {
+        setRateSaveStatus('saving');
+        await Promise.all([
+            handleUpdateAppSetting('poca_rate_a', rateA),
+            handleUpdateAppSetting('poca_rate_b', rateB),
+            handleUpdateAppSetting('poca_price_diff_c', rateC),
+        ]);
+        setRateSaveStatus('saved');
+        setTimeout(() => setRateSaveStatus(''), 2000);
+    };
+
+    const previewTwd = useMemo(() => {
+        const a = Number(rateA), b = Number(rateB), c = Number(rateC);
+        if (!rateA || !rateB || rateC === '' || isNaN(a) || isNaN(b) || isNaN(c) || a === 0) return null;
+        return ((1000 / a) + 6) * b + c;
+    }, [rateA, rateB, rateC]);
+
     const handleUpdateAppSetting = async (key, value) => {
         setAppSettings(prev => {
             const exists = prev.some(s => s.key === key);
@@ -1014,6 +1048,7 @@ export default function SyncPage() {
                         <div className="flex space-x-1 overflow-x-auto no-scrollbar bg-gray-100 p-1 rounded-full w-fit">
                             <button onClick={() => setActiveSubTab('crawler')} className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeSubTab === 'crawler' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>批次抓取設定</button>
                             <button onClick={() => setActiveSubTab('poca_match')} className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeSubTab === 'poca_match' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>POCA對照設定</button>
+                            <button onClick={() => setActiveSubTab('price_rate')} className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeSubTab === 'price_rate' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>價格換算設定</button>
                         </div>
                     </div>
 
@@ -1163,6 +1198,58 @@ export default function SyncPage() {
                             <p className="text-gray-500 mb-6">執行同步程式以抓取最新 POCA 卡片與對照最新卡價。</p>
                             <button onClick={handlePocaCrawl} disabled={isCrawling} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50">
                                 {isCrawling ? syncProgress || '同步中...' : '執行資料同步'}
+                            </button>
+                        </div>
+                    )}
+
+                    {activeSubTab === 'price_rate' && (
+                        <div className="bg-white border rounded-xl p-6 shadow-sm mx-4 max-w-xl">
+                            <h2 className="text-xl font-bold text-gray-800 mb-1">價格換算設定</h2>
+                            <p className="text-gray-500 text-sm mb-6">
+                                前台「卡片詳情」與「收藏」頁面的 POCA₩ 價格，會用以下公式換算成台幣：
+                            </p>
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-6 text-center font-mono text-sm text-gray-700">
+                                台幣 = [(POCA₩ ÷ a) + 6] × b + c
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">a：中韓匯率</label>
+                                    <input
+                                        type="number" step="0.0001" placeholder="例如：180"
+                                        value={rateA} onChange={e => setRateA(e.target.value)}
+                                        className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">b：中臺匯率</label>
+                                    <input
+                                        type="number" step="0.0001" placeholder="例如：4.5"
+                                        value={rateB} onChange={e => setRateB(e.target.value)}
+                                        className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">c：價差</label>
+                                    <input
+                                        type="number" step="0.1" placeholder="例如：10"
+                                        value={rateC} onChange={e => setRateC(e.target.value)}
+                                        className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
+                                    />
+                                </div>
+                            </div>
+
+                            {previewTwd !== null && (
+                                <div className="mt-4 text-sm text-gray-500">
+                                    範例：POCA₩1000 → <span className="font-bold text-blue-600">NT${Math.round(previewTwd).toLocaleString()}</span>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleSaveRates}
+                                disabled={rateSaveStatus === 'saving'}
+                                className="mt-6 w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                {rateSaveStatus === 'saving' ? '儲存中...' : rateSaveStatus === 'saved' ? '已儲存 ✓' : '儲存設定'}
                             </button>
                         </div>
                     )}

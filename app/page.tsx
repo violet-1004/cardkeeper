@@ -415,6 +415,26 @@ const getOwnedQuantity = (invList, cardId) => {
         .reduce((s, i) => s + Number(i.quantity), 0);
 };
 
+// 🌟 POCA 韓幣價格換算台幣：[(POCA₩ / a) + 6] * b + c
+// a = 中韓匯率、b = 中臺匯率、c = 價差，三個變數在「後台 > 資料同步 > 價格換算設定」設定
+// 只要有任何一個變數還沒設定，就回傳 null，畫面上不顯示換算金額（避免顯示誤導性的數字）
+const getPocaRateSettings = (appSettings) => {
+    const list = appSettings || [];
+    const aRaw = list.find(s => s.key === 'poca_rate_a')?.value;
+    const bRaw = list.find(s => s.key === 'poca_rate_b')?.value;
+    const cRaw = list.find(s => s.key === 'poca_price_diff_c')?.value;
+    if (aRaw === undefined || bRaw === undefined || cRaw === undefined) return null;
+    const a = Number(aRaw), b = Number(bRaw), c = Number(cRaw);
+    if (isNaN(a) || isNaN(b) || isNaN(c) || a === 0) return null;
+    return { a, b, c };
+};
+
+const convertPocaKrwToTwd = (krwPrice, appSettings) => {
+    const rates = getPocaRateSettings(appSettings);
+    if (!rates || krwPrice === null || krwPrice === undefined || isNaN(Number(krwPrice))) return null;
+    return ((Number(krwPrice) / rates.a) + 6) * rates.b + rates.c;
+};
+
 // --- 3. 基礎 UI 組件 ---
 const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false, onBodyScroll }) => {
   const swipeHandlers = useSwipeToClose(onClose);
@@ -1068,7 +1088,7 @@ function SeriesFilterModal({
     );
 }
 
-function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords, pocaCards }) {
+function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, inventory, setInventory, sales, setSales, customLists, setCustomLists, groups, members, series, batches, channels, types, setCards, onEdit, onOpenBulkRecord, uniqueSources, onRenameSource, onDeleteSource, bulkRecords, setBulkRecords, pocaCards, appSettings }) {
     const [activeModal, setActiveModal] = useState(null); 
     const [tempInvData, setTempInvData] = useState(null);
     const saleFocusRef = useRef(null);
@@ -1407,13 +1427,21 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="font-bold text-gray-800 text-sm">販售</div>
-                                    {pocaData && (
-                                        <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
-                                            <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
-                                            <span className="text-green-600 font-bold">₩{(!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)}</span>
-                                            <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
-                                        </div>
-                                    )}
+                                    {pocaData && (() => {
+                                        const pocaKrwPrice = (!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0);
+                                        // 🌟 換算後的台幣金額：[(POCA₩ / a) + 6] * b + c，變數未設定時 twdPrice 為 null 不顯示
+                                        const twdPrice = convertPocaKrwToTwd(pocaKrwPrice, appSettings);
+                                        return (
+                                            <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
+                                                <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
+                                                <span className="text-green-600 font-bold">₩{pocaKrwPrice}</span>
+                                                <span className="text-green-500 font-medium">({pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0}張)</span>
+                                                {twdPrice !== null && (
+                                                    <span className="text-blue-600 font-bold border-l border-green-200 pl-1.5 ml-0.5">≈NT${Math.round(twdPrice).toLocaleString()}</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                             <div className="flex gap-1.5">
@@ -2336,7 +2364,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
   );
 }
 
-function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists, pocaCards }) {
+function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, members, series, batches, channels, types, sales, cols, setCols, subunits, customLists, pocaCards, appSettings }) {
   const [viewMode, setViewMode] = useState('all');
   const [detailLevel, setDetailLevel] = useState(2); // 2: all, 1: partial, 0: none
   const [hideSelling, setHideSelling] = useState(false);
@@ -3067,6 +3095,9 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocaCard || card.PocaCard || card.poca_id;
                 const pocaData = matchedPocaId ? pocaMap[String(matchedPocaId)] : null;
                 const pocaPrice = pocaData ? ((!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)) : null;
+                // 🌟 收藏頁小卡下方改顯示換算後的台幣金額（[(POCA₩ / a) + 6] * b + c）；
+                // 變數未設定時 twdPrice 為 null，退回顯示原本的 POCA₩ 價格
+                const pocaTwdPrice = convertPocaKrwToTwd(pocaPrice, appSettings);
 
                 return (
                     <div
@@ -3144,7 +3175,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                 <span>{memberName}</span>
                                 {detailLevel === 2 && pocaPrice && (
                                     <span className="text-green-600 bg-green-50 border border-green-200/50 px-1 rounded font-bold normal-case tracking-tight whitespace-nowrap">
-                                        ${pocaPrice}
+                                        {pocaTwdPrice !== null ? `NT$${Math.round(pocaTwdPrice).toLocaleString()}` : `$${pocaPrice}`}
                                     </span>
                                 )}
                             </div>
@@ -8695,6 +8726,7 @@ export default function App() {
           subunits={currentSubunits}
           customLists={customLists}
           pocaCards={pocaCards}
+          appSettings={appSettings}
         />;
       case 'bulk':
         return <BulkTab 
@@ -8989,14 +9021,14 @@ export default function App() {
       )}
 
       {viewingCard && (
-        <CardDetailModal 
+        <CardDetailModal
           currentGroupId={currentGroupId}
-          card={viewingCard} 
+          card={viewingCard}
           onClose={() => setViewingCard(null)}
           inventory={inventory}
           setInventory={setInventory}
-          sales={sales} 
-          setSales={setSales} 
+          sales={sales}
+          setSales={setSales}
           customLists={customLists}
           setCustomLists={setCustomLists}
           groups={groups}
@@ -9007,6 +9039,7 @@ export default function App() {
           types={types}
           setCards={setCards}
           cards={cards}
+          appSettings={appSettings}
           onEdit={(currentCard) => {
               setViewingCard(null); 
               openModal('card', currentCard || viewingCard);
