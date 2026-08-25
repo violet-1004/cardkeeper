@@ -2263,9 +2263,11 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                         return (
-                            <div key={card.id} 
+                            <div key={card.id}
                                 className={`cursor-pointer group relative select-none ${isSelected ? 'scale-95' : ''}`}
-                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                // 🌟 手機版圖鑑常有上百張卡片，content-visibility 讓瀏覽器跳過畫面外卡片的
+                                // 排版/繪製工作，捲動到才計算，大幅加快大量卡片時的載入與捲動速度
+                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', contentVisibility: 'auto', containIntrinsicSize: '0 260px' }}
                                 onClick={(e) => {
                                     if (isSelectionMode) {
                                         handleSelectAdd(card.id);
@@ -2292,7 +2294,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                     return (
                                         <div className={`aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border transition-all ${isSelected ? 'border-blue-600 ring-2 ring-blue-600 shadow-md' : isOriginalTarget ? 'border-pink-400 ring-2 ring-pink-400 opacity-90' : 'border-gray-100'}`}>
                                             {card.image ? (
-                                                <Image src={card.image} alt="卡片" fill loading="lazy" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
+                                                <Image src={card.image} alt="卡片" fill loading="lazy" decoding="async" sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true} />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                                     <ImageIcon className="w-8 h-8" />
@@ -3067,10 +3069,12 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const pocaPrice = pocaData ? ((!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0)) : null;
 
                 return (
-                    <div 
-                        key={card.id} 
+                    <div
+                        key={card.id}
                         className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'} ${isMarkMode ? 'ring-2 ring-transparent hover:ring-blue-300 rounded-lg' : ''}`}
-                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                        // 🌟 收藏冊常有上百張卡片，content-visibility 讓瀏覽器跳過畫面外卡片的排版/
+                        // 繪製工作，捲動到才計算，大幅加快大量卡片時的載入與捲動速度
+                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', contentVisibility: 'auto', containIntrinsicSize: '0 260px' }}
                         onMouseDown={() => startPress(card.id)}
                         onMouseUp={cancelPress}
                         onMouseLeave={cancelPress}
@@ -3108,7 +3112,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                         <div className="aspect-[2/3] rounded-lg bg-gray-200 overflow-hidden relative mb-1.5 sm:mb-2 shadow-sm border border-gray-100">
                             {/* 🌟 收藏櫃：壓縮畫質至 30%，極速載入 */}
                             {card.image ? (
-                                <Image src={card.image} alt="卡片" fill loading="lazy" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                                <Image src={card.image} alt="卡片" fill loading="lazy" decoding="async" quality={30} sizes="(max-width: 768px) 33vw, 20vw" className="object-cover pointer-events-none" unoptimized={true}/>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                     <ImageIcon className="w-8 h-8" />
@@ -3378,7 +3382,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                     const finalName = item._isBulkHeader ? `[包裹] ${item.name}` : (item.isMisc ? `[包裹] ${item.name}` : (displayTitle || '未命名卡片'));
 
                     return (
-                        <div key={item._virtualId} 
+                        <div key={item._virtualId}
                             onMouseDown={() => startPress(item)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                             onTouchStart={() => startPress(item)} onTouchEnd={cancelPress}
                             onContextMenu={(e) => { e.preventDefault(); cancelPress(); hasLongPressed.current = true; setItemToDelete(item); }}
@@ -3386,8 +3390,11 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                 if (hasLongPressed.current) return e.preventDefault();
                                 if (item._isBulkHeader && item.originalRecord && onEditBulkRecord) onEditBulkRecord(item.originalRecord);
                                 else if (card) setViewingCard(card);
-                            }} 
+                            }}
                             className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-blue-300 border border-transparent select-none"
+                            // 🌟 紀錄列表常有大量交易紀錄，content-visibility 讓畫面外的項目跳過排版/
+                            // 繪製工作，加快載入與捲動速度
+                            style={{ contentVisibility: 'auto', containIntrinsicSize: '0 66px' }}
                         >
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
@@ -3399,9 +3406,9 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                                     {item.isMisc ? (
                                         <div className="w-full h-full bg-orange-50 flex items-center justify-center text-orange-500"><Tag className="w-5 h-5" /></div>
                                     ) : item._isBulkHeader ? (
-                                        item.image ? <Image src={item.image} alt={item.name} fill sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-blue-100 flex items-center justify-center text-blue-500"><Package className="w-5 h-5" /></div>
+                                        item.image ? <Image src={item.image} alt={item.name} fill loading="lazy" decoding="async" sizes="50px" className="object-cover pointer-events-none" unoptimized={true} />: <div className="w-full h-full bg-blue-100 flex items-center justify-center text-blue-500"><Package className="w-5 h-5" /></div>
                                     ) : (card && card.image ? (
-                                        <Image src={card.image} alt="卡片" fill className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />
+                                        <Image src={card.image} alt="卡片" fill loading="lazy" decoding="async" className="object-cover pointer-events-none" sizes="50px" unoptimized={true} />
                                     ) : (
                                         <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-300"><ImageIcon className="w-4 h-4" /></div>
                                     ))}
@@ -4598,9 +4605,11 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-4">
-                <div 
+                <div
                     className="grid gap-2 sm:gap-3 pb-20"
-                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                    // 🌟 containerType 讓卡片文字可用 cqw 依實際欄寬（容器寬度 ÷ cols）等比縮放，
+                    // 手機窄螢幕 + 較多欄數（此選卡器最多可到 10 欄）時文字才不會被截斷
+                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, containerType: 'inline-size' }}
                 >
                     {filteredCards.map(card => {
                         const count = localItems.filter(i => String(i.cardId) === String(card.id)).length;
@@ -4625,9 +4634,11 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                         const displayTitle = [seriesName, channelAndBatch, displayType].filter(Boolean).join(' ');
 
                         return (
-                            <div key={card.id} 
+                            <div key={card.id}
                                 className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
-                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                                // 🌟 選卡器一次可能列出整個系列上百張卡片，content-visibility 讓畫面外的
+                                // 卡片跳過排版/繪製，捲動到才計算，加快開啟與捲動速度
+                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
                                 onMouseDown={() => startPress(card.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                 onTouchStart={() => startPress(card.id)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
                                 onContextMenu={e => { e.preventDefault(); cancelPress(); }}
@@ -4638,7 +4649,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                             >
                                 <div className="aspect-[2/3] bg-gray-100 relative">
                                     {card.image ? (
-                                        <Image src={card.image} alt="卡片" fill loading="lazy" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" unoptimized={true}/>
+                                        <Image src={card.image} alt="卡片" fill loading="lazy" decoding="async" quality={20} sizes="(max-width: 768px) 25vw, 15vw" className="object-cover pointer-events-none" unoptimized={true}/>
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-6 h-6" /></div>
                                     )}
@@ -4649,10 +4660,13 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                     </div>
                                 )}
                                 {detailLevel > 0 && (
+                                    // 🌟 字級改用 clamp(下限, 依 cols 換算的 cqw, 桌機上限)，取代固定的
+                                    // text-[9px] sm:text-[10px] 等斷點：只跟著螢幕寬度變、不跟著欄數(cols)變，
+                                    // 手機開到較多欄時文字會被截斷
                                     <div className="px-0.5 sm:px-1 bg-white pt-1 pb-1">
-                                        <div className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold mb-0.5 truncate">{memberName}</div>
-                                        <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
-                                        {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                                        <div className="text-gray-400 uppercase font-bold mb-0.5 truncate" style={{ fontSize: `clamp(7px, ${(8.5 / cols).toFixed(2)}cqw, 10px)` }}>{memberName}</div>
+                                        <div className="font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2" style={{ fontSize: `clamp(9px, ${(12 / cols).toFixed(2)}cqw, 14px)` }}>{displayTitle || '未命名卡片'}</div>
+                                        {cardBatch?.name && <div className="text-gray-400 mt-0.5 line-clamp-1" style={{ fontSize: `clamp(7px, ${(9 / cols).toFixed(2)}cqw, 9px)` }}>{cardBatch.name}</div>}
                                     </div>
                                 )}
                             </div>
@@ -6172,7 +6186,17 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [cardsPerPage, setCardsPerPage] = useState(8);
     const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
     const [applyFee, setApplyFee] = useState(false); // 🌟 新增：手續費狀態
-    
+
+    // 🌟 手機版的照片排版固定用直式 4x6（寬4吋高6吋），不像桌機那樣依欄數(cols)切換橫直。
+    // 手機螢幕本來就是直的，橫式 6x4 在窄螢幕上反而更擠，所以手機一律用直式。
+    const [isMobileViewport, setIsMobileViewport] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+    useEffect(() => {
+        const handleResize = () => setIsMobileViewport(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    const isPortraitPrint = isMobileViewport || cols < 4;
+
     // 🌟 眼睛長按邏輯 (隱藏/顯示價格)
     const pricePressTimer = useRef(null);
     const hasPriceLongPressed = useRef(false);
@@ -7162,7 +7186,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
           <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in" {...swipeHandlers}>
               <style>{`
                   @media print {
-                      @page { ${is4x6Mode ? (cols >= 4 ? "size: 6in 4in; margin: 0;" : "size: 4in 6in; margin: 0;") : "margin: 8mm;"} }
+                      @page { ${is4x6Mode ? (isPortraitPrint ? "size: 4in 6in; margin: 0;" : "size: 6in 4in; margin: 0;") : "margin: 8mm;"} }
                       body, html { overflow: visible !important; height: auto !important; background-color: #ffffff !important; }
                       .fixed.inset-0 { position: relative !important; overflow: visible !important; height: auto !important; background-color: #ffffff !important; display: block !important; }
                       .no-print { display: none !important; }
@@ -7267,7 +7291,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                       <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
                                       <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
                                           <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer" />
-                                          <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">6x4</label>
+                                          <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">{isPortraitPrint ? '4x6' : '6x4'}</label>
                                       </div>
                                       {is4x6Mode && (
                                           <div className="flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
@@ -7290,7 +7314,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       is4x6Mode ? (
                           <div className="flex flex-col gap-6 sm:gap-10 pb-20 items-center px-4 sm:px-8 print:block print:p-0 print:m-0">
                               {chunkedCards.map((chunk, i) => (
-                                  <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: cols >= 4 ? '1200px' : '800px', aspectRatio: cols >= 4 ? '3/2' : '2/3' }}>
+                                  <div key={i} className="export-page bg-white p-4 sm:p-8 shadow-md rounded-xl relative overflow-hidden border border-gray-200 mx-auto" style={{ width: '100%', maxWidth: isPortraitPrint ? '800px' : '1200px', aspectRatio: isPortraitPrint ? '2/3' : '3/2' }}>
                                       <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
                                           <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-1 sm:gap-2 min-w-0">
                                               <span 
