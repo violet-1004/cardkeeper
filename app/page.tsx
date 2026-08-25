@@ -7121,8 +7121,10 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
                                     {/* 🌟 字級改用 clamp(下限, 依 cols 換算的 cqw, 桌機上限) 動態計算，
                                         取代原本固定 20px/36px：桌機寬容器下維持原本大小，
-                                        手機窄容器（尤其 cols=4 這類常見設定）會等比縮小，價格才能完整顯示 */}
-                                    <div className={`inline-block text-white font-bold px-2.5 py-1 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: `clamp(10px, ${(12.7 / cols).toFixed(2)}cqw, ${cols >= 6 ? 20 : 36}px)` }}>{card.note}</div>
+                                        手機窄容器（尤其 4x6 模式一排 8 張這類較擠的設定）會等比縮小。
+                                        padding 改用 em（跟著字級走）取代固定的 px-2.5 py-1，
+                                        欄位很窄時膠囊本身的內距才不會把可用寬度吃光，價格才能完整顯示 */}
+                                    <div className={`inline-block text-white font-bold rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', padding: '0.3em 0.65em', fontSize: `clamp(8px, ${(12.7 / cols).toFixed(2)}cqw, ${cols >= 6 ? 20 : 36}px)` }}>{card.note}</div>
                                 </div>
                             )}
                             {hiddenCardIds.has(card.id) && (
@@ -7179,16 +7181,25 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                           </div>
                           <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-2 flex-wrap">
                               <div className="flex bg-gray-100 px-2 rounded-lg items-center h-8 gap-2">
-                                  <Grid className="w-3.5 h-3.5 text-gray-400" />
-                                  <input 
-                                      type="range" 
-                                      min="1" 
-                                      max="15" 
-                                      value={cols} 
-                                      onChange={(e) => setCols(Number(e.target.value))} 
-                                      className="w-16 sm:w-20 accent-blue-600 cursor-pointer"
+                                  <Grid className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                  {/* 🌟 手機版滑桿不好精準拖動，改成選項式下拉選單、只列 2-8 欄；
+                                      桌機維持原本 1-15 欄的滑桿 */}
+                                  <select
+                                      value={cols}
+                                      onChange={(e) => setCols(Number(e.target.value))}
+                                      className="sm:hidden bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
+                                  >
+                                      {[2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n} 欄</option>)}
+                                  </select>
+                                  <input
+                                      type="range"
+                                      min="1"
+                                      max="15"
+                                      value={cols}
+                                      onChange={(e) => setCols(Number(e.target.value))}
+                                      className="hidden sm:block w-16 sm:w-20 accent-blue-600 cursor-pointer"
                                   />
-                                  <span className="text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
+                                  <span className="hidden sm:inline-block text-xs font-bold text-gray-600 min-w-[16px] text-center">{cols}</span>
                               </div>
                               <button 
                                   onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} 
@@ -7256,7 +7267,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                       <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">排版格式</span>
                                       <div className="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-md border">
                                           <input type="checkbox" id="mode4x6" checked={is4x6Mode} onChange={e => setIs4x6Mode(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer" />
-                                          <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">4x6</label>
+                                          <label htmlFor="mode4x6" className="text-xs font-bold text-gray-700 cursor-pointer select-none">6x4</label>
                                       </div>
                                       {is4x6Mode && (
                                           <div className="flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
