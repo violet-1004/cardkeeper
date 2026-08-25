@@ -1,26 +1,8 @@
-import AdminClient from './AdminClient';
-import { fetchSeriesAndGroups } from './actions';
+import { redirect } from 'next/navigation';
 
-export const runtime = 'edge';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0; // 🌟 確保伺服器端每次都重新抓取資料，絕對不使用舊快取
-
-export default async function AdminPage() {
-    let seriesData = [];
-    let groupsData = [];
-    let error = null;
-    
-    try {
-        const data = await fetchSeriesAndGroups();
-        if (data) {
-            seriesData = data.seriesData || [];
-            groupsData = data.groupsData || [];
-            error = data.error || null;
-        }
-    } catch (error) {
-        console.error("AdminPage Fetch Error:", error.message);
-        error = error.message;
-    }
-
-    return <AdminClient initialSeries={seriesData} initialGroups={groupsData} error={error} />;
+// 🌟 這裡原本是「後台資料同步管理」(批次抓取設定)，整個功能已經搬到
+// /admin/sync 的「批次抓取設定」分頁，跟 POCA 對照設定、價格換算設定放在一起，
+// 所以這個路由不再需要獨立畫面，直接導去 /admin/sync。
+export default function AdminPage() {
+    redirect('/admin/sync');
 }
