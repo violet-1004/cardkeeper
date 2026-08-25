@@ -627,13 +627,15 @@ export default function SyncPage() {
 
     const handleSaveRates = async () => {
         setRateSaveStatus('saving');
-        await Promise.all([
+        const results = await Promise.all([
             handleUpdateAppSetting('poca_rate_a', rateA),
             handleUpdateAppSetting('poca_rate_b', rateB),
             handleUpdateAppSetting('poca_price_diff_c', rateC),
         ]);
-        setRateSaveStatus('saved');
-        setTimeout(() => setRateSaveStatus(''), 2000);
+        // 🌟 只有三筆都真的寫入成功才顯示「已儲存」，避免明明沒存到卻顯示已儲存的假象
+        const hasError = results.some(r => r?.error);
+        setRateSaveStatus(hasError ? 'error' : 'saved');
+        setTimeout(() => setRateSaveStatus(''), hasError ? 4000 : 2000);
     };
 
     const previewTwd = useMemo(() => {
@@ -642,14 +644,32 @@ export default function SyncPage() {
         return ((1000 / a) + 6) * b + c;
     }, [rateA, rateB, rateC]);
 
+    // 🌟 supabase（從 @/lib/supabaseClient 匯入的原始客戶端）不會寫進這個 App 實際在用的
+    // Cloudflare D1，寫入一律要走 /api/data POST（跟 app/page.tsx 的 D1QueryBuilder 攔截器
+    // 是同一套後端邏輯），不然畫面上看起來成功、其實資料庫完全沒收到。
+    const d1Upsert = async (table, data) => {
+        try {
+            const res = await fetch('/api/data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table, action: 'upsert', data, filters: [] })
+            });
+            const json = await res.json().catch(() => null);
+            return { error: json?.error ?? null };
+        } catch (e) {
+            return { error: { message: e.message } };
+        }
+    };
+
     const handleUpdateAppSetting = async (key, value) => {
         setAppSettings(prev => {
             const exists = prev.some(s => s.key === key);
             if (exists) return prev.map(s => s.key === key ? { ...s, value } : s);
             return [...prev, { key, value }];
         });
-        const { error } = await supabase.from('ui_settings').upsert({ id: key, key, value });
+        const { error } = await d1Upsert('ui_settings', { id: key, key, value });
         if (error) console.error('Error saving setting:', error);
+        return { error };
     };
 
     const handleMissingPriceSubmit = async () => {
@@ -660,11 +680,8 @@ export default function SyncPage() {
         handleUpdateAppSetting('poca_price_mapping', JSON.stringify(priceMappingRef.current));
         try { localStorage.setItem('poca_price_mapping_backup', JSON.stringify(priceMappingRef.current)); } catch (e) {}
 
-        try {
-            await supabase.from('price').upsert({ id: originalPrice, id_c: val });
-        } catch (e) {
-            console.error("儲存至 price 表失敗", e);
-        }
+        const { error: priceError } = await d1Upsert('price', { id: originalPrice, id_c: val });
+        if (priceError) console.error("儲存至 price 表失敗", priceError);
 
         if (missingPriceResolver.current) missingPriceResolver.current(val);
         setMissingPriceCard(null);
@@ -1346,8 +1363,10 @@ export default function SyncPage() {
         }
     };
 
+    // 🌟 不顯示「資料載入中」的過場文字：讀取期間先回傳一個跟頁面同色的空白區塊，
+    // 資料到了再直接呈現內容，避免文字閃一下又消失
     if (loading) {
-        return <div className="p-8 text-center text-gray-500">資料載入中...</div>;
+        return <div className="min-h-screen bg-gray-50" />;
     }
 
     if (!groups.length) {
@@ -1359,7 +1378,9 @@ export default function SyncPage() {
             <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                        <Link href="/admin" className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0">
+                        {/* 🌟 /admin 現在只會導回這頁（批次抓取設定已搬過來），連回去會卡在原地出不去，
+                            改成連回前台主頁 */}
+                        <Link href="/" className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0">
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
                         </Link>
                         <div className="min-w-0">
@@ -1705,9 +1726,9 @@ export default function SyncPage() {
                             <button
                                 onClick={handleSaveRates}
                                 disabled={rateSaveStatus === 'saving'}
-                                className="mt-6 w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50"
+                                className={`mt-6 w-full py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 ${rateSaveStatus === 'error' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
                             >
-                                {rateSaveStatus === 'saving' ? '儲存中...' : rateSaveStatus === 'saved' ? '已儲存 ✓' : '儲存設定'}
+                                {rateSaveStatus === 'saving' ? '儲存中...' : rateSaveStatus === 'saved' ? '已儲存 ✓' : rateSaveStatus === 'error' ? '儲存失敗，請重試' : '儲存設定'}
                             </button>
                         </div>
                     )}

@@ -36,30 +36,35 @@ export async function GET(request: Request) {
             'price': schema.price,
         };
 
-        // 3. 從字典中取得對應的資料表
-        const targetTable = schemaMap[tableName];
-        if (!targetTable) {
-             // 🌟 針對尚未建立的 ui_settings，直接回傳空資料讓前端靜默通過
-             if (tableName === 'ui_settings') {
-                 return NextResponse.json({ data: [] });
-             }
-             return NextResponse.json(
-                 { error: `找不到資料表對應的 Schema: ${tableName}` }, 
-                 { status: 404 }
-             );
-        }
-
-        // 4. 連線 D1 並撈出資料 (使用繞過型別檢查的寫法)
+        // 4. 連線 D1 (提前到 ui_settings 特例之前，因為它也需要 env.DB)
         let env;
         try {
             env = getRequestContext().env as any;
         } catch (e) {
             return NextResponse.json({ error: "無法取得 Cloudflare 邊緣運算環境。如果您在本地端開發，請使用 wrangler pages dev 來啟動伺服器。" }, { status: 400 });
         }
-        
+
         if (!env || !env.DB) {
             return NextResponse.json({ error: "找不到 D1 資料庫綁定 'DB'。請確認您已在 Cloudflare Pages 後台設定了綁定。" }, { status: 400 });
         }
+
+        // 🌟 ui_settings 是通用 key-value 設定表，沒有固定欄位所以沒有進 Drizzle schema。
+        // 用原生 SQL 處理，且第一次用到時自動建表，不需要另外跑 migration。
+        if (tableName === 'ui_settings') {
+            await env.DB.exec(`CREATE TABLE IF NOT EXISTS ui_settings (id TEXT PRIMARY KEY, key TEXT, value TEXT)`);
+            const { results } = await env.DB.prepare(`SELECT id, key, value FROM ui_settings`).all();
+            return NextResponse.json({ data: results || [] });
+        }
+
+        // 3. 從字典中取得對應的資料表
+        const targetTable = schemaMap[tableName];
+        if (!targetTable) {
+             return NextResponse.json(
+                 { error: `找不到資料表對應的 Schema: ${tableName}` },
+                 { status: 404 }
+             );
+        }
+
         const db = drizzle(env.DB);
         const data = await db.select().from(targetTable);
 
@@ -89,12 +94,36 @@ export async function POST(request: Request) {
             'poca': schema.poca, 'price': schema.price
         };
 
-        const targetTable = schemaMap[table];
-        if (!targetTable) return NextResponse.json({ error: null, data: null });
-
         let env;
         try { env = getRequestContext().env as any; } catch(e) { return NextResponse.json({ error: { message: "無 Edge 環境" } }); }
         if (!env || !env.DB) return NextResponse.json({ error: { message: "未綁定 DB" } });
+
+        // 🌟 ui_settings 是通用 key-value 設定表，沒有固定欄位所以沒有進 Drizzle schema。
+        // 用原生 SQL 處理寫入，且第一次用到時自動建表，不需要另外跑 migration。
+        if (table === 'ui_settings') {
+            await env.DB.exec(`CREATE TABLE IF NOT EXISTS ui_settings (id TEXT PRIMARY KEY, key TEXT, value TEXT)`);
+            const items = Array.isArray(data) ? data : [data];
+            if (action === 'insert' || action === 'upsert') {
+                for (const item of items) {
+                    if (!item) continue;
+                    const id = String(item.id ?? item.key ?? '');
+                    if (!id) continue;
+                    await env.DB.prepare(
+                        `INSERT INTO ui_settings (id, key, value) VALUES (?, ?, ?)
+                         ON CONFLICT(id) DO UPDATE SET key = excluded.key, value = excluded.value`
+                    ).bind(id, String(item.key ?? id), item.value === undefined || item.value === null ? null : String(item.value)).run();
+                }
+            } else if (action === 'delete' && filters && filters.length > 0) {
+                const idFilter = filters.find((f: any) => f.col === 'id' || f.col === 'key');
+                if (idFilter?.val !== undefined) {
+                    await env.DB.prepare(`DELETE FROM ui_settings WHERE id = ?`).bind(String(idFilter.val)).run();
+                }
+            }
+            return NextResponse.json({ error: null, data: null });
+        }
+
+        const targetTable = schemaMap[table];
+        if (!targetTable) return NextResponse.json({ error: null, data: null });
 
         const db = drizzle(env.DB);
         const { eq, and, inArray, sql } = await import('drizzle-orm');
