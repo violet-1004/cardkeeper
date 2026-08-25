@@ -2734,8 +2734,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
          if (filterInvStatus === '未知' && stats.unknown <= 0) return false;
      }
 
-     // 🌟 收藏冊篩選
-     if (filterCustomList !== 'All') {
+     // 🌟 收藏冊篩選 (含 [POCA] 這個虛擬選項：只顯示目前 POCA 上架庫存數量 > 0 的小卡)
+     if (filterCustomList === 'POCA') {
+         const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocoJd || card.pocaCard || card.PocaCard || card.poca_id;
+         const pocaData = matchedPocaId ? pocaMap[String(matchedPocaId)] : null;
+         const stockCount = pocaData ? Number(pocaData.stockedCount ?? pocaData.stocked_count ?? pocaData.StockedCount ?? 0) : 0;
+         if (!(stockCount > 0)) return false;
+     } else if (filterCustomList !== 'All') {
          const targetList = (customLists || []).find(l => String(l.id) === String(filterCustomList));
          if (!targetList) return false;
          if (!(targetList.items || []).some(item => String(item.cardId) === String(card.id))) return false;
@@ -2984,7 +2989,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                 setShowInvStatusPopup(false);
                             }}
                             className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${
-                                filterCustomList !== 'All' ? 'bg-blue-100 text-blue-600 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                filterCustomList === 'POCA' ? 'bg-green-100 text-green-600 shadow-sm' : filterCustomList !== 'All' ? 'bg-blue-100 text-blue-600 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                             }`}
                             title="收藏冊篩選"
                         >
@@ -3002,6 +3007,13 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                                         className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === 'All' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                                     >
                                         全部
+                                    </button>
+                                    {/* 🌟 [POCA] 是虛擬選項，不是真的收藏冊：篩選出目前 POCA 上架庫存數量 > 0 的小卡 */}
+                                    <button
+                                        onClick={() => { setFilterCustomList('POCA'); setShowCustomListPopup(false); }}
+                                        className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap font-bold transition-all ${filterCustomList === 'POCA' ? 'bg-green-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                    >
+                                        [POCA]
                                     </button>
                                     {(customLists || []).filter(l => !String(l.id).startsWith('sys_sort_') && (!l.groupId || String(l.groupId) === 'null' || String(l.groupId) === 'undefined' || String(l.groupId) === String(currentGroupId))).map(list => (
                                         <button
