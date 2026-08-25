@@ -16,6 +16,15 @@ import {
 
 import * as htmlToImage from 'html-to-image';
 
+// 🌟 主導覽分頁，桌面版頂部藥丸列與手機版底部 Tab Bar 共用同一份設定
+const NAV_TABS = [
+  { id: 'library', icon: Layers, label: '圖鑑' },
+  { id: 'collection', icon: CheckCircle, label: '收藏' },
+  { id: 'bulk', icon: Package, label: '管理' },
+  { id: 'inventory', icon: List, label: '紀錄' },
+  { id: 'export', icon: Share2, label: '輸出' },
+];
+
 // 🌟 終極 D1 攔截器：將前端所有 Supabase 寫入操作，無縫攔截並轉交給 D1 API
 class D1QueryBuilder {
     payload: any;
@@ -7320,7 +7329,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
               </div>
 
               {showExportLayout && (
-                  <div className="fixed bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
+                  <div className="fixed bottom-24 md:bottom-8 inset-x-0 flex flex-wrap justify-center gap-3 pointer-events-none no-print z-50 px-4">
                       <button onClick={(e) => { e.preventDefault(); handleExportPNG(displayExportTitle); }} disabled={isExporting} className="bg-blue-600 text-white px-6 sm:px-8 py-3.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] font-bold hover:bg-blue-700 transition-all pointer-events-auto flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait">
                           <Download className="w-5 h-5" /> {isExporting ? '輸出中...' : '匯出長圖'}
                       </button>
@@ -8719,7 +8728,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen app-dotted-bg text-gray-800 font-sans pb-20 md:pb-0">
+    <div className="min-h-screen app-dotted-bg text-gray-800 font-sans pb-28 md:pb-0">
       <nav className="bg-white/80 backdrop-blur-lg border-b border-gray-100 shadow-sm sticky top-0 z-40 px-4">
         <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
           <Link href="/admin" className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity">
@@ -8730,14 +8739,8 @@ export default function App() {
           </Link>
 
           {groups.length > 0 && (
-            <div className="flex space-x-1 overflow-x-auto no-scrollbar mx-4 bg-gray-100/80 p-1 rounded-full">
-              {[
-                { id: 'library', icon: Layers, label: '圖鑑' },
-                { id: 'collection', icon:  CheckCircle, label: '收藏' },
-                { id: 'bulk', icon: Package, label: '管理' },
-                { id: 'inventory', icon: List, label: '紀錄' },
-                { id: 'export', icon: Share2, label: '輸出' },
-              ].map(tab => (
+            <div className="hidden md:flex space-x-1 overflow-x-auto no-scrollbar mx-4 bg-gray-100/80 p-1 rounded-full">
+              {NAV_TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => {
@@ -8820,6 +8823,34 @@ export default function App() {
           </div>
         </div>
       </nav>
+
+      {/* 🌟 手機版底部 Tab Bar：頂部藥丸列在小螢幕會被兩側頭像/Logo 擠壓到必須橫向捲動，
+          改用固定在畫面底部、圖示+文字並排的分頁列，符合手機 App 慣例、點擊範圍也更大。
+          選取模式(isSelectionMode)有自己的底部操作列，此時隱藏 Tab Bar 避免重疊。 */}
+      {groups.length > 0 && !isSelectionMode && (
+          <nav className="mobile-tabbar md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-lg border-t border-gray-100 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+              <div className="grid pt-1.5" style={{ gridTemplateColumns: `repeat(${NAV_TABS.length}, minmax(0, 1fr))` }}>
+                  {NAV_TABS.map(tab => (
+                      <button
+                          key={tab.id}
+                          onClick={() => {
+                              setActiveTab(tab.id);
+                              setIsSelectionMode(false);
+                              setSelectedItems([]);
+                              setSelectedBatches([]);
+                              setBatchCategorizeTarget(null);
+                          }}
+                          className={`flex flex-col items-center justify-center gap-0.5 py-1.5 min-h-[52px] transition-colors ${
+                              activeTab === tab.id ? 'text-[#7C739B]' : 'text-gray-400'
+                          }`}
+                      >
+                          <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-[#9B90C2]' : ''}`} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
+                          <span className={`text-[11px] ${activeTab === tab.id ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+                      </button>
+                  ))}
+              </div>
+          </nav>
+      )}
 
       <main className="max-w-6xl mx-auto p-4" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {renderContent()}
@@ -8938,7 +8969,7 @@ export default function App() {
       )}
 
       {isSelectionMode && (
-          <div className="fixed bottom-0 inset-x-0 bg-white border-t p-4 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-between animate-slide-up">
+          <div className="fixed bottom-0 inset-x-0 bg-white border-t p-4 safe-area-bottom z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-between animate-slide-up">
               <div className="font-bold text-gray-700 flex flex-col sm:flex-row sm:items-center gap-2">
                   {batchCategorizeTarget ? (
                       <div className="flex items-center gap-2">

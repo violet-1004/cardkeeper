@@ -73,6 +73,18 @@ body {
   font-family: 'Baloo 2', var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/* 🌟 keeps fixed-bottom bars clear of the iPhone home-indicator / gesture area
+   (was referenced in the Modal footer already but was never actually defined) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 🌟 mobile bottom tab bar: fixed height plus safe-area, so page content
+   padding (pb-28) can reserve enough space above it */
+.mobile-tabbar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* 🌟 macOS-style traffic-light dots, used as a small decorative "window chrome" motif */
 .window-dots {
   display: inline-flex;
