@@ -416,7 +416,7 @@ const getOwnedQuantity = (invList, cardId) => {
 };
 
 // --- 3. 基礎 UI 組件 ---
-const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false }) => {
+const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false, onBodyScroll }) => {
   const swipeHandlers = useSwipeToClose(onClose);
   return (
   <div className={`fixed inset-0 z-[150] bg-black/30 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
@@ -434,7 +434,7 @@ const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullS
             <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors"><X className="w-6 h-6 text-gray-500" /></button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto no-scrollbar relative bg-gray-50/50">
+      <div className="flex-1 overflow-y-auto no-scrollbar relative bg-gray-50/50" onScroll={onBodyScroll}>
         {children}
       </div>
       {footer && (
@@ -4203,6 +4203,17 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     const [filterChannel, setFilterChannel] = useState('All');
     const [showSeriesModal, setShowSeriesModal] = useState(false);
 
+    // 🌟 捲動卡片列表時自動收合篩選器，讓出更多空間；往上捲一點就會再出現
+    const [filtersVisible, setFiltersVisible] = useState(true);
+    const lastScrollTopRef = useRef(0);
+    const handleGridScroll = (e) => {
+        const st = e.currentTarget.scrollTop;
+        const last = lastScrollTopRef.current;
+        if (st > last && st > 32) setFiltersVisible(false);
+        else if (st < last) setFiltersVisible(true);
+        lastScrollTopRef.current = st;
+    };
+
     // 🌟 1. 建立高效能字典 (與 CollectionTab 一致)
     const seriesMap = useMemo(() => {
         const map = {};
@@ -4551,18 +4562,30 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     const cancelPress = () => clearTimeout(pressTimer.current);
 
     return (
-        <div className="fixed inset-0 z-[200] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up">
-            <div className="px-4 py-3 border-b border-gray-200/50 flex flex-col gap-3 bg-white/80 backdrop-blur-md shadow-sm z-10 sticky top-0">
-                <div className="flex justify-between items-center">
-                    <div className="font-bold text-lg text-gray-800">選擇卡片 <span className="text-xs font-normal text-gray-500">(點擊+1，長按-1)</span></div>
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-6 h-6 text-gray-500" /></button>
+        <Modal
+            title={<>選擇卡片 <span className="text-xs font-normal text-gray-500 ml-1">(點擊+1，長按-1)</span></>}
+            onClose={onClose}
+            className="max-w-5xl"
+            mobileFullScreen={true}
+            // 🌟 篩選器的顯示/隱藏跟著 Modal 本體的捲動位置走，所以直接監聽 Modal 內容區的
+            // scroll 事件即可，不需要在裡面再包一層 flex + overflow（那樣反而會遇到巢狀
+            // flex 容器 height:100% 算不出實際高度、內容直接撐爆而抓不到捲軸的問題）
+            onBodyScroll={handleGridScroll}
+            footer={
+                <div className="flex gap-2 w-full">
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
+                    <button onClick={() => onConfirm(localItems)} className="flex-[2] py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認加入清單 ({localItems.length} 張)</button>
                 </div>
-                
-                <div className="flex items-center justify-between gap-2">
+            }
+        >
+            {/* 🌟 工具列＋篩選器包成同一個 sticky 區塊，一起釘在捲動區頂端；
+                篩選器區塊高度用 filtersVisible 收合，工具列本身固定不動 */}
+            <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md">
+                <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-gray-100">
                      <div className="flex items-center gap-2">
                          <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0">
                            <Grid className="w-3.5 h-3.5 text-gray-400 ml-1.5" />
-                           <select 
+                           <select
                               value={cols}
                               onChange={(e) => setCols(Number(e.target.value))}
                               className="bg-transparent text-xs font-bold text-gray-600 outline-none px-1 appearance-none border-none focus:ring-0 cursor-pointer"
@@ -4581,30 +4604,33 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                             {detailLevel === 0 && <EyeOff className="w-4 h-4" />}
                         </button>
                     </div>
-                    
+
                     <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center">
                         <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
                         <button onClick={() => setViewMode('selected')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'selected' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>已選 ({localItems.length})</button>
                     </div>
                 </div>
-            </div>
 
-            <div className="bg-white p-4 border-b border-gray-100 shadow-sm space-y-4 flex-shrink-0">
-                {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />}
-                {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
-                {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
-                {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
-                <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-all group">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
-                        <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                        <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-blue-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                {/* 🌟 篩選器會在捲動卡片列表時自動收合，讓出更多空間看卡片；往上捲一點就會再出現 */}
+                <div className={`bg-white border-b border-gray-100 shadow-sm overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${filtersVisible ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                    <div className="p-4 space-y-4">
+                        {availableSubunits.length > 0 && <RenderFilterSection label="分隊" options={availableSubunits} current={filterSubunit} onChange={(val) => { setFilterSubunit(val); setFilterMember('All'); }} mapName={s => s.name} disableToggleOff={true} />}
+                        {availableMembers.length > 0 && <RenderFilterSection label="成員" options={availableMembers} current={filterMember} onChange={setFilterMember} mapName={m => m.name} />}
+                        {availableTypes.length > 0 && <RenderFilterSection label="子類" options={availableTypes} current={filterType} onChange={setFilterType} mapName={t => t.name} />}
+                        {availableChannels.length > 0 && <RenderFilterSection label="通路" options={availableChannels} current={filterChannel} onChange={setFilterChannel} mapName={c => c.name} />}
+                        <div onClick={() => setShowSeriesModal(true)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-all group">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">系列與版本</span>
+                                <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                                <span className={`text-xs truncate font-medium ${getSeriesSummary() !== '全部系列' ? 'text-blue-600' : 'text-gray-600'}`}>{getSeriesSummary()}</span>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
+                        </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar p-4">
+            <div className="p-4">
                 <div
                     className="grid gap-2 sm:gap-3 pb-20"
                     // 🌟 containerType 讓卡片文字可用 cqw 依實際欄寬（容器寬度 ÷ cols）等比縮放，
@@ -4675,27 +4701,21 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                     {filteredCards.length === 0 && <div className="col-span-full py-10 text-center text-gray-400">沒有符合條件的卡片</div>}
                 </div>
             </div>
-            <div className="p-4 border-t border-gray-200/50 bg-white/80 backdrop-blur-md sticky bottom-0 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-                <div className="flex gap-2">
-                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border font-bold text-gray-500">取消</button>
-                    <button onClick={() => onConfirm(localItems)} className="flex-[2] py-3 rounded-xl bg-black text-white font-bold shadow-lg">確認加入清單 ({localItems.length} 張)</button>
-                </div>
-            </div>
 
-            <SeriesFilterModal 
-                visible={showSeriesModal} onClose={() => setShowSeriesModal(false)} 
-                seriesTypes={availableSeriesTypes} 
-                selectedSeriesType={filterSeriesType} 
+            <SeriesFilterModal
+                visible={showSeriesModal} onClose={() => setShowSeriesModal(false)}
+                seriesTypes={availableSeriesTypes}
+                selectedSeriesType={filterSeriesType}
                 setSeriesType={(val) => {
                     setFilterSeriesType(val);
                     if (val === 'All') { setFilterSeries([]); setFilterBatches([]); }
                 }}
-                series={availableSeriesList} 
-                selectedSeries={filterSeries} 
+                series={availableSeriesList}
+                selectedSeries={filterSeries}
                 setSeries={(val) => { setFilterSeries(val); }}
-                batches={availableBatchesList} selectedBatches={filterBatches} setBatches={setFilterBatches} 
+                batches={availableBatchesList} selectedBatches={filterBatches} setBatches={setFilterBatches}
             />
-        </div>
+        </Modal>
     );
 }
 
