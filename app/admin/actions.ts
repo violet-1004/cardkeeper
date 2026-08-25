@@ -85,51 +85,12 @@ export async function fetchChannels() {
     return await db.select().from(schema.channels);
 }
 
-export async function upsertCards(cards: any[]) {
-    if (!cards || cards.length === 0) return 0;
-    try {
-        // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上偶發 405 / 靜默失敗
-        // （畫面顯示同步完成，但實際沒有寫入資料庫），做法與 upsertPocaCards 一致。
-        const res = await fetch('/api/crawler/upsert-cards', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cards })
-        });
-        if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`API Error: ${res.status} ${errorText}`);
-        }
-        const data: any = await res.json();
-        if (!data.success) throw new Error(data.error || '寫入失敗');
-        return data.count as number;
-    } catch (error: any) {
-        console.error("🔥 upsertCards 嚴重錯誤:", error);
-        throw error;
-    }
-}
-
-export async function upsertBatches(batches: any[]) {
-    if (!batches || batches.length === 0) return 0;
-    try {
-        // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上偶發 405 / 靜默失敗
-        // （畫面顯示同步完成，但實際沒有寫入資料庫），做法與 upsertPocaCards 一致。
-        const res = await fetch('/api/crawler/upsert-batches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ batches })
-        });
-        if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`API Error: ${res.status} ${errorText}`);
-        }
-        const data: any = await res.json();
-        if (!data.success) throw new Error(data.error || '寫入失敗');
-        return data.count as number;
-    } catch (error: any) {
-        console.error("🔥 upsertBatches 嚴重錯誤:", error);
-        throw error;
-    }
-}
+// 🌟 upsertCards/upsertBatches 已搬到 app/admin/sync/page.tsx 裡直接呼叫
+// /api/crawler/upsert-cards、/api/crawler/upsert-batches（plain fetch，非 Server Action）。
+// 原因：只要函式還是從這個 'use server' 檔案 export、被 client component 直接呼叫，
+// 即使函式內部改成呼叫 API route，Next.js 還是會把呼叫包成 Server Action RPC
+// （POST 到當前頁面路徑），這在 Cloudflare Pages 上會 405 且前端會靜默吞掉錯誤，
+// 導致「顯示同步完成，但資料庫沒寫入」。務必只能用 plain fetch 呼叫 API route。
 
 export async function upsertPocaCards(pocaCards: any[]) {
     if (!pocaCards || pocaCards.length === 0) return { success: true, count: 0 };

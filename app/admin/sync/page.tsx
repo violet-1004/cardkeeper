@@ -6,7 +6,42 @@ import Link from 'next/link';
 import { RefreshCw, Check, ChevronLeft, ChevronRight, ImageIcon, ArrowLeft, X, Package, Plus, ChevronDown, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { toCamelCase, toSnakeCase } from '@/utils/case';
-import { updateSeriesApi, insertSeries, fetchChannels, upsertCards, upsertBatches } from '../actions';
+import { updateSeriesApi, insertSeries, fetchChannels } from '../actions';
+
+// 🌟 upsertCards/upsertBatches 改成直接 fetch API route，不能再走 Server Action。
+// 原因：即使 actions.ts 裡的 upsertCards/upsertBatches 內部改成呼叫 API route，
+// 只要它們還是從 'use server' 檔案 export 出來、被 client component 直接呼叫，
+// Next.js 就會照樣把呼叫包成 Server Action RPC（POST 到當前頁面路徑，例如
+// /admin/sync），而這在 Cloudflare Pages 上會被 405 掉且 next 前端會靜默吞掉錯誤，
+// 導致畫面顯示「同步完成」但資料庫其實完全沒被寫入。跟 POCA 同步（見下方
+// fetch('/api/poca/upsert', ...)）走同一種直接 fetch 寫法就不會有這個問題。
+async function upsertCards(cards: any[]) {
+    if (!cards || cards.length === 0) return 0;
+    const res = await fetch('/api/crawler/upsert-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cards })
+    });
+    const data: any = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `API Error: ${res.status}`);
+    }
+    return data.count as number;
+}
+
+async function upsertBatches(batches: any[]) {
+    if (!batches || batches.length === 0) return 0;
+    const res = await fetch('/api/crawler/upsert-batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batches })
+    });
+    const data: any = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `API Error: ${res.status}`);
+    }
+    return data.count as number;
+}
 
 // --- Shared Modal shell ---
 const Modal = ({ title, onClose, children, footer, className = "max-w-lg" }) => (
