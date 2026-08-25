@@ -7048,7 +7048,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     };
     
     const CardGrid = ({ displayCards }) => (
-        <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+        // 🌟 containerType: 'inline-size' 讓卡片內的文字/價格可用 cqw（容器寬度百分比）
+        // 依「實際欄寬」（容器寬度 ÷ cols）等比縮放，手機窄螢幕 + 較多欄數時也不會被截斷
+        <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, containerType: 'inline-size' }}>
             {displayCards.map((card, idx) => {
                 const cardSeries = (series || []).find(s => String(s.id) === String(card.seriesId));
                 const seriesName = cardSeries?.shortName || cardSeries?.name;
@@ -7117,7 +7119,10 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                             </div>
                             {card.note && (activeView !== 'selling' || showPrices) && (
                                 <div className="absolute bottom-1.5 left-0 w-full text-center z-20 px-1 pointer-events-none">
-                                    <div className={`inline-block text-white font-bold px-2.5 py-1 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: cols >= 6 ? '20px' : '36px' }}>{card.note}</div>
+                                    {/* 🌟 字級改用 clamp(下限, 依 cols 換算的 cqw, 桌機上限) 動態計算，
+                                        取代原本固定 20px/36px：桌機寬容器下維持原本大小，
+                                        手機窄容器（尤其 cols=4 這類常見設定）會等比縮小，價格才能完整顯示 */}
+                                    <div className={`inline-block text-white font-bold px-2.5 py-1 rounded-full shadow-md max-w-full truncate ${card.noteColor || 'bg-black/70'}`} style={{ lineHeight: '1.2', fontSize: `clamp(10px, ${(12.7 / cols).toFixed(2)}cqw, ${cols >= 6 ? 20 : 36}px)` }}>{card.note}</div>
                                 </div>
                             )}
                             {hiddenCardIds.has(card.id) && (
@@ -7128,8 +7133,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                         </div>
                         {showDetails && (
                           <div className="px-0.5 sm:px-1">
-                              <div className="text-xs sm:text-sm font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2">{displayTitle || '未命名卡片'}</div>
-                              {cardBatch?.name && <div className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 line-clamp-1">{cardBatch.name}</div>}
+                              {/* 🌟 同樣改用 cqw 依 cols 動態縮放，取代固定的 text-xs sm:text-sm：
+                                  桌機寬容器維持原本 14px 上限，手機窄容器 + 較多欄數時會等比縮小，
+                                  避免標題被 line-clamp 過度截斷 */}
+                              <div className="font-bold text-gray-800 leading-tight mb-0.5 line-clamp-2" style={{ fontSize: `clamp(9px, ${(12 / cols).toFixed(2)}cqw, 14px)` }}>{displayTitle || '未命名卡片'}</div>
+                              {cardBatch?.name && <div className="text-gray-400 mt-0.5 line-clamp-1" style={{ fontSize: `clamp(7px, ${(9 / cols).toFixed(2)}cqw, 9px)` }}>{cardBatch.name}</div>}
                           </div>
                         )}
                     </div>
