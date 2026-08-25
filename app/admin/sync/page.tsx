@@ -6,7 +6,10 @@ import Link from 'next/link';
 import { RefreshCw, Check, ChevronLeft, ChevronRight, ImageIcon, ArrowLeft, X, Package, Plus, ChevronDown, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { toCamelCase, toSnakeCase } from '@/utils/case';
-import { updateSeriesApi, insertSeries, fetchChannels } from '../actions';
+// 🌟 updateSeriesApi/insertSeries/fetchChannels 原本從 '../actions' 這個
+// 'use server' 檔案 import，會有跟 upsertCards/upsertBatches 完全一樣的 405 /
+// 靜默失敗問題（見下方大段說明），所以也一併改成直接呼叫共用的 /api/data
+// route（跟這個檔案其他地方讀寫資料的方式一致），不再需要從 actions.ts 匯入。
 
 // 🌟 upsertCards/upsertBatches 改成直接 fetch API route，不能再走 Server Action。
 // 原因：即使 actions.ts 裡的 upsertCards/upsertBatches 內部改成呼叫 API route，
@@ -41,6 +44,43 @@ async function upsertBatches(batches: any[]) {
         throw new Error(data?.error || `API Error: ${res.status}`);
     }
     return data.count as number;
+}
+
+async function fetchChannels() {
+    const res = await fetch(`/api/data?table=channels&_t=${Date.now()}`, { cache: 'no-store' });
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok || json?.error) throw new Error(json?.error?.message || json?.error || `API Error: ${res.status}`);
+    return json?.data || [];
+}
+
+async function updateSeriesApi(id: number, api: string) {
+    const res = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', table: 'series', data: { api }, filters: [{ col: 'id', op: 'eq', val: id }] })
+    });
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok || json?.error) throw new Error(json?.error?.message || json?.error || `API Error: ${res.status}`);
+}
+
+async function insertSeries(newSeries: any) {
+    const row = {
+        id: newSeries.id ? String(newSeries.id) : Date.now().toString(),
+        name: newSeries.name,
+        group_id: (newSeries.groupId || newSeries.group_id) ? String(newSeries.groupId || newSeries.group_id) : null,
+        short_name: newSeries.shortName || newSeries.short_name || null,
+        subunit: newSeries.subunit || null,
+        type: newSeries.type || null,
+        date: newSeries.date || null,
+        api: newSeries.api || null
+    };
+    const res = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'insert', table: 'series', data: row })
+    });
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok || json?.error) throw new Error(json?.error?.message || json?.error || `API Error: ${res.status}`);
 }
 
 // --- Shared Modal shell ---

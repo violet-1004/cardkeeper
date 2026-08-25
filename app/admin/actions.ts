@@ -1,9 +1,5 @@
 'use server';
-import { revalidatePath } from 'next/cache';
 import { getRequestContext } from '@cloudflare/next-on-pages';
-import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
-import * as schema from '@/schema';
 
 // 負責將外部圖片下載並轉存至您的 R2
 export async function uploadImageToR2(externalUrl: string, fileName: string) {
@@ -49,41 +45,13 @@ export async function uploadImageToR2(externalUrl: string, fileName: string) {
     }
 }
 
-function getDb() {
-    const env = getRequestContext().env as any;
-    return drizzle(env.DB);
-}
-
-export async function fetchSeriesAndGroups() {
-    const db = getDb();
-    const seriesData = await db.select().from(schema.series);
-    const groupsData = await db.select().from(schema.groups);
-    return { seriesData, groupsData };
-}
-
-export async function updateSeriesApi(id: number, api: string) {
-    const db = getDb();
-    await db.update(schema.series).set({ api }).where(eq(schema.series.id, id));
-}
-
-export async function insertSeries(newSeries: any) {
-    const db = getDb();
-    await db.insert(schema.series).values({
-        id: newSeries.id ? String(newSeries.id) as any : Date.now().toString() as any,
-        name: newSeries.name,
-        group_id: (newSeries.groupId || newSeries.group_id) ? String(newSeries.groupId || newSeries.group_id) as any : null,
-        short_name: newSeries.shortName || newSeries.short_name || null,
-        subunit: newSeries.subunit || null,
-        type: newSeries.type || null,
-        date: newSeries.date || null,
-        api: newSeries.api || null
-    });
-}
-
-export async function fetchChannels() {
-    const db = getDb();
-    return await db.select().from(schema.channels);
-}
+// 🌟 fetchSeriesAndGroups/updateSeriesApi/insertSeries/fetchChannels 都已經移除。
+// 原因：這幾個函式一樣是從這個 'use server' 檔案 export、被 client component
+// (app/admin/sync/page.tsx) 直接呼叫，跟 upsertCards/upsertBatches 一樣會被
+// Next.js 包成 Server Action RPC，在 Cloudflare Pages 上 405、前端還會靜默吞掉
+// 錯誤（例如「儲存 API ID」「新增系列」顯示成功但其實沒寫入、批次同步的通路
+// 名稱永遠比對不到）。現在改成直接在 page.tsx 裡用 plain fetch 打共用的
+// /api/data route（GET 查 channels、POST action:'update'/'insert' 查/寫 series）。
 
 // 🌟 upsertCards/upsertBatches 已搬到 app/admin/sync/page.tsx 裡直接呼叫
 // /api/crawler/upsert-cards、/api/crawler/upsert-batches（plain fetch，非 Server Action）。
