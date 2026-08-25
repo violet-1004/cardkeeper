@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { getRequestContext } from '@cloudflare/next-on-pages';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '@/schema';
 
 // 負責將外部圖片下載並轉存至您的 R2
@@ -86,55 +86,22 @@ export async function fetchChannels() {
 }
 
 export async function upsertCards(cards: any[]) {
-    try {
     if (!cards || cards.length === 0) return 0;
-
-    const db = getDb();
-    const CHUNK_SIZE = 5; // 🌟 限制單次資料庫寫入與併發請求數 (防堵 Cloudflare 50 個子請求限制)，降低併發以提高穩定性
-    const skipR2Upload = cards.length > 20; // 🌟 核心防爆：大量同步時跳過 R2 上傳
-
-    // 🌟 重構：將 Promise.all 的併發處理，改為循序處理，避免 Edge Function 超時
-    const allProcessedCards = [];
-    for (const card of cards) {
-        let image = card.image;
-        const seriesId = card.seriesId || card.series_id;
-        if (!skipR2Upload && image && !image.includes('r2.dev')) {
-            const fileName = `cards/${seriesId}/${card.id}.jpg`;
-            image = await uploadImageToR2(image, fileName);
-        }
-        allProcessedCards.push({
-            id: String(card.id) as any,
-            name: card.name,
-            member_id: (card.memberId || card.member_id) ? String(card.memberId || card.member_id) as any : null,
-            image: image || null,
-            type: card.type || null,
-            series_id: seriesId ? String(seriesId) as any : null,
-            group_id: (card.groupId || card.group_id) ? String(card.groupId || card.group_id) as any : null,
+    try {
+        // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上偶發 405 / 靜默失敗
+        // （畫面顯示同步完成，但實際沒有寫入資料庫），做法與 upsertPocaCards 一致。
+        const res = await fetch('/api/crawler/upsert-cards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cards })
         });
-    }
-
-    // 🌟 終極修正：在伺服器端進行精準比對，徹底解決重複寫入問題
-    // 1. 從本次要處理的卡片中，取出所有 ID
-    const incomingCardIds = allProcessedCards.map(c => c.id);
-    if (incomingCardIds.length === 0) {
-        return 0;
-    }
-
-    // 2. 到資料庫查詢這些 ID 中，哪些是已經存在的
-    const existingCards = await db.select({ id: schema.uiCards.id }).from(schema.uiCards).where(sql`id IN ${incomingCardIds}`);
-    const existingCardIds = new Set(existingCards.map(c => c.id));
-
-    // 3. 過濾出真正需要新增的卡片
-    const cardsToInsert = allProcessedCards.filter(c => !existingCardIds.has(c.id));
-
-    // 4. 只對新卡片執行插入操作
-    if (cardsToInsert.length > 0) {
-        await db.insert(schema.uiCards).values(cardsToInsert);
-    }
-
-    // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
-    revalidatePath('/', 'layout');
-    return cardsToInsert.length; // 回傳實際寫入的筆數
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`API Error: ${res.status} ${errorText}`);
+        }
+        const data: any = await res.json();
+        if (!data.success) throw new Error(data.error || '寫入失敗');
+        return data.count as number;
     } catch (error: any) {
         console.error("🔥 upsertCards 嚴重錯誤:", error);
         throw error;
@@ -142,55 +109,22 @@ export async function upsertCards(cards: any[]) {
 }
 
 export async function upsertBatches(batches: any[]) {
-    try {
     if (!batches || batches.length === 0) return 0;
-
-    const db = getDb();
-    const CHUNK_SIZE = 5; // 🌟 防堵 Cloudflare 50 個子請求限制，降低併發以提高穩定性
-    const skipR2Upload = batches.length > 20;
-
-    // 🌟 重構：將 Promise.all 的併發處理，改為循序處理，避免 Edge Function 超時
-    const allProcessedBatches = [];
-    for (const batch of batches) {
-        let image = batch.image;
-        if (!skipR2Upload && image && !image.includes('r2.dev')) {
-            const fileName = `batches/${batch.id}.jpg`;
-            image = await uploadImageToR2(image, fileName);
+    try {
+        // 🌟 改為呼叫 API route，避免 Server Action 在 Cloudflare Pages 上偶發 405 / 靜默失敗
+        // （畫面顯示同步完成，但實際沒有寫入資料庫），做法與 upsertPocaCards 一致。
+        const res = await fetch('/api/crawler/upsert-batches', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batches })
+        });
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`API Error: ${res.status} ${errorText}`);
         }
-        allProcessedBatches.push({
-            id: String(batch.id) as any,
-            name: batch.name,
-            type: batch.type || null,
-            channel: batch.channel || null,
-            batch_number: batch.batchNumber || batch.batch_number || null,
-            date: batch.date || null,
-            group_id: (batch.groupId || batch.group_id) ? String(batch.groupId || batch.group_id) as any : null,
-            series_id: (batch.seriesId || batch.series_id) ? String(batch.seriesId || batch.series_id) as any : null,
-            image: image || null,
-        });
-    }
-
-    // 🌟 循序處理完圖片後，再分批寫入資料庫
-    for (let i = 0; i < allProcessedBatches.length; i += CHUNK_SIZE) {
-        const chunk = allProcessedBatches.slice(i, i + CHUNK_SIZE);
-        await db.insert(schema.batches).values(chunk).onConflictDoUpdate({
-            target: schema.batches.id,
-            set: {
-                name: sql`excluded.name`,
-                type: sql`excluded.type`,
-                channel: sql`excluded.channel`,
-                batch_number: sql`excluded.batch_number`,
-                date: sql`excluded.date`,
-                group_id: sql`excluded.group_id`,
-                series_id: sql`excluded.series_id`,
-                image: sql`excluded.image`,
-            }
-        });
-    }
-
-    // 🌟 寫入完畢後，強制清除 Next.js 伺服器端對於首頁的快取
-    revalidatePath('/', 'layout');
-    return batches.length;
+        const data: any = await res.json();
+        if (!data.success) throw new Error(data.error || '寫入失敗');
+        return data.count as number;
     } catch (error: any) {
         console.error("🔥 upsertBatches 嚴重錯誤:", error);
         throw error;
