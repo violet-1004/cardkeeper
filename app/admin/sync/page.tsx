@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { RefreshCw, Check, ChevronLeft, ChevronRight, ImageIcon, ArrowLeft, X, Package, Plus } from 'lucide-react';
+import { RefreshCw, Check, ChevronLeft, ChevronRight, ImageIcon, ArrowLeft, X, Package, Plus, ChevronDown, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { toCamelCase, toSnakeCase } from '@/utils/case';
 import { updateSeriesApi, insertSeries, fetchChannels, upsertCards, upsertBatches } from '../actions';
@@ -158,6 +158,7 @@ export default function SyncPage() {
     // --- State copied from App component ---
     const [groups, setGroups] = useState<any[]>([]);
     const [currentGroupId, setCurrentGroupId] = useState(null);
+    const [showGroupSelector, setShowGroupSelector] = useState(false);
     const [members, setMembers] = useState<any[]>([]);
     const [series, setSeries] = useState<any[]>([]);
     const [channels, setChannels] = useState<any[]>([]);
@@ -276,28 +277,24 @@ export default function SyncPage() {
     const [isAddSeriesModalOpen, setIsAddSeriesModalOpen] = useState(false);
     const [newSeriesForm, setNewSeriesForm] = useState({ name: '', shortName: '', subunit: '', type: '', date: '' });
 
-    const [crawlerFilterGroupId, setCrawlerFilterGroupId] = useState("");
+    // 🌟 團體篩選拿掉了，改用右上角的團體切換鈕（currentGroupId），跟頁面其他分頁一致
     const [crawlerFilterSubunit, setCrawlerFilterSubunit] = useState("");
     const [crawlerFilterType, setCrawlerFilterType] = useState("");
 
     const crawlerAvailableSubunits = useMemo(() => {
-        let filteredSeries = series;
-        if (crawlerFilterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId || s.group_id) === String(crawlerFilterGroupId));
-        const subunitsSet = new Set(filteredSeries.map(s => s.subunit).filter(Boolean));
+        const subunitsSet = new Set(currentSeriesAll.map(s => s.subunit).filter(Boolean));
         return Array.from(subunitsSet);
-    }, [series, crawlerFilterGroupId]);
+    }, [currentSeriesAll]);
 
     const crawlerAvailableTypes = useMemo(() => {
-        let filteredSeries = series;
-        if (crawlerFilterGroupId) filteredSeries = filteredSeries.filter(s => String(s.groupId || s.group_id) === String(crawlerFilterGroupId));
+        let filteredSeries = currentSeriesAll;
         if (crawlerFilterSubunit) filteredSeries = filteredSeries.filter(s => s.subunit === crawlerFilterSubunit);
         const typesSet = new Set(filteredSeries.map(s => (s.type === 'null' || s.type === 'undefined') ? null : s.type).filter(Boolean));
         return Array.from(typesSet);
-    }, [series, crawlerFilterGroupId, crawlerFilterSubunit]);
+    }, [currentSeriesAll, crawlerFilterSubunit]);
 
     const crawlerFilteredSeriesList = useMemo(() => {
-        let list = series;
-        if (crawlerFilterGroupId) list = list.filter(s => String(s.groupId || s.group_id) === String(crawlerFilterGroupId));
+        let list = currentSeriesAll;
         if (crawlerFilterSubunit) list = list.filter(s => s.subunit === crawlerFilterSubunit);
         if (crawlerFilterType) list = list.filter(s => String(s.type) === String(crawlerFilterType));
         return list.sort((a, b) => {
@@ -305,7 +302,7 @@ export default function SyncPage() {
             const dateB = b.date ? new Date(b.date).getTime() : 253402214400000;
             return dateA - dateB;
         });
-    }, [series, crawlerFilterGroupId, crawlerFilterSubunit, crawlerFilterType]);
+    }, [currentSeriesAll, crawlerFilterSubunit, crawlerFilterType]);
 
     const handleSeriesClick = (id) => {
         setSelectedSeriesId(id);
@@ -326,8 +323,8 @@ export default function SyncPage() {
     };
 
     const handleOpenAddSeriesModal = () => {
-        if (!crawlerFilterGroupId) {
-            return alert("請先在上方「篩選條件」選擇要新增系列所屬的「團體」！");
+        if (!currentGroupId) {
+            return alert("請先在右上角選擇要新增系列所屬的「團體」！");
         }
         setNewSeriesForm({ name: '', shortName: '', subunit: crawlerFilterSubunit || '', type: crawlerFilterType || '', date: '' });
         setIsAddSeriesModalOpen(true);
@@ -338,7 +335,7 @@ export default function SyncPage() {
         const newSeries = {
             id: Date.now(),
             name: newSeriesForm.name.trim(),
-            groupId: Number(crawlerFilterGroupId),
+            groupId: Number(currentGroupId),
             shortName: newSeriesForm.shortName.trim() || null,
             subunit: newSeriesForm.subunit.trim() || null,
             type: newSeriesForm.type.trim() || null,
@@ -423,7 +420,7 @@ export default function SyncPage() {
     const syncCards = async () => {
         try {
             if (fetchPages < 1) return;
-            if (!crawlerFilterGroupId) return setCrawlerStatus("錯誤：請先在上方「篩選條件」選擇「團體」！");
+            if (!currentGroupId) return setCrawlerStatus("錯誤：請先在右上角選擇「團體」！");
             if (!selectedSeriesId) return setCrawlerStatus("錯誤：請先在上方選擇要匯入的「系列」！");
             if (!apiIdInput) return setCrawlerStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
 
@@ -466,7 +463,7 @@ export default function SyncPage() {
                     break;
                 }
 
-                const formattedBatch = apiData.records.map(record => formatCard(record, selectedSeriesId, crawlerFilterGroupId, membersList));
+                const formattedBatch = apiData.records.map(record => formatCard(record, selectedSeriesId, currentGroupId, membersList));
                 allFormattedCards = allFormattedCards.concat(formattedBatch);
                 tempCursor = apiData.next || null;
                 if (!tempCursor) break;
@@ -518,7 +515,7 @@ export default function SyncPage() {
     const syncBatches = async () => {
         try {
             if (fetchPages < 1) return;
-            if (!crawlerFilterGroupId) return setCrawlerStatus("錯誤：請先在上方「篩選條件」選擇「團體」！");
+            if (!currentGroupId) return setCrawlerStatus("錯誤：請先在右上角選擇「團體」！");
             if (!selectedSeriesId) return setCrawlerStatus("錯誤：請先在上方選擇要匯入的「系列」！");
             if (!apiIdInput) return setCrawlerStatus("錯誤：該系列尚未設定 API ID，請先輸入並儲存！");
 
@@ -549,7 +546,7 @@ export default function SyncPage() {
                     break;
                 }
 
-                const formattedBatch = apiData.records.map(record => formatBatch(record, channelMap, selectedSeriesId, crawlerFilterGroupId));
+                const formattedBatch = apiData.records.map(record => formatBatch(record, channelMap, selectedSeriesId, currentGroupId));
                 allFormattedBatches = allFormattedBatches.concat(formattedBatch);
                 tempCursor = apiData.next || null;
                 if (!tempCursor) break;
@@ -643,6 +640,45 @@ export default function SyncPage() {
         if (!rateA || !rateB || rateC === '' || isNaN(a) || isNaN(b) || isNaN(c) || a === 0) return null;
         return ((1000 / a) + 6) * b + c;
     }, [rateA, rateB, rateC]);
+
+    // 🌟 POCA 抓取原本整個 App 寫死 group=36、group_name_en='cravity'，不管右上角選哪個團體
+    // 抓的都是同一份資料。現在改成依 currentGroupId 各自存一份 { pocaGroupId, nameEn }，
+    // 換團體時抓的 POCA 資料也會跟著換。存在 ui_settings 的 poca_group_config (JSON，用團體 id 當 key)。
+    // 還沒幫某個團體設定過的話，退回原本寫死的 36/cravity，保留舊行為不會突然壞掉。
+    const POCA_GROUP_DEFAULT = { pocaGroupId: '36', nameEn: 'cravity' };
+    const getPocaGroupConfig = (groupId, settingsList) => {
+        const raw = (settingsList || []).find(s => s.key === 'poca_group_config')?.value;
+        let conf = {};
+        if (raw) { try { conf = JSON.parse(raw) || {}; } catch (e) {} }
+        const forGroup = conf[String(groupId)];
+        return {
+            pocaGroupId: forGroup?.pocaGroupId || POCA_GROUP_DEFAULT.pocaGroupId,
+            nameEn: forGroup?.nameEn || POCA_GROUP_DEFAULT.nameEn,
+        };
+    };
+
+    const [pocaGroupIdInput, setPocaGroupIdInput] = useState('');
+    const [pocaGroupNameEnInput, setPocaGroupNameEnInput] = useState('');
+    const [pocaGroupConfigSaveStatus, setPocaGroupConfigSaveStatus] = useState('');
+
+    // 切換團體 (或設定資料載入) 時，把輸入框換成「該團體」已存的設定；沒存過就顯示預設值
+    useEffect(() => {
+        const conf = getPocaGroupConfig(currentGroupId, appSettings);
+        setPocaGroupIdInput(conf.pocaGroupId);
+        setPocaGroupNameEnInput(conf.nameEn);
+    }, [currentGroupId, appSettings]);
+
+    const handleSavePocaGroupConfig = async () => {
+        if (!currentGroupId) return;
+        setPocaGroupConfigSaveStatus('saving');
+        const raw = (appSettings || []).find(s => s.key === 'poca_group_config')?.value;
+        let conf = {};
+        if (raw) { try { conf = JSON.parse(raw) || {}; } catch (e) {} }
+        conf[String(currentGroupId)] = { pocaGroupId: pocaGroupIdInput.trim(), nameEn: pocaGroupNameEnInput.trim() };
+        const { error } = await handleUpdateAppSetting('poca_group_config', JSON.stringify(conf));
+        setPocaGroupConfigSaveStatus(error ? 'error' : 'saved');
+        setTimeout(() => setPocaGroupConfigSaveStatus(''), error ? 4000 : 2000);
+    };
 
     // 🌟 supabase（從 @/lib/supabaseClient 匯入的原始客戶端）不會寫進這個 App 實際在用的
     // Cloudflare D1，寫入一律要走 /api/data POST（跟 app/page.tsx 的 D1QueryBuilder 攔截器
@@ -1079,6 +1115,9 @@ export default function SyncPage() {
         setIsCrawling(true);
         setSyncProgress('準備中...');
         try {
+            // 🌟 依目前選取的團體決定要抓 POCA 站上的哪個 group，沒設定過就退回舊的 36/cravity
+            const { pocaGroupId: activePocaGroupId, nameEn: activePocaGroupNameEn } = getPocaGroupConfig(currentGroupId, appSettings);
+
             const initialMapping = {
                 2.5: 500, 3.5: 1000, 4.2: 1500, 4.9: 2000, 5.6: 2500,
                 6.3: 3000, 7.0: 3500, 8.4: 4000, 9.1: 4500, 9.8: 5000,
@@ -1163,7 +1202,7 @@ export default function SyncPage() {
             while (hasNext) {
                 const promises = [];
                 for (let i = 0; i < 5; i++) {
-                    const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=36&price_step=ALL&sort=new&page=${page + i}`;
+                    const targetUrl = `https://pocamarket.com/apis/card/gb/v2/search?group=${activePocaGroupId}&price_step=ALL&sort=new&page=${page + i}`;
                     promises.push(
                         fetch(`/api/proxy-json?url=${encodeURIComponent(targetUrl)}`)
                             .then(async (res) => {
@@ -1237,7 +1276,7 @@ export default function SyncPage() {
                 image: p.image || '',
                 stocked_count: p.stocked_count !== undefined ? Number(p.stocked_count) : 0,
                 price: Number(p.price),
-                group_name_en: 'cravity'
+                group_name_en: activePocaGroupNameEn
             }));
 
             let dbError = null;
@@ -1389,15 +1428,50 @@ export default function SyncPage() {
                             <p className="text-xs text-gray-400">POCA 卡片對照與批次抓取</p>
                         </div>
                     </div>
-                    {groups.length > 1 && (
-                        <select
-                            value={currentGroupId ?? ''}
-                            onChange={(e) => setCurrentGroupId(e.target.value)}
-                            className="text-sm font-bold border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 flex-shrink-0"
+                    {/* 🌟 團體切換改成跟前台一樣的圓形頭像按鈕，兩邊操作一致 */}
+                    <div className="relative flex-shrink-0">
+                        <div
+                            className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-gray-100 transition-colors"
+                            onClick={() => setShowGroupSelector(!showGroupSelector)}
                         >
-                            {groups.map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                        </select>
-                    )}
+                            {currentGroup ? (
+                                <>
+                                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#9B90C2] shadow-md flex items-center justify-center bg-gray-100">
+                                        {currentGroup.image ? <img src={currentGroup.image} alt={currentGroup.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-gray-400"/>}
+                                    </div>
+                                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                                </>
+                            ) : (
+                                <div className="w-10 h-10 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+                                    <Users className="w-5 h-5 text-gray-400"/>
+                                </div>
+                            )}
+                        </div>
+
+                        {showGroupSelector && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setShowGroupSelector(false)}></div>
+                                <div className="absolute right-0 top-12 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in">
+                                    <div className="p-2 border-b bg-gray-50 text-xs font-bold text-gray-500">切換團體</div>
+                                    <div className="max-h-60 overflow-y-auto no-scrollbar">
+                                        {(groups || []).map((g: any) => (
+                                            <div
+                                                key={g.id}
+                                                onClick={() => { setCurrentGroupId(g.id); setShowGroupSelector(false); }}
+                                                className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${currentGroupId === g.id ? 'bg-[#EEEBF5] text-[#7C739B]' : 'text-gray-700'}`}
+                                            >
+                                                <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-100 overflow-hidden border">
+                                                    {g.image ? <img src={g.image} className="w-full h-full object-cover" /> : <Users className="w-4 h-4 m-2 text-gray-400"/>}
+                                                </div>
+                                                <span className="font-bold text-sm">{g.name}</span>
+                                                {currentGroupId === g.id && <Check className="w-4 h-4 ml-auto" />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -1412,6 +1486,31 @@ export default function SyncPage() {
                     </div>
 
                     {activeSubTab === 'poca_match' && (
+                        <>
+                        {/* 🌟 這個團體對應的 POCA 站內 group 參數：換團體 (右上角) 時這裡也會跟著換，
+                            按「同步」時抓的就是這裡設定的 group，不再整個 App 共用同一個寫死的 group=36 */}
+                        <div className="mx-4 bg-white border border-gray-200 rounded-xl shadow-sm p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">
+                                「{currentGroup?.name || '此團體'}」的 POCA 設定
+                            </span>
+                            <input
+                                type="text" placeholder="POCA group ID，例如 36"
+                                value={pocaGroupIdInput} onChange={e => setPocaGroupIdInput(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-indigo-300 w-full sm:w-36"
+                            />
+                            <input
+                                type="text" placeholder="group_name_en，例如 cravity"
+                                value={pocaGroupNameEnInput} onChange={e => setPocaGroupNameEnInput(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-indigo-300 w-full sm:w-40"
+                            />
+                            <button
+                                onClick={handleSavePocaGroupConfig}
+                                disabled={pocaGroupConfigSaveStatus === 'saving'}
+                                className={`text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap disabled:opacity-50 ${pocaGroupConfigSaveStatus === 'error' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-800 hover:bg-gray-700 text-white'}`}
+                            >
+                                {pocaGroupConfigSaveStatus === 'saving' ? '儲存中...' : pocaGroupConfigSaveStatus === 'saved' ? '已儲存 ✓' : pocaGroupConfigSaveStatus === 'error' ? '儲存失敗' : '儲存'}
+                            </button>
+                        </div>
                         <div className="flex flex-col md:flex-row gap-4 px-4 h-[85vh]">
                             <div className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
                                 <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
@@ -1555,6 +1654,7 @@ export default function SyncPage() {
                                 </div>
                             </div>
                         </div>
+                        </>
                     )}
 
                     {activeSubTab === 'crawler' && (
@@ -1584,17 +1684,8 @@ export default function SyncPage() {
 
                                 <div className="flex flex-col gap-2 mb-3 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
                                     <div className="text-xs font-bold text-gray-500 mb-1">篩選條件</div>
+                                    {/* 🌟 團體篩選拿掉了，這裡的系列/分隊/類型都已經跟著右上角選的團體 (currentGroupId) 走 */}
                                     <div className="flex flex-col gap-3">
-                                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                                            <span className="text-xs font-bold text-gray-400 whitespace-nowrap min-w-fit">團體</span>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setCrawlerFilterGroupId("")} className={`px-3 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${crawlerFilterGroupId === "" ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>全部</button>
-                                                {(groups || []).map((g) => (
-                                                    <button key={g.id} onClick={() => setCrawlerFilterGroupId(g.id)} className={`px-3 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${String(crawlerFilterGroupId) === String(g.id) ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>{g.name}</button>
-                                                ))}
-                                            </div>
-                                        </div>
-
                                         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                                             <span className="text-xs font-bold text-gray-400 whitespace-nowrap min-w-fit">分隊</span>
                                             <div className="flex gap-2">
