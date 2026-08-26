@@ -756,7 +756,10 @@ export default function SyncPage() {
     const [pocaSyncSubunit, setPocaSyncSubunit] = useState('');
     useEffect(() => {
         if (currentSubunitsAll && currentSubunitsAll.length > 0) {
-            setPocaSyncSubunit(prev => currentSubunitsAll.some(s => s.name === prev) ? prev : currentSubunitsAll[0].name);
+            // 🌟 currentSubunitsAll 是資料庫回來的原始順序（不保證跟 sort_order 一致），
+            // 預設要選第一個分隊時要照 sort_order 排序過再取，才會跟畫面上的分隊按鈕順序一致
+            const sorted = [...currentSubunitsAll].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+            setPocaSyncSubunit(prev => currentSubunitsAll.some(s => s.name === prev) ? prev : sorted[0].name);
         } else {
             setPocaSyncSubunit('');
         }
