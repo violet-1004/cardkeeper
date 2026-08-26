@@ -296,7 +296,13 @@ export default function SyncPage() {
             const fetchedGroups = await fetchTable('groups');
             setGroups(fetchedGroups);
 
-            if (fetchedGroups.length > 0) {
+            // 🌟 切換主畫面 (app/page.tsx) 與資料同步兩個頁面時保持在同一團體：
+            // 兩邊都用同一個 localStorage key 記住目前選的團體，優先用它，沒有才退回第一個團體。
+            let storedGroupId: string | null = null;
+            try { storedGroupId = localStorage.getItem('ck_current_group_id'); } catch (e) {}
+            if (storedGroupId && fetchedGroups.some((g: any) => String(g.id) === String(storedGroupId))) {
+                setCurrentGroupId(storedGroupId as any);
+            } else if (fetchedGroups.length > 0) {
                 setCurrentGroupId(fetchedGroups[0].id);
             }
 
@@ -330,6 +336,13 @@ export default function SyncPage() {
     }, []);
 
     const currentGroup = (groups || []).find(g => g.id === currentGroupId);
+
+    // 🌟 切換團體時（不論是右上角選的，還是初始從 localStorage 讀回來的），把最新選擇存回去，
+    // 讓主畫面 (app/page.tsx) 之後也能讀到同一個團體。
+    useEffect(() => {
+        if (!currentGroupId) return;
+        try { localStorage.setItem('ck_current_group_id', String(currentGroupId)); } catch (e) {}
+    }, [currentGroupId]);
 
     // 🌟 依目前選取的團體過濾出對應資料，與前台 App 的 currentXxx 邏輯一致
     const currentMembers = useMemo(() => (members || []).filter(m => String(m.groupId) === String(currentGroupId)), [members, currentGroupId]);
@@ -720,28 +733,45 @@ export default function SyncPage() {
     // 抓的都是同一份資料。現在改成依 currentGroupId 各自存一份 { pocaGroupId, nameEn }，
     // 換團體時抓的 POCA 資料也會跟著換。存在 ui_settings 的 poca_group_config (JSON，用團體 id 當 key)。
     // 還沒幫某個團體設定過的話，退回原本寫死的 36/cravity，保留舊行為不會突然壞掉。
+    //
+    // 🌟 如果該團體有分隊（例如 VIVIZ/GFRIEND 底下的 VIVIZ、GFRIEND、SOLO），POCA 站上對應的
+    // group 參數通常是「每個分隊各自一個」，不是整個團體共用一個。所以有分隊時改成分開存：
+    // conf[groupId] = { subunits: { [分隊名稱]: { pocaGroupId, nameEn } } }
+    // 沒有分隊的團體（例如 CRAVITY）維持原本扁平的 conf[groupId] = { pocaGroupId, nameEn } 格式，
+    // 不需要改資料、舊設定照樣讀得到。
     const POCA_GROUP_DEFAULT = { pocaGroupId: '36', nameEn: 'cravity' };
-    const getPocaGroupConfig = (groupId, settingsList) => {
+    const getPocaGroupConfig = (groupId, settingsList, subunitName) => {
         const raw = (settingsList || []).find(s => s.key === 'poca_group_config')?.value;
         let conf = {};
         if (raw) { try { conf = JSON.parse(raw) || {}; } catch (e) {} }
         const forGroup = conf[String(groupId)];
+        const forSubunit = subunitName ? forGroup?.subunits?.[subunitName] : null;
         return {
-            pocaGroupId: forGroup?.pocaGroupId || POCA_GROUP_DEFAULT.pocaGroupId,
-            nameEn: forGroup?.nameEn || POCA_GROUP_DEFAULT.nameEn,
+            pocaGroupId: forSubunit?.pocaGroupId || forGroup?.pocaGroupId || POCA_GROUP_DEFAULT.pocaGroupId,
+            nameEn: forSubunit?.nameEn || forGroup?.nameEn || POCA_GROUP_DEFAULT.nameEn,
         };
     };
+
+    // 🌟 目前選擇要同步/顯示哪個分隊的 POCA 設定；該團體沒有分隊時維持空字串（走團體層級設定）
+    const [pocaSyncSubunit, setPocaSyncSubunit] = useState('');
+    useEffect(() => {
+        if (currentSubunitsAll && currentSubunitsAll.length > 0) {
+            setPocaSyncSubunit(prev => currentSubunitsAll.some(s => s.name === prev) ? prev : currentSubunitsAll[0].name);
+        } else {
+            setPocaSyncSubunit('');
+        }
+    }, [currentGroupId, currentSubunitsAll]);
 
     const [pocaGroupIdInput, setPocaGroupIdInput] = useState('');
     const [pocaGroupNameEnInput, setPocaGroupNameEnInput] = useState('');
     const [pocaGroupConfigSaveStatus, setPocaGroupConfigSaveStatus] = useState('');
 
-    // 切換團體 (或設定資料載入) 時，把輸入框換成「該團體」已存的設定；沒存過就顯示預設值
+    // 切換團體/分隊 (或設定資料載入) 時，把輸入框換成「該團體/分隊」已存的設定；沒存過就顯示預設值
     useEffect(() => {
-        const conf = getPocaGroupConfig(currentGroupId, appSettings);
+        const conf = getPocaGroupConfig(currentGroupId, appSettings, pocaSyncSubunit);
         setPocaGroupIdInput(conf.pocaGroupId);
         setPocaGroupNameEnInput(conf.nameEn);
-    }, [currentGroupId, appSettings]);
+    }, [currentGroupId, appSettings, pocaSyncSubunit]);
 
     const handleSavePocaGroupConfig = async () => {
         if (!currentGroupId) return;
@@ -749,7 +779,15 @@ export default function SyncPage() {
         const raw = (appSettings || []).find(s => s.key === 'poca_group_config')?.value;
         let conf = {};
         if (raw) { try { conf = JSON.parse(raw) || {}; } catch (e) {} }
-        conf[String(currentGroupId)] = { pocaGroupId: pocaGroupIdInput.trim(), nameEn: pocaGroupNameEnInput.trim() };
+        const groupKey = String(currentGroupId);
+        const entry = { pocaGroupId: pocaGroupIdInput.trim(), nameEn: pocaGroupNameEnInput.trim() };
+        if (pocaSyncSubunit) {
+            const existingGroup = (conf[groupKey] && typeof conf[groupKey] === 'object') ? conf[groupKey] : {};
+            const existingSubunits = (existingGroup.subunits && typeof existingGroup.subunits === 'object') ? existingGroup.subunits : {};
+            conf[groupKey] = { ...existingGroup, subunits: { ...existingSubunits, [pocaSyncSubunit]: entry } };
+        } else {
+            conf[groupKey] = entry;
+        }
         const { error } = await handleUpdateAppSetting('poca_group_config', JSON.stringify(conf));
         setPocaGroupConfigSaveStatus(error ? 'error' : 'saved');
         setTimeout(() => setPocaGroupConfigSaveStatus(''), error ? 4000 : 2000);
@@ -1175,10 +1213,15 @@ export default function SyncPage() {
         return set;
     }, [allCards, cards]);
 
-    // 🌟 排序，讓新抓到的卡片排在最前面 (過濾掉已對照的卡片)
+    // 🌟 依右上角目前選的團體（有分隊的話還要再依目前選的分隊）決定要看哪個 group_name_en 的
+    // POCA 卡片，換團體/分隊時這個列表就會跟著換，不再是整個 App 共用同一份列表。
+    const activePocaNameEn = useMemo(() => getPocaGroupConfig(currentGroupId, appSettings, pocaSyncSubunit).nameEn, [currentGroupId, appSettings, pocaSyncSubunit]);
+
+    // 🌟 排序，讓新抓到的卡片排在最前面 (過濾掉已對照的卡片、以及不屬於目前團體/分隊的卡片)
     const unmatchedPoca = useMemo(() => (pocaCards || [])
         .filter(p => !matchedPocaIds.has(String(p.id)) && !p.cardId && !p.card_id)
-        .sort((a, b) => Number(b.id) - Number(a.id)), [pocaCards, matchedPocaIds]);
+        .filter(p => !activePocaNameEn || String(p.groupNameEn || p.group_name_en || '').toLowerCase() === String(activePocaNameEn).toLowerCase())
+        .sort((a, b) => Number(b.id) - Number(a.id)), [pocaCards, matchedPocaIds, activePocaNameEn]);
 
     const totalPocaPages = Math.ceil(unmatchedPoca.length / POCA_PER_PAGE);
     const displayedPocaCards = useMemo(() => {
@@ -1190,8 +1233,9 @@ export default function SyncPage() {
         setIsCrawling(true);
         setSyncProgress('準備中...');
         try {
-            // 🌟 依目前選取的團體決定要抓 POCA 站上的哪個 group，沒設定過就退回舊的 36/cravity
-            const { pocaGroupId: activePocaGroupId, nameEn: activePocaGroupNameEn } = getPocaGroupConfig(currentGroupId, appSettings);
+            // 🌟 依目前選取的團體（有分隊的話再依目前選的分隊）決定要抓 POCA 站上的哪個 group，
+            // 沒設定過就退回舊的 36/cravity
+            const { pocaGroupId: activePocaGroupId, nameEn: activePocaGroupNameEn } = getPocaGroupConfig(currentGroupId, appSettings, pocaSyncSubunit);
 
             const initialMapping = {
                 2.5: 500, 3.5: 1000, 4.2: 1500, 4.9: 2000, 5.6: 2500,
@@ -1562,11 +1606,27 @@ export default function SyncPage() {
 
                     {activeSubTab === 'poca_match' && (
                         <>
-                        {/* 🌟 這個團體對應的 POCA 站內 group 參數：換團體 (右上角) 時這裡也會跟著換，
+                        {/* 🌟 該團體有分隊的話（例如 VIVIZ/GFRIEND 底下的 VIVIZ、GFRIEND、SOLO），
+                            POCA 站上對應的 group 參數通常每個分隊各自不同，所以先選要同步/查看哪個分隊。 */}
+                        {currentSubunitsAll.length > 0 && (
+                            <div className="mx-4 flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold text-gray-400 whitespace-nowrap">分隊：</span>
+                                {[...currentSubunitsAll].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)).map((s: any) => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => setPocaSyncSubunit(s.name)}
+                                        className={`px-3 py-1.5 text-xs rounded-full border transition-all whitespace-nowrap select-none ${pocaSyncSubunit === s.name ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                                    >
+                                        {s.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        {/* 🌟 這個團體 (或分隊) 對應的 POCA 站內 group 參數：換團體/分隊時這裡也會跟著換，
                             按「同步」時抓的就是這裡設定的 group，不再整個 App 共用同一個寫死的 group=36 */}
                         <div className="mx-4 bg-white border border-gray-200 rounded-xl shadow-sm p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                             <span className="text-xs font-bold text-gray-500 whitespace-nowrap">
-                                「{currentGroup?.name || '此團體'}」的 POCA 設定
+                                「{currentGroup?.name || '此團體'}{pocaSyncSubunit ? ` - ${pocaSyncSubunit}` : ''}」的 POCA 設定
                             </span>
                             <input
                                 type="text" placeholder="POCA group ID，例如 36"

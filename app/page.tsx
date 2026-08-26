@@ -7659,6 +7659,8 @@ export default function App() {
   useEffect(() => {
       const urlParams = new URLSearchParams(window.location.search);
       if (currentGroupId) {
+          // 🌟 切換主畫面與資料同步兩個頁面時保持在同一團體：跟 /admin/sync 共用同一個 localStorage key
+          try { localStorage.setItem('ck_current_group_id', String(currentGroupId)); } catch (e) {}
           if (urlParams.get('group') !== String(currentGroupId)) {
               const newUrl = new URL(window.location.href);
               newUrl.searchParams.set('group', currentGroupId);
@@ -7804,8 +7806,15 @@ export default function App() {
         
         const urlParams = new URLSearchParams(window.location.search);
         const urlGroupId = urlParams.get('group');
+        // 🌟 切換主畫面與資料同步兩個頁面時保持在同一團體：網址帶的 ?group= 優先，
+        // 沒有的話退回 localStorage 記住的上次選擇（跟 /admin/sync 共用同一個 key），
+        // 都沒有才用第一個團體。
+        let storedGroupId = null;
+        try { storedGroupId = localStorage.getItem('ck_current_group_id'); } catch (e) {}
         if (urlGroupId && fetchedGroups.some(g => String(g.id) === String(urlGroupId))) {
             setCurrentGroupId(urlGroupId);
+        } else if (storedGroupId && fetchedGroups.some(g => String(g.id) === String(storedGroupId))) {
+            setCurrentGroupId(storedGroupId);
         } else if (fetchedGroups.length > 0 && !currentGroupId) {
             setCurrentGroupId(fetchedGroups[0].id);
         }
