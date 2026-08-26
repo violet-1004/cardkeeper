@@ -1226,11 +1226,21 @@ export default function SyncPage() {
         .filter(p => !activePocaNameEn || String(p.groupNameEn || p.group_name_en || '').toLowerCase() === String(activePocaNameEn).toLowerCase())
         .sort((a, b) => Number(b.id) - Number(a.id)), [pocaCards, matchedPocaIds, activePocaNameEn]);
 
+    // 🌟 修正：切換團體/分隊後 unmatchedPoca 的筆數會跟著改變（例如從 IDID 921 筆切到
+    // CRAVITY 3 筆），但 pocaPage 沒有跟著重置，導致停在超出範圍的頁數、畫面直接空白
+    // （明明還有很多未對照的卡片，卻什麼都沒顯示）。改成切換團體/分隊時一律回到第 1 頁。
+    useEffect(() => {
+        setPocaPage(1);
+    }, [activePocaNameEn]);
+
     const totalPocaPages = Math.ceil(unmatchedPoca.length / POCA_PER_PAGE);
     const displayedPocaCards = useMemo(() => {
-        const startIndex = (pocaPage - 1) * POCA_PER_PAGE;
+        // 🌟 防呆：萬一 pocaPage 因為某些情況（例如新抓到的資料變少了）超出目前的總頁數，
+        // 夾回最後一頁，而不是讓 slice 算出空範圍、畫面整個空白。
+        const safePage = Math.min(Math.max(pocaPage, 1), Math.max(totalPocaPages, 1));
+        const startIndex = (safePage - 1) * POCA_PER_PAGE;
         return unmatchedPoca.slice(startIndex, startIndex + POCA_PER_PAGE);
-    }, [unmatchedPoca, pocaPage]);
+    }, [unmatchedPoca, pocaPage, totalPocaPages]);
 
     const handlePocaCrawl = async () => {
         setIsCrawling(true);
@@ -1355,7 +1365,14 @@ export default function SyncPage() {
 
                             if (finalPrice === undefined) {
                                 finalPrice = await new Promise((resolve) => {
-                                    setMissingPriceCard({ originalPrice, image: String(item.image || item.imagePath || '') } as any);
+                                    // 🌟 補上這張卡的 id / 庫存數，讓「發現未知卡價」的視窗能在圖片下方標註，
+                                    // 方便對照時知道這是哪張卡（不只是看到一張圖片、一個原始價格數字）
+                                    setMissingPriceCard({
+                                        originalPrice,
+                                        image: String(item.image || item.imagePath || ''),
+                                        id: String(item.id ?? ''),
+                                        stockedCount: Number(item.stocked_count ?? item.stock_count ?? item.stockCount ?? item.stockedCount ?? item.quantity ?? 0),
+                                    } as any);
                                     missingPriceResolver.current = resolve;
                                 });
                                 if (finalPrice === null) throw new Error("使用者中斷了同步作業");
@@ -1985,6 +2002,11 @@ export default function SyncPage() {
                                 <div className="text-gray-500 text-sm">此 POCA 卡片的價格不在對照表中，請手動輸入轉換後的價格：</div>
                                 <div className="w-32 aspect-[2/3] rounded-lg overflow-hidden border shadow-sm relative bg-gray-100">
                                     {(missingPriceCard as any).image ? <img src={(missingPriceCard as any).image} className="absolute inset-0 w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300" /></div>}
+                                    {/* 🌟 在圖片底下標註這張卡的資訊（id、庫存數），跟「未對照 POCA 卡片」列表的縮圖標註樣式一致 */}
+                                    <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1">
+                                        <div className="text-[9px] text-white font-bold truncate">{(missingPriceCard as any).id}</div>
+                                        <div className="text-[9px] text-gray-200">庫存 {(missingPriceCard as any).stockedCount}</div>
+                                    </div>
                                 </div>
                                 <div className="font-bold text-red-500 text-lg">原始價格 (美金): {(missingPriceCard as any).originalPrice}</div>
                                 <div className="w-full">
