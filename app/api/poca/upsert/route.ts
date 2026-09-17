@@ -68,6 +68,10 @@ export async function POST(req: Request) {
         if (error.cause) {
             console.error("🔥 /api/poca/upsert Error Cause:", error.cause);
         }
-        return NextResponse.json({ success: false, error: error.message, cause: error.cause }, { status: 500 });
+        // 🌟 debug：error.cause 常常是個 Error 物件，直接塞進 NextResponse.json 會被
+        // JSON.stringify 成 {}（Error 的 message/stack 不是 enumerable），先前完全看不到
+        // D1 真正回傳的原因。改成把 message/name 明確抓出來，才查得出實際失敗原因。
+        const causeInfo = error.cause ? { message: error.cause.message, name: error.cause.name } : null;
+        return NextResponse.json({ success: false, error: error.message, cause: causeInfo }, { status: 500 });
     }
 }
