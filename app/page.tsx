@@ -439,12 +439,12 @@ const convertPocaKrwToTwd = (krwPrice, appSettings) => {
 const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false, onBodyScroll }) => {
   const swipeHandlers = useSwipeToClose(onClose);
   return (
-  <div className={`fixed inset-0 z-[150] bg-black/30 backdrop-blur-sm flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
+  <div className={`fixed inset-0 z-[150] bg-black/30 flex items-center justify-center animate-fade-in ${mobileFullScreen ? 'p-0 sm:p-4' : 'p-4'}`} onClick={onClose} {...swipeHandlers}>
     <div
-      className={`bg-white/90 backdrop-blur-xl border border-white/50 w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-3xl ${className}` : `rounded-3xl max-h-[90vh] ${className}`}`}
+      className={`bg-white border border-white/50 w-full shadow-2xl overflow-hidden flex flex-col transition-all ${fullScreen ? 'fixed inset-0 rounded-none h-full max-h-full' : mobileFullScreen ? `h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-3xl ${className}` : `rounded-3xl max-h-[90vh] ${className}`}`}
       onClick={e => e.stopPropagation()}
     >
-      <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/50 backdrop-blur-sm flex-shrink-0 z-10">
+      <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/50 flex-shrink-0 z-10">
         <div className="font-bold font-display text-lg text-gray-800 truncate pr-2 flex-1 flex items-center gap-3">
             <span className="window-dots hidden sm:inline-flex flex-shrink-0"><span></span><span></span><span></span></span>
             {title}
@@ -458,7 +458,7 @@ const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullS
         {children}
       </div>
       {footer && (
-        <div className="px-4 py-3 border-t border-gray-200/50 bg-white/50 backdrop-blur-sm flex justify-end gap-3 flex-shrink-0 z-10 safe-area-bottom">
+        <div className="px-4 py-3 border-t border-gray-200/50 bg-white/50 flex justify-end gap-3 flex-shrink-0 z-10 safe-area-bottom">
           {footer}
         </div>
       )}
@@ -1374,15 +1374,15 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     }, [activeModal]);
 
     return (
-        <div className="fixed inset-0 z-[250] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-fade-in" {...swipeHandlers}>
-            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0">
+        <div className="fixed inset-0 z-[250] bg-gray-50 flex flex-col animate-fade-in" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 z-10 sticky top-0">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">卡片詳情</div>
                 <button onClick={() => { onClose(); onEdit(card); }} className="p-2 -mr-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-5 h-5" /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar bg-transparent">
-                <div className="bg-white/60 p-6 mb-2 text-center border-b border-gray-200/50 shadow-sm backdrop-blur-sm">
+                <div className="bg-white/60 p-6 mb-2 text-center border-b border-gray-200/50 shadow-sm">
                     <div className="w-40 aspect-[2/3] mx-auto bg-gray-100 rounded-xl overflow-hidden border shadow-lg mb-4 relative">
                         {/* 🌟 詳情頁：加入 unoptimized 直接讀取最原始、最高畫質的無損圖片 */}
                         {card.image ? (
@@ -1567,7 +1567,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                 </div>
             </div>
 
-            <div className="border-t border-gray-200/50 bg-white/80 backdrop-blur-md p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] grid grid-cols-3 gap-3 z-20">
+            <div className="border-t border-gray-200/50 bg-white/80 p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] grid grid-cols-3 gap-3 z-20">
                 <button 
                     onClick={toggleWishlist}
                     className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all active:scale-95 ${card.isWishlist ? 'bg-pink-50 text-pink-600 ring-1 ring-pink-200' : 'hover:bg-gray-50 text-gray-600'}`}
@@ -1987,6 +1987,22 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
       return safeString(cardA.id).localeCompare(safeString(cardB.id));
   });
 
+  // 🌟 Safari 一次渲染上百張原圖會吃光記憶體而卡死，改為分批載入（捲到底再多載一批）
+  const PAGE_SIZE = 60;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const loadMoreRef = useRef(null);
+  const filterSignature = [currentGroupId, filterMemberId, filterSubunit, filterSeriesId, filterSeriesType, filterBatchId, filterType, filterChannel, filterSubMembers.join(',')].join('|');
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filterSignature]);
+  useEffect(() => {
+      const el = loadMoreRef.current;
+      if (!el || typeof IntersectionObserver === 'undefined') return;
+      const io = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) setVisibleCount(c => c + PAGE_SIZE);
+      }, { rootMargin: '600px 0px' });
+      io.observe(el);
+      return () => io.disconnect();
+  }, [visibleCount, filteredCards.length]);
+
   const inventoryMap = useMemo(() => {
       const map = {};
       (inventory || []).forEach(inv => {
@@ -2266,11 +2282,11 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
             </div>
         </div>
 
-        <div 
-            className="grid gap-2 sm:gap-3 lg:gap-4 transition-all duration-300 ease-in-out mt-2"
+        <div
+            className="grid gap-2 sm:gap-3 lg:gap-4 mt-2"
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
         >
-            {filteredCards.map(card => {
+            {filteredCards.slice(0, visibleCount).map(card => {
                         const isSelected = selectedItems.some(i => String(i.cardId) === String(card.id));
                         const invStats = inventoryMap[String(card.id)] || { total: 0, arrived: 0, unshipped: 0, hoarded: 0, unknown: 0 };
                         const { arrived, unshipped, hoarded, unknown, total } = invStats;
@@ -2303,7 +2319,7 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                                 className={`cursor-pointer group relative select-none ${isSelected ? 'scale-95' : ''}`}
                                 // 🌟 手機版圖鑑常有上百張卡片，content-visibility 讓瀏覽器跳過畫面外卡片的
                                 // 排版/繪製工作，捲動到才計算，大幅加快大量卡片時的載入與捲動速度
-                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', contentVisibility: 'auto', containIntrinsicSize: '0 260px' }}
+                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                 onClick={(e) => {
                                     if (isSelectionMode) {
                                         handleSelectAdd(card.id);
@@ -2367,6 +2383,9 @@ function LibraryTab({ currentGroupId, members, series, batches, channels, types,
                         )
                     })}
         </div>
+        {visibleCount < filteredCards.length && (
+          <div ref={loadMoreRef} className="py-6 text-center text-xs text-gray-400">載入更多… ({visibleCount}/{filteredCards.length})</div>
+        )}
       </div>
     </div>
   );
@@ -3127,7 +3146,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                         className={`cursor-pointer group relative select-none ${isOwned ? '' : 'opacity-30 grayscale'} ${isMarkMode ? 'ring-2 ring-transparent hover:ring-blue-300 rounded-lg' : ''}`}
                         // 🌟 收藏冊常有上百張卡片，content-visibility 讓瀏覽器跳過畫面外卡片的排版/
                         // 繪製工作，捲動到才計算，大幅加快大量卡片時的載入與捲動速度
-                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', contentVisibility: 'auto', containIntrinsicSize: '0 260px' }}
+                        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                         onMouseDown={() => startPress(card.id)}
                         onMouseUp={cancelPress}
                         onMouseLeave={cancelPress}
@@ -3359,7 +3378,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
 
     return (
         <div className="bg-gray-50 min-h-screen pb-20">
-             <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
+             <div className="bg-white/80 border-b border-gray-200/50 sticky top-14 sm:top-16 z-20 shadow-sm px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
                  <div className="flex justify-center items-center relative">
                      <div className="relative">
                          <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value)} className="appearance-none bg-blue-50 border border-blue-100 text-blue-700 font-bold py-1.5 pl-4 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer text-xs shadow-sm">
@@ -3447,7 +3466,7 @@ function InventoryTab({ cards, inventory, setViewingCard, series, bulkRecords, b
                             className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm active:scale-[0.99] transition-transform cursor-pointer hover:border-blue-300 border border-transparent select-none"
                             // 🌟 紀錄列表常有大量交易紀錄，content-visibility 讓畫面外的項目跳過排版/
                             // 繪製工作，加快載入與捲動速度
-                            style={{ contentVisibility: 'auto', containIntrinsicSize: '0 66px' }}
+                            
                         >
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="flex flex-col items-center justify-center w-11 h-11 bg-gray-100 rounded-lg flex-shrink-0">
@@ -4086,8 +4105,8 @@ function AlbumDetailModal({ album, onClose, cards, members, series, setInventory
     const priceKey = `${album.id}_${activeStatus}`;
 
     return (
-        <div className="fixed inset-0 z-[250] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-fade-in" {...swipeHandlers}>
-            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0">
+        <div className="fixed inset-0 z-[250] bg-gray-50 flex flex-col animate-fade-in" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 z-10 sticky top-0">
                 <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">專輯詳情</div>
                 <div className="w-10"></div> {/* Placeholder */}
@@ -4633,7 +4652,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
         >
             {/* 🌟 工具列＋篩選器包成同一個 sticky 區塊，一起釘在捲動區頂端；
                 篩選器區塊高度用 filtersVisible 收合，工具列本身固定不動 */}
-            <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md">
+            <div className="sticky top-0 z-10 bg-white/80">
                 <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-gray-100">
                      <div className="flex items-center gap-2">
                          <div className="flex bg-gray-100 p-1 rounded-lg items-center h-8 flex-shrink-0">
@@ -4717,7 +4736,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                                 className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-600 scale-95 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
                                 // 🌟 選卡器一次可能列出整個系列上百張卡片，content-visibility 讓畫面外的
                                 // 卡片跳過排版/繪製，捲動到才計算，加快開啟與捲動速度
-                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
+                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                                 onMouseDown={() => startPress(card.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                                 onTouchStart={() => startPress(card.id)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
                                 onContextMenu={e => { e.preventDefault(); cancelPress(); }}
@@ -5284,8 +5303,8 @@ function BulkRecordDetailView({ record, onClose, onSave, onDelete, cards, member
     const swipeHandlers = useSwipeToClose(handleClose);
 
     return (
-        <div className="fixed inset-0 z-[150] bg-gray-50/50 backdrop-blur-xl flex flex-col animate-slide-up" {...swipeHandlers}>
-            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 sticky top-0 shadow-sm">
+        <div className="fixed inset-0 z-[150] bg-gray-50/50 flex flex-col animate-slide-up" {...swipeHandlers}>
+            <div className="px-4 py-3 border-b border-gray-200/50 flex items-center justify-between bg-white/80 z-10 sticky top-0 shadow-sm">
                 <button onClick={handleClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft className="w-6 h-6 text-gray-700" /></button>
                 <div className="font-bold text-lg">{isEdit ? (isSetMode ? '編輯套收記錄' : '編輯盤收記錄') : (isSetMode ? '新增套收記錄' : '新增盤收記錄')}</div>
                 <div className="flex gap-1 items-center">
@@ -7225,7 +7244,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                 </div>
                             )}
                             {hiddenCardIds.has(card.id) && (
-                                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20 rounded-lg backdrop-blur-sm">
+                                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20 rounded-lg">
                                     <EyeOff className="w-1/3 h-1/3 text-white/80" />
                                 </div>
                             )}
@@ -8855,7 +8874,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen app-dotted-bg text-gray-800 font-sans pb-28 md:pb-0">
-      <nav className="bg-white/80 backdrop-blur-lg border-b border-gray-100 shadow-sm sticky top-0 z-40 px-4">
+      <nav className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-40 px-4">
         <div className="max-w-6xl mx-auto h-16 flex justify-between items-center">
           <Link href="/admin" className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="bg-[#9B90C2] p-2 rounded-xl shadow-[0_4px_14px_rgba(155,144,194,0.35)]">
@@ -8954,7 +8973,7 @@ export default function App() {
           改用固定在畫面底部、圖示+文字並排的分頁列，符合手機 App 慣例、點擊範圍也更大。
           選取模式(isSelectionMode)有自己的底部操作列，此時隱藏 Tab Bar 避免重疊。 */}
       {groups.length > 0 && !isSelectionMode && (
-          <nav className="mobile-tabbar md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-lg border-t border-gray-100 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+          <nav className="mobile-tabbar md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-100 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
               <div className="grid pt-1.5" style={{ gridTemplateColumns: `repeat(${NAV_TABS.length}, minmax(0, 1fr))` }}>
                   {NAV_TABS.map(tab => (
                       <button
