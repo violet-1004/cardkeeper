@@ -6289,6 +6289,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [cardsPerPage, setCardsPerPage] = useState(8);
     const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
     const [applyFee, setApplyFee] = useState(false); // 🌟 新增：手續費狀態
+    const [showUnlisted, setShowUnlisted] = useState(false); // 🌟 販售頁：是否一併顯示待售（POCA 換算價）小卡
 
     // 🌟 手機版的照片排版固定用直式 4x6（寬4吋高6吋），不像桌機那樣依欄數(cols)切換橫直。
     // 手機螢幕本來就是直的，橫式 6x4 在窄螢幕上反而更擠，所以手機一律用直式。
@@ -6406,17 +6407,25 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         return map;
     }, [types]);
 
+    // 🌟 待售價：庫存 >= 1、沒有在販售中、有對照 POCA 且價格非 ₩0，換算台幣後進位到 5；不符合回傳 null
+    const getUnlistedTwdPrice = (c) => {
+        if ((inventoryMap[c.id] || 0) < 1 || salesMap[String(c.id)]) return null;
+        const krw = getCardPocaKrw(c, pocaMap);
+        if (!krw || krw <= 0) return null;
+        const twd = convertPocaKrwToTwd(krw, appSettings);
+        return twd === null ? null : roundUpToFive(twd);
+    };
+
     const poolCards = useMemo(() => {
         if (!activeView) return [];
         if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
         if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
-        if (activeView === 'selling') return (cards || []).filter(c => salesMap[String(c.id)]);
-        if (activeView === 'unlisted') return (cards || []).filter(c => (inventoryMap[c.id] || 0) >= 1 && !salesMap[String(c.id)] && getCardPocaKrw(c, pocaMap) !== 0);
+        if (activeView === 'selling') return (cards || []).filter(c => salesMap[String(c.id)] || (showUnlisted && getUnlistedTwdPrice(c) !== null));
         if (typeof activeView === 'object' && activeView.items) {
             return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
         return [];
-    }, [activeView, cards, inventoryMap, salesMap, pocaMap]);
+    }, [activeView, cards, inventoryMap, salesMap, pocaMap, showUnlisted, appSettings]);
 
     // ==========================================
     // 3. 連動過濾器邏輯
@@ -6476,6 +6485,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         subunitFilteredCards.forEach(c => {
             const s = salesMap[String(c.id)];
             if (s) colors.add(s.color || 'bg-black/70');
+            else colors.add('bg-pink-500');
         });
         return [...colors];
     }, [activeView, subunitFilteredCards, salesMap]);
@@ -6641,23 +6651,21 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             
             if (activeView === 'selling' && filterColors.length > 0) {
                  const saleRecord = salesMap[String(c.id)];
-                 const color = saleRecord?.color || 'bg-black/70';
+                 const color = saleRecord ? (saleRecord.color || 'bg-black/70') : 'bg-pink-500';
                  if (!filterColors.includes(color)) return false;
             }
             return true;
         }).map(c => {
             if (activeView === 'selling') {
                 const saleRecord = salesMap[String(c.id)];
+                if (!saleRecord) {
+                    return { ...c, note: `$${getUnlistedTwdPrice(c)}`, noteColor: 'bg-pink-500' };
+                }
                 let displayPrice = Number(saleRecord?.price) || 0;
                 if (applyFee && displayPrice > 0) {
                     displayPrice = Math.ceil((displayPrice * 1.02) / 5) * 5;
                 }
                 return { ...c, note: `$${displayPrice}`, noteColor: saleRecord?.color || 'bg-black/70' };
-            }
-            if (activeView === 'unlisted') {
-                const krw = getCardPocaKrw(c, pocaMap);
-                const twd = (krw && krw > 0) ? convertPocaKrwToTwd(krw, appSettings) : null;
-                return { ...c, note: twd !== null ? `$${roundUpToFive(twd)}` : undefined, noteColor: 'bg-black/70' };
             }
             if (typeof activeView === 'object' && activeView.items) {
                 const item = activeView.items.find(i => String(i.cardId) === String(c.id));
@@ -7294,7 +7302,6 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         const defaultExportTitle = activeView === 'owned' ? '我的擁有' : 
                       activeView === 'wishlist' ? '願望清單' : 
                       activeView === 'selling' ? '販售中' : 
-                      activeView === 'unlisted' ? '待售（POCA 換算價）' : 
                       activeView.title;
         const displayExportTitle = customExportTitle !== null ? customExportTitle : defaultExportTitle;
 
@@ -7361,8 +7368,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
-                              {(activeView === 'selling' || activeView === 'unlisted') && (
-                                  <button onClick={() => setActiveView(activeView === 'selling' ? 'unlisted' : 'selling')} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${activeView === 'unlisted' ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                              {activeView === 'selling' && (
+                                  <button onClick={() => setShowUnlisted(!showUnlisted)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${showUnlisted ? 'bg-pink-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                       待售
                                   </button>
                               )}
