@@ -446,6 +446,21 @@ const getCardPocaKrw = (card, pocaMap) => {
 // 🌟 POCA 換算台幣後無條件進位到 5 的倍數（72 → 75）
 const roundUpToFive = (n) => Math.ceil(n / 5) * 5;
 
+// 🌟 販售價格標籤只保留四種顏色；舊資料的顏色 class 會自動轉成對應的新顏色
+const SALE_COLOR_BLACK = 'bg-black/70';
+const SALE_COLOR_RED = 'bg-[#E87A90]';
+const SALE_COLOR_PURPLE = 'bg-[#986DB2]';
+const SALE_COLOR_LIGHT = 'bg-[#81C7D4]';
+const UNLISTED_COLOR = 'bg-[#91B493]';
+const normalizeSaleColor = (color) => {
+    if (!color) return SALE_COLOR_BLACK;
+    if (color === SALE_COLOR_RED || color === SALE_COLOR_PURPLE || color === SALE_COLOR_LIGHT || color === UNLISTED_COLOR) return color;
+    if (color === 'bg-red-500/80') return SALE_COLOR_RED;
+    if (color === 'bg-purple-500/80') return SALE_COLOR_PURPLE;
+    if (color === 'bg-blue-500/80') return SALE_COLOR_LIGHT;
+    return SALE_COLOR_BLACK;
+};
+
 // --- 3. 基礎 UI 組件 ---
 const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false, onBodyScroll }) => {
   const swipeHandlers = useSwipeToClose(onClose);
@@ -1106,12 +1121,10 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
     const swipeHandlers = useSwipeToClose(onClose);
 
     const SALE_COLORS = [
-        { id: 'black', class: 'bg-black/70', display: 'bg-gray-800' },
-        { id: 'red', class: 'bg-red-500/80', display: 'bg-red-500' },
-        { id: 'orange', class: 'bg-orange-500/80', display: 'bg-orange-500' },
-        { id: 'green', class: 'bg-green-600/80', display: 'bg-green-600' },
-        { id: 'blue', class: 'bg-blue-500/80', display: 'bg-blue-500' },
-        { id: 'purple', class: 'bg-purple-500/80', display: 'bg-purple-500' },
+        { id: 'black', class: SALE_COLOR_BLACK, display: 'bg-gray-800' },
+        { id: 'red', class: SALE_COLOR_RED, display: SALE_COLOR_RED },
+        { id: 'purple', class: SALE_COLOR_PURPLE, display: SALE_COLOR_PURPLE },
+        { id: 'light', class: SALE_COLOR_LIGHT, display: SALE_COLOR_LIGHT },
     ];
 
     const card = cards.find(c => String(c.id) === String(initialCard.id)) || initialCard;
@@ -1468,7 +1481,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                     <button
                                         key={c.id}
                                         onClick={() => handleUpdateSale('color', c.class)}
-                                        className={`w-4 h-4 rounded-full ${c.display} border-2 ${currentSale?.color === c.class || (!currentSale?.color && c.id === 'black') ? 'border-gray-400 scale-110' : 'border-transparent opacity-40 hover:opacity-100'} transition-all`}
+                                        className={`w-4 h-4 rounded-full ${c.display} border-2 ${normalizeSaleColor(currentSale?.color) === c.class ? 'border-gray-400 scale-110' : 'border-transparent opacity-40 hover:opacity-100'} transition-all`}
                                         title="設定標籤顏色"
                                     />
                                 ))}
@@ -6495,8 +6508,8 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         const colors = new Set();
         subunitFilteredCards.forEach(c => {
             const s = salesMap[String(c.id)];
-            if (s) colors.add(s.color || 'bg-black/70');
-            else colors.add('bg-pink-500');
+            if (s) colors.add(normalizeSaleColor(s.color));
+            else colors.add(UNLISTED_COLOR);
         });
         return [...colors];
     }, [activeView, subunitFilteredCards, salesMap]);
@@ -6662,7 +6675,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             
             if (activeView === 'selling' && filterColors.length > 0) {
                  const saleRecord = salesMap[String(c.id)];
-                 const color = saleRecord ? (saleRecord.color || 'bg-black/70') : 'bg-pink-500';
+                 const color = saleRecord ? normalizeSaleColor(saleRecord.color) : UNLISTED_COLOR;
                  if (!filterColors.includes(color)) return false;
             }
             return true;
@@ -6670,13 +6683,13 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             if (activeView === 'selling') {
                 const saleRecord = salesMap[String(c.id)];
                 if (!saleRecord) {
-                    return { ...c, note: `$${getUnlistedTwdPrice(c)}`, noteColor: 'bg-pink-500' };
+                    return { ...c, note: `$${getUnlistedTwdPrice(c)}`, noteColor: UNLISTED_COLOR };
                 }
                 let displayPrice = Number(saleRecord?.price) || 0;
                 if (applyFee && displayPrice > 0) {
                     displayPrice = Math.ceil((displayPrice * 1.02) / 5) * 5;
                 }
-                return { ...c, note: `$${displayPrice}`, noteColor: saleRecord?.color || 'bg-black/70' };
+                return { ...c, note: `$${displayPrice}`, noteColor: normalizeSaleColor(saleRecord?.color) };
             }
             if (typeof activeView === 'object' && activeView.items) {
                 const item = activeView.items.find(i => String(i.cardId) === String(c.id));
@@ -7380,7 +7393,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
                               {activeView === 'selling' && (
-                                  <button onClick={() => setShowUnlisted(!showUnlisted)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${showUnlisted ? 'bg-pink-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                  <button onClick={() => setShowUnlisted(!showUnlisted)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${showUnlisted ? 'bg-[#91B493] text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                       待售
                                   </button>
                               )}
