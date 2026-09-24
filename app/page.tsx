@@ -4298,12 +4298,6 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     };
 
     // 🌟 1. 建立高效能字典 (與 CollectionTab 一致)
-    const pocaMap = useMemo(() => {
-        const map = {};
-        (pocaCards || []).forEach(p => map[String(p.id)] = p);
-        return map;
-    }, [pocaCards]);
-
     const seriesMap = useMemo(() => {
         const map = {};
         (series || []).forEach(s => map[String(s.id)] = s);
@@ -6374,6 +6368,12 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         return map;
     }, [inventory]);
 
+    const pocaMap = useMemo(() => {
+        const map = {};
+        (pocaCards || []).forEach(p => map[String(p.id)] = p);
+        return map;
+    }, [pocaCards]);
+
     const salesMap = useMemo(() => {
         const map = {};
         (sales || []).forEach(s => {
@@ -6411,12 +6411,12 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
         if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
         if (activeView === 'selling') return (cards || []).filter(c => salesMap[String(c.id)]);
-        if (activeView === 'unlisted') return (cards || []).filter(c => (inventoryMap[c.id] || 0) >= 1 && !salesMap[String(c.id)]);
+        if (activeView === 'unlisted') return (cards || []).filter(c => (inventoryMap[c.id] || 0) >= 1 && !salesMap[String(c.id)] && getCardPocaKrw(c, pocaMap) !== 0);
         if (typeof activeView === 'object' && activeView.items) {
             return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
         return [];
-    }, [activeView, cards, inventoryMap, salesMap]);
+    }, [activeView, cards, inventoryMap, salesMap, pocaMap]);
 
     // ==========================================
     // 3. 連動過濾器邏輯
@@ -7361,6 +7361,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
+                              {(activeView === 'selling' || activeView === 'unlisted') && (
+                                  <button onClick={() => setActiveView(activeView === 'selling' ? 'unlisted' : 'selling')} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${activeView === 'unlisted' ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                      待售
+                                  </button>
+                              )}
                               {activeView === 'selling' && (
                                   <button onClick={() => setApplyFee(!applyFee)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${applyFee ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`} title="含手續費 (x1.02並進位至0或5)">
                                       含手續費
@@ -7569,7 +7574,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         <div className="p-4 space-y-8 pb-24">
             <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">系統分類</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                   <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
                       <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform"><Folder className="w-6 h-6 fill-current" /></div>
                       <span className="font-bold text-gray-700 text-sm">擁有</span>
@@ -7581,10 +7586,6 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                   <div onClick={() => setActiveView('selling')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md transition-all group">
                       <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform"><ShoppingBag className="w-6 h-6" /></div>
                       <span className="font-bold text-gray-700 text-sm">販售</span>
-                  </div>
-                  <div onClick={() => setActiveView('unlisted')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-orange-300 hover:shadow-md transition-all group">
-                      <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 group-hover:scale-110 transition-transform"><Coins className="w-6 h-6" /></div>
-                      <span className="font-bold text-gray-700 text-sm">待售</span>
                   </div>
               </div>
           </section>
