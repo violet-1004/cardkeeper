@@ -435,6 +435,17 @@ const convertPocaKrwToTwd = (krwPrice, appSettings) => {
     return ((Number(krwPrice) / rates.a) + 6) * rates.b + rates.c;
 };
 
+// 🌟 取得小卡對照的 POCA 韓幣價格（沿用收藏頁邏輯）；沒對照回傳 null，0 代表 POCA 未售
+const getCardPocaKrw = (card, pocaMap) => {
+    const matchedPocaId = card.poco_id || card.pocoId || card.poco_jd || card.pocaCard || card.PocaCard || card.poca_id;
+    const pocaData = matchedPocaId ? pocaMap[String(matchedPocaId)] : null;
+    if (!pocaData) return null;
+    return (!isNaN(Number(pocaData.price)) && Number(pocaData.price) > 100) ? Number(pocaData.price) : Number(pocaData.idC ?? pocaData.id_c ?? pocaData.price ?? 0);
+};
+
+// 🌟 POCA 換算台幣後無條件進位到 5 的倍數（72 → 75）
+const roundUpToFive = (n) => Math.ceil(n / 5) * 5;
+
 // --- 3. 基礎 UI 組件 ---
 const Modal = ({ title, onClose, children, footer, className = "max-w-lg", fullScreen = false, headerAction, mobileFullScreen = false, onBodyScroll }) => {
   const swipeHandlers = useSwipeToClose(onClose);
@@ -4287,6 +4298,12 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
     };
 
     // 🌟 1. 建立高效能字典 (與 CollectionTab 一致)
+    const pocaMap = useMemo(() => {
+        const map = {};
+        (pocaCards || []).forEach(p => map[String(p.id)] = p);
+        return map;
+    }, [pocaCards]);
+
     const seriesMap = useMemo(() => {
         const map = {};
         (series || []).forEach(s => map[String(s.id)] = s);
@@ -6251,7 +6268,7 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices }) {
+function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices, pocaCards }) {
     // ==========================================
     // 1. 狀態宣告 (確保順序與唯一性)
     // ==========================================
@@ -6394,6 +6411,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
         if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
         if (activeView === 'selling') return (cards || []).filter(c => salesMap[String(c.id)]);
+        if (activeView === 'unlisted') return (cards || []).filter(c => (inventoryMap[c.id] || 0) >= 1 && !salesMap[String(c.id)]);
         if (typeof activeView === 'object' && activeView.items) {
             return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
@@ -6635,6 +6653,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                     displayPrice = Math.ceil((displayPrice * 1.02) / 5) * 5;
                 }
                 return { ...c, note: `$${displayPrice}`, noteColor: saleRecord?.color || 'bg-black/70' };
+            }
+            if (activeView === 'unlisted') {
+                const krw = getCardPocaKrw(c, pocaMap);
+                const twd = (krw && krw > 0) ? convertPocaKrwToTwd(krw, appSettings) : null;
+                return { ...c, note: twd !== null ? `$${roundUpToFive(twd)}` : undefined, noteColor: 'bg-black/70' };
             }
             if (typeof activeView === 'object' && activeView.items) {
                 const item = activeView.items.find(i => String(i.cardId) === String(c.id));
@@ -7271,6 +7294,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         const defaultExportTitle = activeView === 'owned' ? '我的擁有' : 
                       activeView === 'wishlist' ? '願望清單' : 
                       activeView === 'selling' ? '販售中' : 
+                      activeView === 'unlisted' ? '待售（POCA 換算價）' : 
                       activeView.title;
         const displayExportTitle = customExportTitle !== null ? customExportTitle : defaultExportTitle;
 
@@ -7545,7 +7569,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
         <div className="p-4 space-y-8 pb-24">
             <section>
               <h3 className="font-bold text-lg text-gray-800 mb-4 px-1">系統分類</h3>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div onClick={() => setActiveView('owned')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
                       <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform"><Folder className="w-6 h-6 fill-current" /></div>
                       <span className="font-bold text-gray-700 text-sm">擁有</span>
@@ -7557,6 +7581,10 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                   <div onClick={() => setActiveView('selling')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md transition-all group">
                       <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform"><ShoppingBag className="w-6 h-6" /></div>
                       <span className="font-bold text-gray-700 text-sm">販售</span>
+                  </div>
+                  <div onClick={() => setActiveView('unlisted')} className="bg-white aspect-square rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-orange-300 hover:shadow-md transition-all group">
+                      <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 group-hover:scale-110 transition-transform"><Coins className="w-6 h-6" /></div>
+                      <span className="font-bold text-gray-700 text-sm">待售</span>
                   </div>
               </div>
           </section>
@@ -8867,6 +8895,7 @@ export default function App() {
           onUpdateSetting={handleUpdateAppSetting} // 🌟 傳入更新函式
           showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
           setShowPrices={setExportShowPrices}
+          pocaCards={pocaCards}
         />;
       default: return null;
     }
