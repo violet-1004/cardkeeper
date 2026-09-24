@@ -6408,8 +6408,19 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     }, [types]);
 
     // 🌟 待售價：庫存 >= 1、沒有在販售中、有對照 POCA 且價格非 ₩0，換算台幣後進位到 5；不符合回傳 null
+    const arrivedMap = useMemo(() => {
+        const map = {};
+        (inventory || []).forEach(inv => {
+            if (inv.sellPrice && inv.sellPrice > 0) return;
+            if (inv.status === '未發貨' || inv.status === '囤貨' || inv.status === '未知') return;
+            const key = String(inv.cardId);
+            map[key] = (map[key] || 0) + Number(inv.quantity || 1);
+        });
+        return map;
+    }, [inventory]);
+
     const getUnlistedTwdPrice = (c) => {
-        if ((inventoryMap[c.id] || 0) < 1 || salesMap[String(c.id)]) return null;
+        if ((arrivedMap[String(c.id)] || 0) < 1 || salesMap[String(c.id)]) return null;
         const krw = getCardPocaKrw(c, pocaMap);
         if (!krw || krw <= 0) return null;
         const twd = convertPocaKrwToTwd(krw, appSettings);
@@ -6425,7 +6436,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
             return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
         return [];
-    }, [activeView, cards, inventoryMap, salesMap, pocaMap, showUnlisted, appSettings]);
+    }, [activeView, cards, inventoryMap, arrivedMap, salesMap, pocaMap, showUnlisted, appSettings]);
 
     // ==========================================
     // 3. 連動過濾器邏輯
