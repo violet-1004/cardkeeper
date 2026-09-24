@@ -6303,6 +6303,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [cardsPerPage, setCardsPerPage] = useState(8);
     const [sortDirection, setSortDirection] = useState('asc'); // asc: 舊到新, desc: 新到舊
     const [applyFee, setApplyFee] = useState(false); // 🌟 新增：手續費狀態
+    const [wishlistPocaOnly, setWishlistPocaOnly] = useState(false); // 🌟 願望清單：只顯示 POCA 有金額（>0）的小卡
     const [showUnlisted, setShowUnlisted] = useState(false); // 🌟 販售頁：是否一併顯示待售（POCA 換算價）小卡
 
     // 🌟 手機版的照片排版固定用直式 4x6（寬4吋高6吋），不像桌機那樣依欄數(cols)切換橫直。
@@ -6444,13 +6445,13 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const poolCards = useMemo(() => {
         if (!activeView) return [];
         if (activeView === 'owned') return (cards || []).filter(c => (inventoryMap[c.id] || 0) > 0);
-        if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist);
+        if (activeView === 'wishlist') return (cards || []).filter(c => c.isWishlist && (!wishlistPocaOnly || getCardPocaKrw(c, pocaMap) > 0));
         if (activeView === 'selling') return (cards || []).filter(c => salesMap[String(c.id)] || (showUnlisted && getUnlistedTwdPrice(c) !== null));
         if (typeof activeView === 'object' && activeView.items) {
             return activeView.items.map(item => (cards || []).find(c => String(c.id) === String(item.cardId))).filter(Boolean);
         }
         return [];
-    }, [activeView, cards, inventoryMap, arrivedMap, salesMap, pocaMap, showUnlisted, appSettings]);
+    }, [activeView, cards, inventoryMap, arrivedMap, salesMap, pocaMap, showUnlisted, wishlistPocaOnly, appSettings]);
 
     // ==========================================
     // 3. 連動過濾器邏輯
@@ -7398,6 +7399,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onMouseDown={startPricePress} onMouseUp={cancelPricePress} onMouseLeave={cancelPricePress} onTouchStart={startPricePress} onTouchEnd={cancelPricePress} onClick={handleEyeClick} className={`p-2 rounded-lg transition-all h-8 flex items-center justify-center ${showDetails ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-400'}`}>
                                   {showDetails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
+                              {activeView === 'wishlist' && (
+                                  <button onClick={() => setWishlistPocaOnly(!wishlistPocaOnly)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${wishlistPocaOnly ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                      有 POCA 價
+                                  </button>
+                              )}
                               {activeView === 'selling' && (
                                   <button onClick={() => setShowUnlisted(!showUnlisted)} className={`px-2 py-1 rounded-lg transition-all h-8 flex items-center justify-center text-xs font-bold whitespace-nowrap ${showUnlisted ? 'bg-[#91B493] text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                       待售
