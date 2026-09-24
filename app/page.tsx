@@ -429,10 +429,11 @@ const getPocaRateSettings = (appSettings) => {
     return { a, b, c };
 };
 
-const convertPocaKrwToTwd = (krwPrice, appSettings) => {
+// includeC=false 用於願望清單：不加價差 c → [(POCA₩ / a) + 6] * b
+const convertPocaKrwToTwd = (krwPrice, appSettings, includeC = true) => {
     const rates = getPocaRateSettings(appSettings);
     if (!rates || krwPrice === null || krwPrice === undefined || isNaN(Number(krwPrice))) return null;
-    return ((Number(krwPrice) / rates.a) + 6) * rates.b + rates.c;
+    return ((Number(krwPrice) / rates.a) + 6) * rates.b + (includeC ? rates.c : 0);
 };
 
 // 🌟 取得小卡對照的 POCA 韓幣價格（沿用收藏頁邏輯）；沒對照回傳 null，0 代表 POCA 未售
@@ -1456,7 +1457,7 @@ function CardDetailModal({ currentGroupId, cards, card: initialCard, onClose, in
                                         // 🌟 POCA₩ 為 0 代表這張卡目前未上架/未售，顯示 [未售] 而不是 ₩0
                                         const isUnsold = pocaKrwPrice === 0;
                                         // 🌟 換算後的台幣金額：[(POCA₩ / a) + 6] * b + c，變數未設定時 twdPrice 為 null 不顯示
-                                        const twdPrice = isUnsold ? null : convertPocaKrwToTwd(pocaKrwPrice, appSettings);
+                                        const twdPrice = isUnsold ? null : convertPocaKrwToTwd(pocaKrwPrice, appSettings, !card.isWishlist);
                                         return (
                                             <div className="flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-md text-[10px] border border-green-100">
                                                 <span className="text-green-700 font-black tracking-wider uppercase">POCA</span>
@@ -3162,7 +3163,7 @@ function CollectionTab({ currentGroupId, cards, inventory, setViewingCard, membe
                 const isPocaUnsold = pocaPrice === 0;
                 // 🌟 收藏頁小卡下方改顯示換算後的台幣金額（[(POCA₩ / a) + 6] * b + c）；
                 // 變數未設定時 twdPrice 為 null，退回顯示原本的 POCA₩ 價格
-                const pocaTwdPrice = isPocaUnsold ? null : convertPocaKrwToTwd(pocaPrice, appSettings);
+                const pocaTwdPrice = isPocaUnsold ? null : convertPocaKrwToTwd(pocaPrice, appSettings, !card.isWishlist);
 
                 return (
                     <div
@@ -6690,6 +6691,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                     displayPrice = Math.ceil((displayPrice * 1.02) / 5) * 5;
                 }
                 return { ...c, note: `$${displayPrice}`, noteColor: normalizeSaleColor(saleRecord?.color) };
+            }
+            if (activeView === 'wishlist') {
+                const krw = getCardPocaKrw(c, pocaMap);
+                const twd = (krw && krw > 0) ? convertPocaKrwToTwd(krw, appSettings, false) : null;
+                return { ...c, note: twd !== null ? `$${Math.round(twd)}` : undefined, noteColor: 'bg-black/70' };
             }
             if (typeof activeView === 'object' && activeView.items) {
                 const item = activeView.items.find(i => String(i.cardId) === String(c.id));
