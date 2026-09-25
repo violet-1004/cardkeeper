@@ -4509,6 +4509,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
                  const isSelected = localItems.some(i => String(i.cardId) === String(card.id));
                  if (!isSelected) return false;
              }
+             if (viewMode === 'wishlist' && !card.isWishlist) return false;
 
              // 🌟 修正：採用與 CollectionTab 完全相同的篩選判斷
              if (filterSubunit !== 'All' && filterMember === 'All') {
@@ -4704,6 +4705,7 @@ function MiniCardSelector({ cards, selectedItems, onConfirm, onClose, members, s
 
                     <div className="flex bg-gray-100 p-1 rounded-lg h-8 items-center">
                         <button onClick={() => setViewMode('all')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'all' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}>全部</button>
+                        <button onClick={() => setViewMode('wishlist')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'wishlist' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-400'}`}>想要</button>
                         <button onClick={() => setViewMode('selected')} className={`px-3 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${viewMode === 'selected' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>已選 ({localItems.length})</button>
                     </div>
                 </div>
