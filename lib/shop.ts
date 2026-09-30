@@ -6,8 +6,9 @@ export const CUTOFF_HOUR = 23;
 const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const MAX_CART_ITEMS = 100;
+export const MAX_CART_ITEMS = 100; // 購物車可放的「不同小卡」上限，不是總張數上限
 export const MAX_NAME_LENGTH = 40;
+export const UNLISTED_COLOR = 'bg-[#91B493]'; // 待售（POCA 換算價）標籤顏色
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -77,7 +78,8 @@ export const nameKey = (name: string) => name.toLowerCase();
 export interface OrderItem {
     userKey: string;
     cardId: number;
-    price: number;
+    qty: number;
+    price: number; // 單價
     isBlack: boolean;
     submittedAt: string; // ISO，僅用於同分時的穩定排序
 }
@@ -98,8 +100,8 @@ export function rankUsers(items: OrderItem[]): UserTotals[] {
             u = { userKey: it.userKey, total: 0, black: 0, firstSubmittedAt: it.submittedAt };
             map.set(it.userKey, u);
         }
-        u.total += it.price;
-        if (it.isBlack) u.black += it.price;
+        u.total += it.price * it.qty;
+        if (it.isBlack) u.black += it.price * it.qty;
         if (it.submittedAt < u.firstSubmittedAt) u.firstSubmittedAt = it.submittedAt;
     }
     return [...map.values()].sort(
@@ -111,7 +113,12 @@ export function rankUsers(items: OrderItem[]): UserTotals[] {
     );
 }
 
-/** 依順位把庫存先給順位前面的人；庫存不夠的後面順位標為 sold_out（打叉）。回傳 key = `${userKey}|${cardId}`。 */
+/**
+ * 依順位把庫存先給順位前面的人；一筆訂購（可能一次要好幾張同一張卡）要嘛整筆給，
+ * 要嘛整筆打叉——不會把庫存切一半給後面的人，這樣才不會出現「打叉但只拿到一部分」的
+ * 曖昧狀態。庫存不夠整筆給時完全不動用剩餘庫存，讓後面順位、要的數量較少的人仍有機會。
+ * 回傳 key = `${userKey}|${cardId}`。
+ */
 export function allocate(
     items: OrderItem[],
     stock: Map<number, number>
@@ -128,8 +135,8 @@ export function allocate(
     for (const u of ranking) {
         for (const it of byUser.get(u.userKey) || []) {
             const left = remaining.get(it.cardId) ?? 0;
-            if (left > 0) {
-                remaining.set(it.cardId, left - 1);
+            if (left >= it.qty) {
+                remaining.set(it.cardId, left - it.qty);
                 status.set(`${it.userKey}|${it.cardId}`, 'won');
             } else {
                 status.set(`${it.userKey}|${it.cardId}`, 'sold_out');
@@ -144,5 +151,6 @@ export function priceTagClass(color: string | null | undefined): string {
     if (color === 'bg-[#E87A90]' || color === 'bg-red-500/80') return 'bg-[#E87A90]';
     if (color === 'bg-[#986DB2]' || color === 'bg-purple-500/80') return 'bg-[#986DB2]';
     if (color === 'bg-[#81C7D4]' || color === 'bg-blue-500/80') return 'bg-[#81C7D4]';
+    if (color === UNLISTED_COLOR) return UNLISTED_COLOR;
     return 'bg-black/70';
 }

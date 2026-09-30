@@ -5,7 +5,7 @@ import { priceTagClass } from '@/lib/shop';
 import { useShop } from '../ShopProvider';
 
 interface Item {
-    cardId: number; title: string; memberName: string; image: string;
+    cardId: number; qty: number; title: string; memberName: string; image: string;
     price: number; isBlack: boolean; color: string; status: 'pending' | 'won' | 'sold_out';
 }
 interface Participant { rank: number; name: string; total: number; black: number; items: Item[] }
@@ -153,8 +153,13 @@ export default function SummaryPage() {
                                         {it.status === 'won' && (
                                             <div className="absolute right-1 top-1 rounded-full bg-green-500 px-1.5 py-0.5 text-[10px] font-bold text-white">✓</div>
                                         )}
+                                        {it.qty > 1 && (
+                                            <div className="absolute left-1 top-1 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">x{it.qty}</div>
+                                        )}
                                         <div className="absolute bottom-1.5 left-0 w-full text-center">
-                                            <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold text-white shadow ${priceTagClass(it.color)}`}>${it.price}</span>
+                                            <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold text-white shadow ${priceTagClass(it.color)}`}>
+                                                ${it.price}{it.qty > 1 ? ` ×${it.qty}` : ''}
+                                            </span>
                                         </div>
                                     </div>
                                     <div className="line-clamp-2 text-[11px] font-bold leading-tight">{it.title}</div>
