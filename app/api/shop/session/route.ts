@@ -5,6 +5,9 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 // 登記/確認 FB 帳號名。第一次登記會發一組裝置 token（只存雜湊），之後操作購物車與訂單都要帶。
+// 換裝置、清過瀏覽器資料時舊 token 會不見：這裡沒有金流、出貨前賣家都會跟買家本人核對，
+// 所以不強制卡死，改成需要使用者在畫面上明確按一次「接手使用」（claim）才會頂替舊裝置，
+// 舊裝置的 token 會失效。保留一次明確確認的動作，單純是避免打錯別人名字就直接誤頂替。
 export async function POST(req: Request) {
     try {
         const db = getDb();
@@ -16,6 +19,7 @@ export async function POST(req: Request) {
         const name = normalizeName(body?.name);
         if (!name) return fail('請輸入 1–40 字的 FB 帳號名');
         const token = typeof body?.token === 'string' ? body.token : '';
+        const claim = body?.claim === true;
         const key = nameKey(name);
 
         const row = await db.prepare(`SELECT name, token_hash FROM shop_users WHERE user_key = ?`).bind(key).first();
@@ -23,7 +27,13 @@ export async function POST(req: Request) {
             if (token.length >= 32 && token.length <= 128 && (await sha256Hex(token)) === row.token_hash) {
                 return json({ name: row.name });
             }
-            return fail('此帳號名已被其他裝置使用，若是您本人請聯絡賣家', 409);
+            if (!claim) {
+                return json({ error: '此帳號名已登記過，換裝置了嗎？', code: 'name_taken' }, 409);
+            }
+            if (!(await rateLimit(db, 'register', ip, 5, 3600))) return fail('操作次數過多，請稍後再試', 429);
+            const newToken = randomToken();
+            await db.prepare(`UPDATE shop_users SET token_hash = ? WHERE user_key = ?`).bind(await sha256Hex(newToken), key).run();
+            return json({ name: row.name, token: newToken });
         }
 
         if (!(await rateLimit(db, 'register', ip, 5, 3600))) return fail('登記次數過多，請稍後再試', 429);

@@ -26,22 +26,31 @@ const write = (k: string, v: string | null) => {
     try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* 隱私模式等情況無法存 */ }
 };
 
+class SessionError extends Error {
+    code?: string;
+    constructor(message: string, code?: string) {
+        super(message);
+        this.code = code;
+    }
+}
+
 export function ShopProvider({ children }: { children: React.ReactNode }) {
     const [name, setName] = useState<string | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [ready, setReady] = useState(false);
     const [input, setInput] = useState('');
     const [error, setError] = useState('');
+    const [nameTaken, setNameTaken] = useState(false);
     const [busy, setBusy] = useState(false);
 
-    const register = useCallback(async (n: string, t: string | null) => {
+    const register = useCallback(async (n: string, t: string | null, claim?: boolean) => {
         const res = await fetch('/api/shop/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: n, token: t || undefined }),
+            body: JSON.stringify({ name: n, token: t || undefined, claim: claim || undefined }),
         });
         const data: any = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || '登入失敗');
+        if (!res.ok) throw new SessionError(data.error || '登入失敗', data.code);
         return data as { name: string; token?: string };
     }, []);
 
@@ -63,23 +72,27 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         })();
     }, [register]);
 
-    const submitName = async () => {
+    const doRegister = async (claim: boolean) => {
         setBusy(true);
         setError('');
         try {
-            const r = await register(input, read(TOKEN_KEY));
+            const r = await register(input, read(TOKEN_KEY), claim);
             const t = r.token || read(TOKEN_KEY);
             if (!t) throw new Error('登入失敗，請重試');
             write(NAME_KEY, r.name);
             write(TOKEN_KEY, t);
             setName(r.name);
             setToken(t);
+            setNameTaken(false);
         } catch (e: any) {
             setError(e.message || '登入失敗');
+            setNameTaken(e instanceof SessionError && e.code === 'name_taken');
         } finally {
             setBusy(false);
         }
     };
+    const submitName = () => doRegister(false);
+    const claimName = () => doRegister(true);
 
     const api = useCallback(
         (path: string, init: RequestInit = {}) =>
@@ -117,19 +130,32 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
                             autoFocus
                             value={input}
                             maxLength={40}
-                            onChange={(e) => setInput(e.target.value)}
+                            onChange={(e) => { setInput(e.target.value); setNameTaken(false); setError(''); }}
                             onKeyDown={(e) => e.key === 'Enter' && input.trim() && !busy && submitName()}
                             placeholder="FB 帳號名"
                             className="mt-4 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base outline-none focus:border-[#9B90C2] focus:ring-2 focus:ring-[#9B90C2]/30"
                         />
                         {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-                        <button
-                            onClick={submitName}
-                            disabled={!input.trim() || busy}
-                            className="mt-4 w-full rounded-xl bg-[#9B90C2] py-2.5 font-bold text-white disabled:opacity-40"
-                        >
-                            {busy ? '確認中…' : '開始選購'}
-                        </button>
+                        {nameTaken ? (
+                            <>
+                                <p className="mt-2 text-xs text-gray-500">如果這是你本人、只是換了裝置或清過瀏覽器資料，可以直接接手；原本的裝置會因此失去這個名稱的存取權。</p>
+                                <button
+                                    onClick={claimName}
+                                    disabled={busy}
+                                    className="mt-3 w-full rounded-xl bg-[#9B90C2] py-2.5 font-bold text-white disabled:opacity-40"
+                                >
+                                    {busy ? '處理中…' : '這是我，接手使用這個名稱'}
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={submitName}
+                                disabled={!input.trim() || busy}
+                                className="mt-4 w-full rounded-xl bg-[#9B90C2] py-2.5 font-bold text-white disabled:opacity-40"
+                            >
+                                {busy ? '確認中…' : '開始選購'}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
