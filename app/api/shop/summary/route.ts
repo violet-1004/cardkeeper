@@ -1,92 +1,54 @@
-import { getDb, ensureShopSchema, json, fail, getStockForCards } from '@/lib/shopServer';
+import { getDb, ensureShopSchema, json, fail, resolveGroupId, cachedJson, finalizeRoundIfClosed, fetchRoundItems } from '@/lib/shopServer';
 import { allocate, cutoffMs, isRoundClosed, openRoundDate, previousRoundDate, ROUND_RE, type OrderItem } from '@/lib/shop';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
-// 結單後第一次有人查看時，依順位把庫存分給順位前面的人，並把結果寫進 shop_order_items.status。
-// 整個過程只讀取展示資料的庫存數，只寫入 shop_ 資料表；結果決定性相同，重複執行也安全。
-async function finalizeRound(db: any, round: string) {
-    const done = await db.prepare(`SELECT 1 AS ok FROM shop_rounds WHERE round_date = ?`).bind(round).first();
-    if (done) return;
-
-    const { results: rows } = await db
-        .prepare(`SELECT user_key, card_id, qty, price, is_black, submitted_at FROM shop_order_items WHERE round_date = ?`)
-        .bind(round)
-        .all();
-    const items: OrderItem[] = (rows || []).map((r: any) => ({
-        userKey: String(r.user_key),
-        cardId: Number(r.card_id),
-        qty: Number(r.qty) || 1,
-        price: Number(r.price),
-        isBlack: Number(r.is_black) === 1,
-        submittedAt: String(r.submitted_at),
-    }));
-
-    // 結單當下的庫存：優先看販售紀錄的數量；待售（POCA 換算價）卡沒有販售紀錄，改看到貨庫存數。
-    // 兩邊都查不到（已下架/庫存歸零）就視為 0，一律打叉。
-    const stock = await getStockForCards(db, items.map((i) => i.cardId));
-
-    const { status } = allocate(items, stock);
-    const stmts = items.map((it) =>
-        db
-            .prepare(`UPDATE shop_order_items SET status = ? WHERE round_date = ? AND user_key = ? AND card_id = ?`)
-            .bind(status.get(`${it.userKey}|${it.cardId}`) || 'sold_out', round, it.userKey, it.cardId)
-    );
-    stmts.push(
-        db.prepare(`INSERT OR IGNORE INTO shop_rounds (round_date, finalized_at) VALUES (?, ?)`).bind(round, new Date().toISOString())
-    );
-    await db.batch(stmts);
-}
-
 export async function GET(req: Request) {
-    try {
-        const db = getDb();
-        await ensureShopSchema(db);
-        const now = Date.now();
-        const open = openRoundDate(now);
-        const prev = previousRoundDate(open);
-        const wanted = new URL(req.url).searchParams.get('round');
-        const round = wanted && ROUND_RE.test(wanted) && (wanted === open || wanted === prev) ? wanted : open;
-        const closed = isRoundClosed(round, now);
-        if (closed) await finalizeRound(db, round);
+    return cachedJson(req, 8, async () => {
+        try {
+            const db = getDb();
+            await ensureShopSchema(db);
+            const now = Date.now();
+            const open = openRoundDate(now);
+            const prev = previousRoundDate(open);
+            const url = new URL(req.url);
+            const wanted = url.searchParams.get('round');
+            const round = wanted && ROUND_RE.test(wanted) && (wanted === open || wanted === prev) ? wanted : open;
+            const closed = isRoundClosed(round, now);
+            if (closed) await finalizeRoundIfClosed(db, round);
 
-        const { results } = await db
-            .prepare(
-                `SELECT o.user_key, u.name, o.card_id, o.qty, o.price, o.color, o.is_black, o.title, o.member_name, o.image,
-                        o.submitted_at, o.status
-                 FROM shop_order_items o JOIN shop_users u ON u.user_key = o.user_key
-                 WHERE o.round_date = ?`
-            )
-            .bind(round)
-            .all();
-        const rows: any[] = results || [];
+            const groupName = url.searchParams.get('group');
+            const groupId = groupName ? await resolveGroupId(db, groupName) : null;
+            if (groupName && groupId === null) {
+                return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants: [], groupNotFound: true });
+            }
 
-        const items: OrderItem[] = rows.map((r) => ({
-            userKey: String(r.user_key), cardId: Number(r.card_id), qty: Number(r.qty) || 1, price: Number(r.price),
-            isBlack: Number(r.is_black) === 1, submittedAt: String(r.submitted_at),
-        }));
-        const { ranking } = allocate(items, new Map()); // 只取排序；結單後的中籤狀態以資料庫為準
-        const names = new Map<string, string>(rows.map((r) => [String(r.user_key), String(r.name)]));
+            const rows = await fetchRoundItems(db, round, groupId);
+            const items: OrderItem[] = rows.map((r) => ({
+                userKey: r.userKey, cardId: r.cardId, qty: r.qty, price: r.price, isBlack: r.isBlack, submittedAt: r.submittedAt,
+            }));
+            const { ranking } = allocate(items, new Map()); // 只取排序；結單後的中籤狀態以資料庫為準
 
-        const participants = ranking.map((u, i) => ({
-            rank: i + 1,
-            name: names.get(u.userKey) || u.userKey,
-            total: u.total,
-            black: u.black,
-            items: rows
-                .filter((r) => String(r.user_key) === u.userKey)
-                .sort((a, b) => Number(b.price) - Number(a.price))
-                .map((r) => ({
-                    cardId: Number(r.card_id), qty: Number(r.qty) || 1, title: String(r.title), memberName: String(r.member_name),
-                    image: String(r.image), price: Number(r.price), isBlack: Number(r.is_black) === 1,
-                    color: String(r.color), status: closed ? String(r.status) : 'pending',
-                })),
-        }));
+            const participants = ranking.map((u, i) => ({
+                rank: i + 1,
+                name: rows.find((r) => r.userKey === u.userKey)?.name || u.userKey,
+                total: u.total,
+                black: u.black,
+                items: rows
+                    .filter((r) => r.userKey === u.userKey)
+                    .sort((a, b) => b.price - a.price)
+                    .map((r) => ({
+                        cardId: r.cardId, qty: r.qty, title: r.title, memberName: r.memberName,
+                        image: r.image, price: r.price, isBlack: r.isBlack,
+                        color: r.color, status: closed ? r.status : 'pending',
+                    })),
+            }));
 
-        return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants });
-    } catch (e) {
-        console.error('shop summary error', e);
-        return fail('載入失敗，請稍後再試', 500);
-    }
+            return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants });
+        } catch (e) {
+            console.error('shop summary error', e);
+            return fail('載入失敗，請稍後再試', 500);
+        }
+    });
 }

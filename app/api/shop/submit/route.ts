@@ -39,10 +39,10 @@ export async function POST(req: Request) {
                 return db
                     .prepare(
                         `INSERT OR IGNORE INTO shop_order_items
-                         (round_date, user_key, card_id, qty, price, color, is_black, title, member_name, image, submitted_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                         (round_date, user_key, card_id, qty, price, color, is_black, group_id, title, member_name, image, submitted_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     )
-                    .bind(round, user.userKey, id, qty, c.price, c.color, isBlackColor(c.color) ? 1 : 0, c.title, c.memberName, c.image, iso);
+                    .bind(round, user.userKey, id, qty, c.price, c.color, isBlackColor(c.color) ? 1 : 0, c.groupId, c.title, c.memberName, c.image, iso);
             }),
             db.prepare(`DELETE FROM shop_carts WHERE user_key = ?`).bind(user.userKey),
         ]);

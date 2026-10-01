@@ -5,12 +5,44 @@
 //  - 所有 SQL 都用 bind 參數，不拼接使用者輸入
 import { getRequestContext } from '@cloudflare/next-on-pages';
 import { NextResponse } from 'next/server';
-import { nameKey, normalizeName, MAX_NAME_LENGTH, UNLISTED_COLOR } from './shop';
+import { nameKey, normalizeName, MAX_NAME_LENGTH, UNLISTED_COLOR, allocate, type OrderItem } from './shop';
 
 export function getDb(): any {
     const env = getRequestContext().env as any;
     if (!env?.DB) throw new Error('DB binding missing');
     return env.DB;
+}
+
+/**
+ * D1 的「讀取列數」計費/配額很容易被選購網站的輪詢打滿：每個人每隔幾十秒就重新查一次
+ * 全部販售中小卡 + 一堆關聯表。這裡用 Workers 內建、免費的 Edge Cache API 把同一個網址的
+ * GET 回應短暫快取幾秒～幾十秒，同一個快取視窗內不管幾個人同時打進來，D1 只會被查一次。
+ * 不影響正確性的前提：這些資料本來就不要求即時到秒，前端本身也是每隔一段時間才輪詢一次。
+ */
+export async function cachedJson(req: Request, ttlSeconds: number, compute: () => Promise<Response>): Promise<Response> {
+    const cache = (caches as any).default;
+    const cacheKey = new Request(req.url, { method: 'GET' });
+    try {
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+    } catch {
+        /* Cache API 不可用時直接算，不影響功能 */
+    }
+
+    const res = await compute();
+    if (!res.ok) return res;
+
+    const toCache = new Response(res.body, res);
+    toCache.headers.set('Cache-Control', `public, max-age=${ttlSeconds}`);
+    try {
+        const ctx = getRequestContext().ctx as any;
+        const putPromise = cache.put(cacheKey, toCache.clone());
+        if (ctx?.waitUntil) ctx.waitUntil(putPromise);
+        else await putPromise;
+    } catch {
+        /* 快取寫入失敗就算了，不影響這次回應 */
+    }
+    return toCache;
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -26,7 +58,7 @@ export function ensureShopSchema(db: any): Promise<void> {
                 db.prepare(`CREATE TABLE IF NOT EXISTS shop_order_items (
                     round_date TEXT NOT NULL, user_key TEXT NOT NULL, card_id INTEGER NOT NULL,
                     qty INTEGER NOT NULL DEFAULT 1, price INTEGER NOT NULL, color TEXT NOT NULL, is_black INTEGER NOT NULL,
-                    title TEXT NOT NULL, member_name TEXT NOT NULL, image TEXT NOT NULL,
+                    group_id INTEGER, title TEXT NOT NULL, member_name TEXT NOT NULL, image TEXT NOT NULL,
                     submitted_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
                     PRIMARY KEY (round_date, user_key, card_id))`),
                 db.prepare(`CREATE TABLE IF NOT EXISTS shop_rounds (
@@ -34,10 +66,11 @@ export function ensureShopSchema(db: any): Promise<void> {
                 db.prepare(`CREATE TABLE IF NOT EXISTS shop_rate (
                     k TEXT PRIMARY KEY, n INTEGER NOT NULL, exp INTEGER NOT NULL)`),
             ]);
-            // 舊資料表（第一版沒有 qty 欄位）逐一補欄位；已存在就吃掉錯誤，維持可重複執行。
+            // 舊資料表（第一版沒有這些欄位）逐一補欄位；已存在就吃掉錯誤，維持可重複執行。
             for (const stmt of [
                 `ALTER TABLE shop_carts ADD COLUMN qty INTEGER NOT NULL DEFAULT 1`,
                 `ALTER TABLE shop_order_items ADD COLUMN qty INTEGER NOT NULL DEFAULT 1`,
+                `ALTER TABLE shop_order_items ADD COLUMN group_id INTEGER`,
             ]) {
                 try {
                     await db.prepare(stmt).run();
@@ -324,6 +357,15 @@ export async function loadOnSaleCards(db: any): Promise<{ cards: ShopCard[]; met
     return { cards, meta };
 }
 
+/** 依團體名稱找 id（忽略大小寫/前後空白），對應 /shop/<團體> 這類網址。找不到回傳 null。 */
+export async function resolveGroupId(db: any, name: string): Promise<number | null> {
+    const target = name.trim().toLowerCase();
+    if (!target) return null;
+    const { results } = await db.prepare(`SELECT id, name FROM groups`).all();
+    const hit = (results || []).find((g: any) => String(g.name).trim().toLowerCase() === target);
+    return hit ? Number(hit.id) : null;
+}
+
 /** 結單時查目前庫存：優先看販售紀錄的數量，沒有販售紀錄（待售/POCA 換算卡）就用到貨庫存數。 */
 export async function getStockForCards(db: any, cardIds: number[]): Promise<Map<number, number>> {
     const stock = new Map<number, number>();
@@ -360,6 +402,93 @@ export async function getStockForCards(db: any, cardIds: number[]): Promise<Map<
         }
     }
     return stock;
+}
+
+// ---------- 結單分配（公開總結頁與後台「商店」分頁共用） ----------
+export interface RoundOrderRow {
+    userKey: string;
+    name: string;
+    cardId: number;
+    qty: number;
+    price: number;
+    color: string;
+    isBlack: boolean;
+    groupId: number | null;
+    title: string;
+    memberName: string;
+    image: string;
+    submittedAt: string;
+    status: string;
+}
+
+/**
+ * 結單後第一次有人查看時，依順位把庫存分給順位前面的人，寫進 shop_order_items.status。
+ * 排序與分配都是「每個團體自己一組」：某人在 A 團體排第幾名、能不能搶到卡，只看他在 A 團體的
+ * 金額，不受他在其他團體買了多少影響。重複執行結果一致，公開總結頁與後台都可以放心呼叫。
+ */
+export async function finalizeRoundIfClosed(db: any, round: string): Promise<void> {
+    const done = await db.prepare(`SELECT 1 AS ok FROM shop_rounds WHERE round_date = ?`).bind(round).first();
+    if (done) return;
+
+    const { results: rows } = await db
+        .prepare(`SELECT user_key, card_id, qty, price, is_black, group_id, submitted_at FROM shop_order_items WHERE round_date = ?`)
+        .bind(round)
+        .all();
+    const items: OrderItem[] = (rows || []).map((r: any) => ({
+        userKey: String(r.user_key),
+        cardId: Number(r.card_id),
+        qty: Number(r.qty) || 1,
+        price: Number(r.price),
+        isBlack: Number(r.is_black) === 1,
+        submittedAt: String(r.submitted_at),
+        groupId: r.group_id == null ? null : Number(r.group_id),
+    }));
+    if (items.length === 0) return;
+
+    const stock = await getStockForCards(db, items.map((i) => i.cardId));
+
+    const byGroup = new Map<string | number, OrderItem[]>();
+    for (const it of items) {
+        const key = it.groupId ?? 'null';
+        const list = byGroup.get(key);
+        if (list) list.push(it);
+        else byGroup.set(key, [it]);
+    }
+
+    const status = new Map<string, 'won' | 'sold_out'>();
+    for (const groupItems of byGroup.values()) {
+        const { status: groupStatus } = allocate(groupItems, stock);
+        for (const [k, v] of groupStatus) status.set(k, v);
+    }
+
+    const stmts = items.map((it) =>
+        db
+            .prepare(`UPDATE shop_order_items SET status = ? WHERE round_date = ? AND user_key = ? AND card_id = ?`)
+            .bind(status.get(`${it.userKey}|${it.cardId}`) || 'sold_out', round, it.userKey, it.cardId)
+    );
+    stmts.push(
+        db.prepare(`INSERT OR IGNORE INTO shop_rounds (round_date, finalized_at) VALUES (?, ?)`).bind(round, new Date().toISOString())
+    );
+    await db.batch(stmts);
+}
+
+/** 讀取某場次（可選限定某團體）的完整訂單列，供排序/顯示使用。 */
+export async function fetchRoundItems(db: any, round: string, groupId?: number | null): Promise<RoundOrderRow[]> {
+    const { results } = await db
+        .prepare(
+            `SELECT o.user_key, u.name, o.card_id, o.qty, o.price, o.color, o.is_black, o.group_id, o.title, o.member_name, o.image,
+                    o.submitted_at, o.status
+             FROM shop_order_items o JOIN shop_users u ON u.user_key = o.user_key
+             WHERE o.round_date = ?${groupId != null ? ' AND o.group_id = ?' : ''}`
+        )
+        .bind(...(groupId != null ? [round, groupId] : [round]))
+        .all();
+    return (results || []).map((r: any) => ({
+        userKey: String(r.user_key), name: String(r.name), cardId: Number(r.card_id), qty: Number(r.qty) || 1,
+        price: Number(r.price), color: String(r.color), isBlack: Number(r.is_black) === 1,
+        groupId: r.group_id == null ? null : Number(r.group_id), title: String(r.title), memberName: String(r.member_name),
+        image: String(r.image), submittedAt: String(r.submitted_at), status: String(r.status),
+    }));
 }
 
 export { MAX_NAME_LENGTH };

@@ -82,6 +82,7 @@ export interface OrderItem {
     price: number; // 單價
     isBlack: boolean;
     submittedAt: string; // ISO，僅用於同分時的穩定排序
+    groupId?: number | null; // 僅用於呼叫端依團體分組，allocate/rankUsers 本身不看這個欄位
 }
 
 export interface UserTotals {

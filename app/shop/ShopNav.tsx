@@ -7,8 +7,15 @@ import { useShop } from './ShopProvider';
 export function ShopNav() {
     const path = usePathname();
     const { name, logout } = useShop();
-    // 「選購」在 /shop 以及任何 /shop/<團體> 分頁都算啟用中，只有 /shop/summary 算「總結」
-    const isSelecting = path === '/shop' || (path.startsWith('/shop/') && !path.startsWith('/shop/summary'));
+
+    // 解析目前在哪個團體底下：/shop、/shop/summary、/shop/<group>、/shop/<group>/summary
+    const segs = path.split('/').filter(Boolean); // ['shop', ...]
+    const isSummaryPath = segs[segs.length - 1] === 'summary';
+    const group = segs[1] && segs[1] !== 'summary' ? segs[1] : null;
+
+    const selectHref = group ? `/shop/${group}` : '/shop';
+    const summaryHref = group ? `/shop/${group}/summary` : '/shop/summary';
+
     const tab = (href: string, label: string, active: boolean) => (
         <Link
             href={href}
@@ -23,8 +30,8 @@ export function ShopNav() {
         <nav className="sticky top-0 z-30 border-b border-gray-100 bg-white">
             <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
                 <div className="flex items-center gap-1">
-                    {tab('/shop', '選購', isSelecting)}
-                    {tab('/shop/summary', '總結', path.startsWith('/shop/summary'))}
+                    {tab(selectHref, '選購', !isSummaryPath)}
+                    {tab(summaryHref, '總結', isSummaryPath)}
                 </div>
                 {name && (
                     <button onClick={logout} className="max-w-[45%] truncate text-xs text-gray-400" title="切換帳號">
