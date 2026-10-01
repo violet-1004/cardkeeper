@@ -6307,6 +6307,7 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     const [applyFee, setApplyFee] = useState(false); // 🌟 新增：手續費狀態
     const [wishlistPocaOnly, setWishlistPocaOnly] = useState(false); // 🌟 願望清單：只顯示 POCA 有金額（>0）的小卡
     const [showUnlisted, setShowUnlisted] = useState(false); // 🌟 販售頁：是否一併顯示待售（POCA 換算價）小卡
+    const [sellingSubTab, setSellingSubTab] = useState('sell'); // 🌟 販售頁左上角頁籤：販售 / 商店(mycardshop總結) / 售出
 
     // 🌟 手機版的照片排版固定用直式 4x6（寬4吋高6吋），不像桌機那樣依欄數(cols)切換橫直。
     // 手機螢幕本來就是直的，橫式 6x4 在窄螢幕上反而更擠，所以手機一律用直式。
@@ -7338,6 +7339,24 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                       activeView.title;
         const displayExportTitle = customExportTitle !== null ? customExportTitle : defaultExportTitle;
 
+        // 🌟 販售頁的「商店」「售出」頁籤：跟原本販售頁（篩選器+卡片格+輸出版面）完全是不同的畫面，
+        // 在既有的大段 return 之前先攔截掉，避免把兩套邏輯攪在一起、影響到原本販售頁的程式碼。
+        if (activeView === 'selling' && sellingSubTab !== 'sell') {
+            return (
+                <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar animate-fade-in">
+                    <div className="max-w-[1200px] mx-auto px-4 sm:px-8 py-4 sm:py-8">
+                        <div className="flex items-center gap-3 mb-4">
+                            <button onClick={() => setActiveView(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0 bg-white border">
+                                <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                            </button>
+                            <SellingSubTabs active={sellingSubTab} onChange={setSellingSubTab} />
+                        </div>
+                        {sellingSubTab === 'shop' ? <ShopAdminPanel /> : <SoldReportPanel />}
+                    </div>
+                </div>
+            );
+        }
+
         return (
           <div className="fixed inset-0 z-[100] bg-gray-100 overflow-auto no-scrollbar flex flex-col items-center animate-fade-in" {...swipeHandlers}>
               <style>{`
@@ -7357,7 +7376,11 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                               <button onClick={() => showExportLayout ? setShowExportLayout(false) : setActiveView(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
                                   <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                               </button>
-                              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{displayExportTitle}</h1>
+                              {activeView === 'selling' && !showExportLayout ? (
+                                  <SellingSubTabs active={sellingSubTab} onChange={setSellingSubTab} />
+                              ) : (
+                                  <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate">{displayExportTitle}</h1>
+                              )}
                           </div>
                           <div className="flex items-center justify-start sm:justify-end w-full sm:w-auto gap-2 flex-wrap">
                               <div className="flex bg-gray-100 px-2 rounded-lg items-center h-8 gap-2">
@@ -7700,7 +7723,238 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
     );
 }
 
+// 🌟 販售頁左上角的「販售／商店／售出」頁籤。商店＝mycardshop 的每日總結（可刪除購買資料、
+// 一鍵出貨）；售出＝當天結單後實際賣出的小卡清單。兩個都是讀/寫 shop_ 系列資料表與既有庫存，
+// 透過 /api/shop-admin/* 這組後台專用 API（跟公開選購網站的 /api/shop/* 分開）。
+function SellingSubTabs({ active, onChange }) {
+    const tabs = [
+        { id: 'sell', label: '販售' },
+        { id: 'shop', label: '商店' },
+        { id: 'sold', label: '售出' },
+    ];
+    return (
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+            {tabs.map(t => (
+                <button
+                    key={t.id}
+                    onClick={() => onChange(t.id)}
+                    className={`px-3 sm:px-4 py-1.5 rounded-md text-sm font-bold transition-all ${active === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
+}
 
+// 🌟 日期切換器：兩個頁籤共用同一套「選日期」UI
+function ShopAdminRoundPicker({ rounds, round, onChange }) {
+    if (rounds.length === 0) return null;
+    const idx = rounds.indexOf(round);
+    const step = (d) => { const next = rounds[idx + d]; if (next) onChange(next); };
+    return (
+        <div className="flex items-center gap-2 bg-white rounded-lg border px-2 py-1.5">
+            <button onClick={() => step(1)} disabled={idx >= rounds.length - 1} className="p-1 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+            <select value={round} onChange={e => onChange(e.target.value)} className="text-sm font-bold bg-transparent outline-none">
+                {rounds.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <button onClick={() => step(-1)} disabled={idx <= 0} className="p-1 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+    );
+}
+
+function ShopAdminPanel() {
+    const [rounds, setRounds] = useState([]);
+    const [round, setRound] = useState('');
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [selected, setSelected] = useState(null);
+    const [busyKey, setBusyKey] = useState(null);
+
+    useEffect(() => {
+        fetch('/api/shop-admin/rounds').then(r => r.json()).then(d => {
+            setRounds(d.rounds || []);
+            setRound((d.rounds || [])[0] || '');
+        }).catch(() => setError('無法載入場次清單'));
+    }, []);
+
+    const load = useCallback(async () => {
+        if (!round) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/shop-admin/summary?round=${round}`);
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || '載入失敗');
+            setData(d);
+            setError('');
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [round]);
+
+    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        if (selected && data) setSelected((data.participants || []).find(p => p.userKey === selected.userKey) || null);
+    }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleDelete = async (userKey, name) => {
+        if (!confirm(`確定要刪除「${name}」這筆購買資料嗎？`)) return;
+        await fetch('/api/shop-admin/order', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ round, userKey }) });
+        load();
+    };
+
+    const handleFulfill = async (userKey) => {
+        setBusyKey(userKey);
+        try {
+            const res = await fetch('/api/shop-admin/fulfill', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ round, userKey }) });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || '出貨失敗');
+            const shortfall = (d.results || []).filter(r => r.shippedQty < r.requestedQty);
+            if (shortfall.length > 0) {
+                alert('部分小卡庫存不足（到貨且未售出的庫存不夠），請人工確認：\n' + shortfall.map(r => `卡片 ID ${r.cardId}：要 ${r.requestedQty} 張，只標記了 ${r.shippedQty} 張`).join('\n'));
+            }
+            load();
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            setBusyKey(null);
+        }
+    };
+
+    return (
+        <div>
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <ShopAdminRoundPicker rounds={rounds} round={round} onChange={setRound} />
+                {data && <span className="text-xs text-gray-400">{data.closed ? '已結單' : '進行中（23:00 結單）'} ・ {(data.participants || []).length} 人</span>}
+            </div>
+            {error && <div className="text-red-500 text-sm mb-3">{error}</div>}
+            {loading ? (
+                <div className="text-center text-gray-400 py-16">載入中…</div>
+            ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {(data?.participants || []).map(p => {
+                        const hasWon = p.items.some(it => it.status === 'won');
+                        return (
+                            <div key={p.userKey} className="bg-white rounded-2xl p-4 shadow-sm relative flex flex-col items-center">
+                                <span className="absolute left-3 top-2 text-[11px] font-bold text-gray-300">#{p.rank}</span>
+                                <button onClick={() => handleDelete(p.userKey, p.name)} className="absolute right-2 top-2 p-1 text-gray-300 hover:text-red-500 rounded-full hover:bg-red-50" title="刪除這筆購買資料">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => setSelected(p)} title="查看購買的小卡" className="mt-2 active:scale-95 transition-transform">
+                                    <div className="w-12 h-12 rounded-full bg-[#9B90C2] text-white flex items-center justify-center font-bold text-lg">{(p.name[0] || '?').toUpperCase()}</div>
+                                </button>
+                                <div className="mt-2 text-sm font-bold truncate max-w-full">{p.name}</div>
+                                <div className="text-xs text-gray-500">總金額 <span className="font-bold text-gray-800">${p.total}</span></div>
+                                <div className="text-xs text-gray-500">黑字 <span className="font-black text-black">${p.black}</span></div>
+                                {hasWon && (
+                                    <button
+                                        disabled={busyKey === p.userKey}
+                                        onClick={() => handleFulfill(p.userKey)}
+                                        className="mt-2 text-xs bg-green-600 text-white px-3 py-1 rounded-full font-bold disabled:opacity-50"
+                                    >
+                                        {busyKey === p.userKey ? '處理中…' : '一鍵出貨'}
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {(data?.participants || []).length === 0 && <div className="col-span-full text-center text-gray-400 py-16">這天沒有訂單資料</div>}
+                </div>
+            )}
+
+            {selected && (
+                <Modal title={selected.name} onClose={() => setSelected(null)}>
+                    <div className="grid grid-cols-3 gap-2 p-4">
+                        {selected.items.map(it => (
+                            <div key={it.cardId} className="flex flex-col gap-1">
+                                <div className="relative aspect-[2/3] bg-gray-100 rounded-lg overflow-hidden border">
+                                    {it.image && <img src={it.image} alt={it.title} className="absolute inset-0 w-full h-full object-cover" />}
+                                    {it.status === 'sold_out' && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">已售出</span>
+                                        </div>
+                                    )}
+                                    {it.status === 'won' && <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">待出貨</div>}
+                                    {it.status === 'fulfilled' && <div className="absolute top-1 right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">已出貨</div>}
+                                    {it.qty > 1 && <div className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">x{it.qty}</div>}
+                                    <div className="absolute bottom-1.5 left-0 w-full text-center">
+                                        <span className="inline-block bg-black/70 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">${it.price}{it.qty > 1 ? ` ×${it.qty}` : ''}</span>
+                                    </div>
+                                </div>
+                                <div className="text-[11px] font-bold leading-tight line-clamp-2">{it.title}</div>
+                            </div>
+                        ))}
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+function SoldReportPanel() {
+    const [rounds, setRounds] = useState([]);
+    const [round, setRound] = useState('');
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        fetch('/api/shop-admin/rounds').then(r => r.json()).then(d => {
+            setRounds(d.rounds || []);
+            setRound((d.rounds || [])[0] || '');
+        }).catch(() => setError('無法載入場次清單'));
+    }, []);
+
+    useEffect(() => {
+        if (!round) return;
+        setLoading(true);
+        fetch(`/api/shop-admin/summary?round=${round}`)
+            .then(r => r.json())
+            .then(d => { setData(d); setError(''); })
+            .catch(() => setError('載入失敗'))
+            .finally(() => setLoading(false));
+    }, [round]);
+
+    const sold = (data?.participants || [])
+        .flatMap(p => p.items.filter(it => it.status === 'won' || it.status === 'fulfilled').map(it => ({ ...it, buyer: p.name })))
+        .sort((a, b) => b.price - a.price);
+    const total = sold.reduce((s, it) => s + it.price * it.qty, 0);
+
+    return (
+        <div>
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <ShopAdminRoundPicker rounds={rounds} round={round} onChange={setRound} />
+                {data && <span className="text-xs text-gray-400">{data.closed ? '已結單' : '進行中，尚未開獎'} ・ 共 {sold.length} 筆 ・ 總計 ${total}</span>}
+            </div>
+            {error && <div className="text-red-500 text-sm mb-3">{error}</div>}
+            {loading ? (
+                <div className="text-center text-gray-400 py-16">載入中…</div>
+            ) : !data?.closed ? (
+                <div className="text-center text-gray-400 py-16">這天還沒結單，尚未開出賣出結果</div>
+            ) : sold.length === 0 ? (
+                <div className="text-center text-gray-400 py-16">這天沒有賣出任何小卡</div>
+            ) : (
+                <div className="space-y-2">
+                    {sold.map((it, i) => (
+                        <div key={`${it.cardId}-${i}`} className="bg-white rounded-xl border p-2.5 flex items-center gap-3">
+                            <div className="relative w-10 h-14 shrink-0 bg-gray-100 rounded overflow-hidden">
+                                {it.image && <img src={it.image} alt={it.title} className="absolute inset-0 w-full h-full object-cover" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="text-sm font-bold truncate">{it.title}</div>
+                                <div className="text-xs text-gray-400">買家：{it.buyer}{it.qty > 1 ? ` ・ 數量 ${it.qty}` : ''}</div>
+                            </div>
+                            <div className="text-sm font-black text-green-600 shrink-0">${it.price}{it.qty > 1 ? ` ×${it.qty}` : ''}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // --- 7. App Main Component ---
 export default function App() {
