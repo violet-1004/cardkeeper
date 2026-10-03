@@ -38,6 +38,19 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     );
 }
 
+function LinkChip({ active, href, children }: { active: boolean; href: string; children: React.ReactNode }) {
+    return (
+        <Link
+            href={href}
+            className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs transition-colors ${
+                active ? 'border-[#9B90C2] bg-[#9B90C2] font-bold text-white' : 'border-gray-200 bg-white text-gray-600'
+            }`}
+        >
+            {children}
+        </Link>
+    );
+}
+
 function formatRemaining(ms: number) {
     if (ms <= 0) return '已結單';
     const s = Math.floor(ms / 1000);
@@ -262,11 +275,11 @@ export function ShopCatalog({ lockGroupName }: { lockGroupName?: string }) {
             )}
 
             <div className="mb-3 space-y-2 rounded-2xl bg-white p-3 shadow-sm">
-                {!lockGroupName && catalog.groups.length > 1 && (
+                {catalog.groups.length > 1 && (
                     <div className="flex gap-1.5 overflow-x-auto">
-                        <Chip active={groupId === 'All'} onClick={() => { setGroupId('All'); setSubunit('All'); setMemberId('All'); setSeriesId('All'); }}>全部團體</Chip>
+                        <LinkChip active={!lockGroupName} href="/shop">全部團體</LinkChip>
                         {catalog.groups.filter((g) => catalog.cards.some((c) => c.groupId === g.id)).map((g) => (
-                            <Chip key={g.id} active={groupId === g.id} onClick={() => { setGroupId(g.id); setSubunit('All'); setMemberId('All'); setSeriesId('All'); }}>{g.name}</Chip>
+                            <LinkChip key={g.id} active={lockedGroup?.id === g.id} href={`/shop/${encodeURIComponent(g.name)}`}>{g.name}</LinkChip>
                         ))}
                     </div>
                 )}

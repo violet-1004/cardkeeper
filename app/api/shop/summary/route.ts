@@ -1,4 +1,4 @@
-import { getDb, ensureShopSchema, json, fail, resolveGroupId, cachedJson, finalizeRoundIfClosed, fetchRoundItems } from '@/lib/shopServer';
+import { getDb, ensureShopSchema, json, fail, loadGroups, cachedJson, finalizeRoundIfClosed, fetchRoundItems } from '@/lib/shopServer';
 import { allocate, cutoffMs, isRoundClosed, openRoundDate, previousRoundDate, ROUND_RE, type OrderItem } from '@/lib/shop';
 
 export const runtime = 'edge';
@@ -18,10 +18,13 @@ export async function GET(req: Request) {
             const closed = isRoundClosed(round, now);
             if (closed) await finalizeRoundIfClosed(db, round);
 
+            const groups = await loadGroups(db);
             const groupName = url.searchParams.get('group');
-            const groupId = groupName ? await resolveGroupId(db, groupName) : null;
+            const target = groupName?.trim().toLowerCase();
+            const matched = target ? groups.find((g) => g.name.trim().toLowerCase() === target) : undefined;
+            const groupId = matched ? matched.id : null;
             if (groupName && groupId === null) {
-                return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants: [], groupNotFound: true });
+                return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants: [], groups, groupNotFound: true });
             }
 
             const rows = await fetchRoundItems(db, round, groupId);
@@ -45,7 +48,7 @@ export async function GET(req: Request) {
                     })),
             }));
 
-            return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants });
+            return json({ round, closed, cutoffAt: cutoffMs(round), openRound: open, previousRound: prev, now, participants, groups });
         } catch (e) {
             console.error('shop summary error', e);
             return fail('載入失敗，請稍後再試', 500);

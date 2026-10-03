@@ -6278,7 +6278,7 @@ function CardMarkInput({ initialValue, onSave }) {
         </div>
     );
 }
-function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices, pocaCards }) {
+function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists, setViewingCard, isExportMode, setIsExportMode, sales, inventory, members, series, batches, channels, types, cols, setCols, showDetails, setShowDetails, subunits, appSettings, onUpdateSetting, showPrices, setShowPrices, pocaCards, allCards, onShopDataChanged }) {
     // ==========================================
     // 1. 狀態宣告 (確保順序與唯一性)
     // ==========================================
@@ -7351,7 +7351,9 @@ function ExportTab({ currentGroupId, groups, cards, customLists, setCustomLists,
                             </button>
                             <SellingSubTabs active={sellingSubTab} onChange={setSellingSubTab} />
                         </div>
-                        {sellingSubTab === 'shop' ? <ShopAdminPanel /> : <SoldReportPanel />}
+                        {sellingSubTab === 'shop'
+                            ? <ShopAdminPanel allCards={allCards || cards} setViewingCard={setViewingCard} onDataChanged={onShopDataChanged} />
+                            : <SoldReportPanel allCards={allCards || cards} setViewingCard={setViewingCard} />}
                     </div>
                 </div>
             );
@@ -7763,7 +7765,7 @@ function ShopAdminRoundPicker({ rounds, round, onChange }) {
     );
 }
 
-function ShopAdminPanel() {
+function ShopAdminPanel({ allCards = [], setViewingCard, onDataChanged }) {
     const [rounds, setRounds] = useState([]);
     const [round, setRound] = useState('');
     const [data, setData] = useState(null);
@@ -7800,6 +7802,12 @@ function ShopAdminPanel() {
         if (selected && data) setSelected((data.participants || []).find(p => p.userKey === selected.userKey) || null);
     }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    const openCard = (cardId) => {
+        const card = allCards.find(c => String(c.id) === String(cardId));
+        if (!card) { alert('找不到這張卡片的資料（可能不在目前載入的團體）'); return; }
+        if (setViewingCard) setViewingCard(card);
+    };
+
     const handleDelete = async (userKey, name) => {
         if (!confirm(`確定要刪除「${name}」這筆購買資料嗎？`)) return;
         await fetch('/api/shop-admin/order', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ round, userKey }) });
@@ -7814,8 +7822,12 @@ function ShopAdminPanel() {
             if (!res.ok) throw new Error(d.error || '出貨失敗');
             const shortfall = (d.results || []).filter(r => r.shippedQty < r.requestedQty);
             if (shortfall.length > 0) {
-                alert('部分小卡庫存不足（到貨且未售出的庫存不夠），請人工確認：\n' + shortfall.map(r => `卡片 ID ${r.cardId}：要 ${r.requestedQty} 張，只標記了 ${r.shippedQty} 張`).join('\n'));
+                alert('部分小卡找不到足夠「到貨且尚未售出」的庫存，請人工確認：\n' + shortfall.map(r => {
+                    const c = allCards.find(x => String(x.id) === String(r.cardId));
+                    return `${c ? (c.name || `卡片 ${r.cardId}`) : `卡片 ${r.cardId}`}：要 ${r.requestedQty} 張，只標記了 ${r.shippedQty} 張` + (r.shippedQty === 0 ? '（未標記，補好庫存後可再按一次）' : '');
+                }).join('\n'));
             }
+            if (onDataChanged) await onDataChanged();
             load();
         } catch (e) {
             alert(e.message);
@@ -7869,7 +7881,7 @@ function ShopAdminPanel() {
                 <Modal title={selected.name} onClose={() => setSelected(null)}>
                     <div className="grid grid-cols-3 gap-2 p-4">
                         {selected.items.map(it => (
-                            <div key={it.cardId} className="flex flex-col gap-1">
+                            <div key={it.cardId} className="flex flex-col gap-1 cursor-pointer" onClick={() => openCard(it.cardId)}>
                                 <div className="relative aspect-[2/3] bg-gray-100 rounded-lg overflow-hidden border">
                                     {it.image && <img src={it.image} alt={it.title} className="absolute inset-0 w-full h-full object-cover" />}
                                     {it.status === 'sold_out' && (
@@ -7894,7 +7906,7 @@ function ShopAdminPanel() {
     );
 }
 
-function SoldReportPanel() {
+function SoldReportPanel({ allCards = [], setViewingCard }) {
     const [rounds, setRounds] = useState([]);
     const [round, setRound] = useState('');
     const [data, setData] = useState(null);
@@ -7939,7 +7951,7 @@ function SoldReportPanel() {
             ) : (
                 <div className="space-y-2">
                     {sold.map((it, i) => (
-                        <div key={`${it.cardId}-${i}`} className="bg-white rounded-xl border p-2.5 flex items-center gap-3">
+                        <div key={`${it.cardId}-${i}`} className="bg-white rounded-xl border p-2.5 flex items-center gap-3 cursor-pointer" onClick={() => { const c = allCards.find(x => String(x.id) === String(it.cardId)); if (c && setViewingCard) setViewingCard(c); }}>
                             <div className="relative w-10 h-14 shrink-0 bg-gray-100 rounded overflow-hidden">
                                 {it.image && <img src={it.image} alt={it.title} className="absolute inset-0 w-full h-full object-cover" />}
                             </div>
@@ -8374,6 +8386,29 @@ export default function App() {
   };
 
   // 🌟 更新全域設定 (例如自訂排序)
+  // 🌟 後台「商店」一鍵出貨是在伺服器端改庫存/販售紀錄，畫面上 App 記憶體裡的資料要重新抓一次，
+  // 不然看起來沒變，之後在別處儲存庫存時還會拿舊資料蓋回去。
+  const refreshInventoryAndSales = async () => {
+      const load = async (t) => {
+          const res = await fetch(`/api/data?table=${t}&_t=${Date.now()}`, { cache: 'no-store' });
+          const json = await res.json();
+          return (json.data || []).map(toCamelCase).map(item => {
+              if (typeof item.items === 'string') {
+                  try { item.items = JSON.parse(item.items) || []; } catch (e) { item.items = []; }
+              }
+              return item;
+          });
+      };
+      try {
+          const [inv, sal, bulk] = await Promise.all([load('ui_inventory'), load('ui_sales'), load('bulk_records')]);
+          setInventory(inv);
+          setSales(sal);
+          setBulkRecords(bulk);
+      } catch (e) {
+          console.error('refresh inventory/sales failed', e);
+      }
+  };
+
   const handleUpdateAppSetting = async (key, value) => {
       setAppSettings(prev => {
           const exists = prev.some(s => s.key === key);
@@ -9196,6 +9231,8 @@ export default function App() {
           showPrices={exportShowPrices}         // 🌟 傳入價格顯示狀態
           setShowPrices={setExportShowPrices}
           pocaCards={pocaCards}
+          allCards={cards}
+          onShopDataChanged={refreshInventoryAndSales}
         />;
       default: return null;
     }

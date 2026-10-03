@@ -12,7 +12,7 @@ interface Item {
 interface Participant { rank: number; name: string; total: number; black: number; items: Item[] }
 interface Summary {
     round: string; closed: boolean; cutoffAt: number; openRound: string; previousRound: string;
-    now: number; participants: Participant[]; groupNotFound?: boolean;
+    now: number; participants: Participant[]; groups?: { id: number; name: string }[]; groupNotFound?: boolean;
 }
 
 const AVATAR_COLORS = ['#9B90C2', '#E87A90', '#81C7D4', '#91B493', '#F2B872', '#7C9CD6', '#C9A0DC'];
@@ -31,6 +31,19 @@ function Avatar({ name, size = 56 }: { name: string; size?: number }) {
         >
             {initial(name)}
         </div>
+    );
+}
+
+function GroupLink({ active, href, children }: { active: boolean; href: string; children: React.ReactNode }) {
+    return (
+        <Link
+            href={href}
+            className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs transition-colors ${
+                active ? 'border-[#9B90C2] bg-[#9B90C2] font-bold text-white' : 'border-gray-200 bg-white text-gray-600'
+            }`}
+        >
+            {children}
+        </Link>
     );
 }
 
@@ -83,8 +96,19 @@ export function SummaryBoard({ lockGroupName }: { lockGroupName?: string }) {
 
     const grandTotal = data.participants.reduce((s, p) => s + p.total, 0);
 
+    const groups = data.groups || [];
+    const activeGroup = lockGroupName?.trim().toLowerCase();
+
     return (
         <main className="mx-auto max-w-4xl px-3 pb-16 pt-4 sm:px-4">
+            {groups.length > 1 && (
+                <div className="mb-3 flex gap-1.5 overflow-x-auto">
+                    <GroupLink active={!lockGroupName} href="/shop/summary">全部團體</GroupLink>
+                    {groups.map((g) => (
+                        <GroupLink key={g.id} active={activeGroup === g.name.trim().toLowerCase()} href={`/shop/${encodeURIComponent(g.name)}/summary`}>{g.name}</GroupLink>
+                    ))}
+                </div>
+            )}
             <div className="mb-3 flex items-center justify-between">
                 <div className="flex rounded-full bg-white p-1 shadow-sm">
                     <button

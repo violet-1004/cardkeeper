@@ -357,6 +357,12 @@ export async function loadOnSaleCards(db: any): Promise<{ cards: ShopCard[]; met
     return { cards, meta };
 }
 
+/** 所有團體（id + 名稱），總結頁用來做「依團體切換網址」的按鈕。 */
+export async function loadGroups(db: any): Promise<{ id: number; name: string }[]> {
+    const { results } = await db.prepare(`SELECT id, name FROM groups`).all();
+    return (results || []).map((g: any) => ({ id: Number(g.id), name: clip(g.name, 60) as string }));
+}
+
 /** 依團體名稱找 id（忽略大小寫/前後空白），對應 /shop/<團體> 這類網址。找不到回傳 null。 */
 export async function resolveGroupId(db: any, name: string): Promise<number | null> {
     const target = name.trim().toLowerCase();
